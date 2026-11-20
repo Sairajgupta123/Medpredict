@@ -78,6 +78,7 @@ def consume_password_reset_token(db: Session, raw_token: str) -> User | None:
             PasswordResetToken.expires_at > now,
         )
         .values(used_at=now)
+        .execution_options(synchronize_session=False)
     )
     if claimed.rowcount != 1:
         return None
