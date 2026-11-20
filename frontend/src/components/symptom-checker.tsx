@@ -227,7 +227,7 @@ export function SymptomChecker() {
                   <div className="human-review-item" key={item.id}>
                     <div className="human-review-term">
                       <strong>{item.label}</strong>
-                      <small>{contextFlag ? (contextLabels[contextFlag] ?? "Context needs review") : item.category}</small>
+                      <small>{contextFlag ? (contextLabels[String(contextFlag)] ?? "Context needs review") : item.category}</small>
                     </div>
                     <label className="field-label" htmlFor={`review-${item.id}`}>
                       Your confirmation
