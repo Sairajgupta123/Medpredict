@@ -103,3 +103,46 @@ def test_weak_password_is_rejected(client: TestClient) -> None:
         json={"email": "weak@example.com", "password": "short"},
     )
     assert response.status_code == 422
+
+
+def test_password_is_stored_as_a_hash(client: TestClient) -> None:
+    from app.core.security import verify_password
+    from app.models.user import User
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": "hash@example.com", "password": "StrongPass123!"},
+    )
+    assert response.status_code == 201
+
+    db = TestingSessionLocal()
+    try:
+        stored_user = db.query(User).filter_by(email="hash@example.com").one()
+        assert stored_user.password_hash != "StrongPass123!"
+        assert verify_password("StrongPass123!", stored_user.password_hash)
+    finally:
+        db.close()
+
+
+def test_inactive_account_cannot_log_in(client: TestClient) -> None:
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            User(
+                email="inactive@example.com",
+                password_hash=hash_password("StrongPass123!"),
+                is_active=False,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "inactive@example.com", "password": "StrongPass123!"},
+    )
+    assert response.status_code == 401
