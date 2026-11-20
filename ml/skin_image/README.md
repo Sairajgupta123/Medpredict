@@ -31,9 +31,12 @@ logs. Keep the manifest and images in approved private storage.
 python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10
 ```
 
-The trainer creates patient-grouped 70/15/15 approximate partitions, supports MobileNetV3, ResNet50
-and EfficientNet-B0, selects the checkpoint using validation macro-F1, and evaluates the held-out
-test partition at the end. The test partition must not be used for model selection. The output
+The trainer creates deterministic, class-aware patient-grouped 70/15/15 approximate partitions.
+It requires every class to occur in at least three distinct patients and in every partition, then
+searches candidate group splits to reduce row/patient proportion and class-distribution imbalance.
+It supports MobileNetV3, ResNet50 and EfficientNet-B0, selects the checkpoint using validation
+macro-F1, fits temperature and selects a 90% technical coverage threshold on validation only, and
+evaluates the held-out test partition at the end. The test partition must not be used for model selection. The output
 directory contains a checkpoint, experiment configuration, model metadata and aggregate report;
 keep all artifacts outside Git because they may be large and subject to dataset license restrictions.
 See EXPERIMENTS.md for the controlled architecture comparison runner.
@@ -78,7 +81,9 @@ remain future work.
 `ml.skin_image.calibration` adds validation-fitted scalar temperature scaling, negative log
 likelihood, multiclass Brier score and top-label expected calibration error. Follow
 `CALIBRATION.md`: fit temperature on validation logits only and evaluate on an untouched test set.
-The helper is not yet wired into the training runner; no calibration result is claimed.
+The trainer now fits temperature on the selected checkpoint's validation logits and evaluates
+calibration metrics on the untouched test logits. The fitted temperature is stored with the
+checkpoint and model metadata.
 
 ## Safety-gated research inference
 
@@ -87,7 +92,8 @@ execution, applies the supplied temperature and abstention threshold, and return
 an uncertainty status, or an image-quality rejection. See `INFERENCE.md`.
 
 The helper is not connected to the FastAPI backend. The caller must provide a trained model, exact
-class order, validation-fitted temperature and validation-selected threshold. No model has been
+class order, validation-fitted temperature and validation-selected threshold. The offline trainer
+stores these values in its checkpoint and model metadata. No model has been
 trained, and this helper is not approved for patient-facing use.
 
 ## Class imbalance and per-class rates
