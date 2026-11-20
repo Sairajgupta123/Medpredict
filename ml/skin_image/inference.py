@@ -6,6 +6,7 @@ class mapping, calibrated temperature and validation-selected abstention thresho
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -35,6 +36,40 @@ def validate_skin_checkpoint(
     missing = required - set(checkpoint)
     if missing:
         raise ValueError(f"Checkpoint is missing required fields: {sorted(missing)}")
+
+    state_dict = checkpoint["model_state_dict"]
+    if not isinstance(state_dict, Mapping) or not state_dict:
+        raise ValueError("Checkpoint model_state_dict must be a non-empty mapping")
+    for key, value in state_dict.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("Checkpoint model_state_dict keys must be non-empty strings")
+        # Accept PyTorch tensors without importing the optional PyTorch stack at module load.
+        tensor = value
+        if hasattr(tensor, "detach"):
+            tensor = tensor.detach()
+        if hasattr(tensor, "cpu"):
+            tensor = tensor.cpu()
+        if hasattr(tensor, "numpy"):
+            try:
+                tensor = tensor.numpy()
+            except (TypeError, RuntimeError) as exc:
+                raise ValueError(
+                    f"Checkpoint model_state_dict entry {key!r} cannot be inspected"
+                ) from exc
+        try:
+            array = np.asarray(tensor)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Checkpoint model_state_dict entry {key!r} is not a numeric tensor"
+            ) from exc
+        if array.size == 0 or not np.issubdtype(array.dtype, np.number):
+            raise ValueError(
+                f"Checkpoint model_state_dict entry {key!r} must be a non-empty numeric tensor"
+            )
+        if not np.isfinite(array).all():
+            raise ValueError(
+                f"Checkpoint model_state_dict entry {key!r} contains non-finite values"
+            )
 
     names = checkpoint["class_names"]
     if (
