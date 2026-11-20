@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -44,14 +45,49 @@ def client():
     Base.metadata.drop_all(bind=test_engine)
 
 
-def test_symptom_catalog_returns_active_items(client: TestClient) -> None:
+def test_symptom_catalog_returns_only_active_approved_items(
+    client: TestClient,
+) -> None:
     db = TestingSessionLocal()
     try:
         db.add_all(
             [
-                Symptom(code="SYM_FEVER", name="Fever", is_active=True),
-                Symptom(code="SYM_COUGH", name="Cough", is_active=True),
-                Symptom(code="SYM_INTERNAL", name="Internal Draft", is_active=False),
+                Symptom(
+                    code="SYM_FEVER",
+                    name="Fever",
+                    is_active=True,
+                    review_status="approved",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=__import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ),
+                ),
+                Symptom(
+                    code="SYM_COUGH",
+                    name="Cough",
+                    is_active=True,
+                    review_status="draft",
+                ),
+                Symptom(
+                    code="SYM_INTERNAL",
+                    name="Internal Retired",
+                    is_active=True,
+                    review_status="retired",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=__import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ),
+                ),
+                Symptom(
+                    code="SYM_INACTIVE",
+                    name="Inactive Approved",
+                    is_active=False,
+                    review_status="approved",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=__import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ),
+                ),
             ]
         )
         db.commit()
@@ -61,17 +97,37 @@ def test_symptom_catalog_returns_active_items(client: TestClient) -> None:
     response = client.get("/api/v1/catalog/symptoms")
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 2
-    assert [item["name"] for item in body["items"]] == ["Cough", "Fever"]
+    assert body["total"] == 1
+    assert [item["name"] for item in body["items"]] == ["Fever"]
 
 
-def test_symptom_catalog_searches_name_and_code(client: TestClient) -> None:
+def test_symptom_catalog_searches_approved_items_by_name_and_code(
+    client: TestClient,
+) -> None:
     db = TestingSessionLocal()
     try:
         db.add_all(
             [
-                Symptom(code="SYM_FEVER", name="Fever", is_active=True),
-                Symptom(code="SYM_COUGH", name="Cough", is_active=True),
+                Symptom(
+                    code="SYM_FEVER",
+                    name="Fever",
+                    is_active=True,
+                    review_status="approved",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=__import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ),
+                ),
+                Symptom(
+                    code="SYM_COUGH",
+                    name="Cough",
+                    is_active=True,
+                    review_status="approved",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=__import__("datetime").datetime.now(
+                        __import__("datetime").timezone.utc
+                    ),
+                ),
             ]
         )
         db.commit()
@@ -82,6 +138,26 @@ def test_symptom_catalog_searches_name_and_code(client: TestClient) -> None:
     by_code = client.get("/api/v1/catalog/symptoms", params={"q": "SYM_COUGH"})
     assert [item["name"] for item in by_name.json()["items"]] == ["Fever"]
     assert [item["name"] for item in by_code.json()["items"]] == ["Cough"]
+
+
+def test_symptom_cannot_be_approved_without_reviewer_audit(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            Symptom(
+                code="SYM_UNREVIEWED",
+                name="Unreviewed",
+                is_active=True,
+                review_status="approved",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
+    finally:
+        db.rollback()
+        db.close()
 
 
 def test_disease_catalog_paginates(client: TestClient) -> None:
