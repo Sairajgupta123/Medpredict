@@ -1,5 +1,6 @@
 """Owner-scoped prediction history and consent operations."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -89,6 +90,7 @@ def revoke_text_history_consent(
             purpose="prediction_history",
             action="revoked",
             policy_version="history-v1",
+            captured_at=datetime.now(timezone.utc),
         )
     )
     db.commit()
