@@ -23,6 +23,16 @@ class ImageQualityPolicy:
     max_clipped_pixel_fraction: float = 0.55
     min_laplacian_variance: float = 8.0
 
+    def __post_init__(self) -> None:
+        if self.min_width < 1 or self.min_height < 1:
+            raise ValueError("Minimum image dimensions must be positive")
+        if not 0 <= self.min_mean_luminance < self.max_mean_luminance <= 255:
+            raise ValueError("Luminance thresholds must satisfy 0 <= min < max <= 255")
+        if not 0 <= self.max_clipped_pixel_fraction <= 1:
+            raise ValueError("Clipped-pixel fraction must be between 0 and 1")
+        if self.min_laplacian_variance < 0:
+            raise ValueError("Minimum detail score cannot be negative")
+
 
 def _laplacian_variance(gray: np.ndarray) -> float:
     """Estimate high-frequency detail using a simple four-neighbour Laplacian."""
