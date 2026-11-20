@@ -67,3 +67,13 @@ This scaffold has not been run against an approved real dataset. The chosen inpu
 augmentation and normalization are starting assumptions for controlled research, not clinically
 validated preprocessing. Dataset-specific review and clinician input are required. The module
 does not detect unsupported image modalities, out-of-distribution images, or diagnostic uncertainty.
+
+## Model factory and metrics
+
+`ml.skin_image.model.build_mobilenet_v3` provides MobileNetV3-Large and MobileNetV3-Small
+classifier factories. Pretrained weights are opt-in and may download external artifacts.
+`ml.skin_image.metrics.classification_metrics` reports macro-F1, balanced accuracy, confusion
+matrix and per-class metrics.
+
+See `MODEL_AND_EVALUATION.md`. No training run, benchmark result or clinical validation is
+claimed. The current preprocessing and model factory are research scaffolding only.
