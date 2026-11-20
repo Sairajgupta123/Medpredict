@@ -10,7 +10,12 @@ from app.models.knowledge import (
     MedicalReference,
     RecommendationReference,
 )
-from app.models.prediction import Prediction, PredictionResult, SkinImageAnalysis
+from app.models.prediction import (
+    Prediction,
+    PredictionConsentEvent,
+    PredictionResult,
+    SkinImageAnalysis,
+)
 from app.models.user import User
 
 __all__ = [
@@ -19,6 +24,7 @@ __all__ = [
     "DiseaseSymptom",
     "MedicalReference",
     "Prediction",
+    "PredictionConsentEvent",
     "PredictionFeedback",
     "PredictionResult",
     "RecommendationReference",
