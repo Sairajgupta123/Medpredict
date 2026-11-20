@@ -10,6 +10,8 @@ from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+from app.models.knowledge import MedicalReference
+from app.schemas.knowledge import MedicalReferenceCreate, MedicalReferenceRead
 from app.schemas.admin import (
     ReviewerScopeCreate,
     ReviewerScopeEventRead,
@@ -293,3 +295,70 @@ def list_reviewer_scope_history(
     ).all()
     return [ReviewerScopeEventRead.model_validate(event) for event in events]
 
+
+
+@router.get("/medical-references", response_model=list[MedicalReferenceRead])
+def list_medical_references(
+    administrator: Administrator,
+    db: DbSession,
+    q: str | None = Query(default=None, max_length=120),
+    review_status: str | None = Query(
+        default=None, pattern="^(draft|in_review|approved|retired)$"
+    ),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[MedicalReference]:
+    """List source records for administrator governance and maintenance."""
+    statement = select(MedicalReference)
+    if q:
+        pattern = f"%{q.strip()}%"
+        statement = statement.where(
+            MedicalReference.title.ilike(pattern)
+            | MedicalReference.publisher.ilike(pattern)
+            | MedicalReference.evidence_type.ilike(pattern)
+        )
+    if review_status:
+        statement = statement.where(MedicalReference.review_status == review_status)
+    return list(db.scalars(
+        statement.order_by(MedicalReference.created_at.desc()).limit(limit)
+    ).all())
+
+
+@router.post(
+    "/medical-references",
+    response_model=MedicalReferenceRead,
+    status_code=201,
+)
+def create_medical_reference(
+    payload: MedicalReferenceCreate,
+    administrator: Administrator,
+    db: DbSession,
+) -> MedicalReference:
+    """Create a source record as a draft; creation never implies source approval."""
+    duplicate = db.scalar(
+        select(MedicalReference.id).where(
+            MedicalReference.url == str(payload.url),
+            MedicalReference.version == payload.version,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A source with this URL and version already exists.",
+        )
+    source = MedicalReference(
+        title=payload.title,
+        publisher=payload.publisher,
+        url=str(payload.url),
+        evidence_type=payload.evidence_type,
+        version=payload.version,
+        published_on=payload.published_on,
+        accessed_on=payload.accessed_on,
+        license_name=payload.license_name,
+        content_sha256=payload.content_sha256.lower() if payload.content_sha256 else None,
+        next_review_due=payload.next_review_due,
+        review_status="draft",
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
