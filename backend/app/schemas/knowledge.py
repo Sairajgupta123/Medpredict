@@ -17,6 +17,7 @@ class MedicalReferenceRead(BaseModel):
     version: str
     published_on: date | None
     accessed_on: date
+    next_review_due: date | None
 
 
 class CareRecommendationRead(BaseModel):
@@ -30,6 +31,7 @@ class CareRecommendationRead(BaseModel):
     urgency: str
     title: str
     content: str
+    next_review_due: date | None
     references: list[MedicalReferenceRead] = Field(default_factory=list)
 
 
