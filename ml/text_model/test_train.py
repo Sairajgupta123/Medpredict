@@ -178,3 +178,16 @@ def test_dataset_allows_duplicate_normalized_text_with_same_label(tmp_path) -> N
 
     frame = load_dataset(path)
     assert len(frame) == 4
+
+def test_artifact_guard_rejects_existing_outputs(tmp_path) -> None:
+    from ml.text_model.train import ensure_artifacts_do_not_exist
+
+    (tmp_path / "model.joblib").write_bytes(b"existing")
+    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
+        ensure_artifacts_do_not_exist(tmp_path, ["model.joblib", "metrics.json"])
+
+
+def test_artifact_guard_allows_fresh_output_directory(tmp_path) -> None:
+    from ml.text_model.train import ensure_artifacts_do_not_exist
+
+    ensure_artifacts_do_not_exist(tmp_path, ["model.joblib", "metrics.json"])
