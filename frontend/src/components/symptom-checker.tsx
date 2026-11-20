@@ -2,22 +2,20 @@
 
 import { FormEvent, useState } from "react";
 
-type SymptomItem = {
-  id: string;
-  label: string;
-  category: string;
-};
+type Duration = "less_than_24_hours" | "one_to_three_days" | "four_to_seven_days" | "more_than_one_week" | "not_sure";
+type Severity = "mild" | "moderate" | "severe" | "not_sure";
+type Onset = "sudden" | "gradual" | "comes_and_goes" | "not_sure";
 
-type ContextualMention = SymptomItem & {
-  context_flag: string;
-};
-
+type SymptomItem = { id: string; label: string; category: string };
+type ContextualMention = SymptomItem & { context_flag: string };
+type ReportedContext = { duration: Duration; severity: Severity; onset: Onset };
 type NormalizeResult = {
   taxonomy_version: string;
   matched_symptoms: SymptomItem[];
   contextual_mentions: ContextualMention[];
   unrecognized_text_present: boolean;
   review_required: boolean;
+  reported_context: ReportedContext;
   clinical_interpretation_performed: false;
   disclaimer: string;
 };
@@ -31,6 +29,9 @@ const contextLabels: Record<string, string> = {
 
 export function SymptomChecker() {
   const [text, setText] = useState("");
+  const [duration, setDuration] = useState<Duration>("not_sure");
+  const [severity, setSeverity] = useState<Severity>("not_sure");
+  const [onset, setOnset] = useState<Onset>("not_sure");
   const [result, setResult] = useState<NormalizeResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,11 +45,14 @@ export function SymptomChecker() {
       const response = await fetch("/api/symptoms/normalize", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          reported_context: { duration, severity, onset },
+        }),
       });
       const body = await response.json() as NormalizeResult & { detail?: string };
       if (!response.ok) {
-        setError(body.detail ?? "We could not process this text. Please try again.");
+        setError(body.detail ?? "We could not process this information. Please try again.");
         return;
       }
       setResult(body);
@@ -64,7 +68,7 @@ export function SymptomChecker() {
       <div className="symptom-intro">
         <div className="eyebrow"><span className="eyebrow-dot" /> TEXT INPUT · RESEARCH PROTOTYPE</div>
         <h1>Tell us what <em>you are experiencing.</em></h1>
-        <p>Describe symptoms in your own words. This first version only recognizes a limited vocabulary of phrases. It does not identify a disease or assess how serious a condition may be.</p>
+        <p>Describe symptoms and, if you can, share when they started and how they feel. This prototype recognizes a limited vocabulary only; it does not identify a disease or assess medical urgency.</p>
       </div>
 
       <form className="symptom-form" onSubmit={handleSubmit}>
@@ -81,9 +85,42 @@ export function SymptomChecker() {
           />
         </label>
         <div className="symptom-form-meta"><span>Your text is processed for this request and is not saved to prediction history.</span><span>{text.length}/4000</span></div>
+
+        <fieldset className="symptom-context-fields">
+          <legend>About the symptoms you described</legend>
+          <p className="context-helper">These are your own descriptions, not measurements or a medical assessment. Choose “Not sure” if you cannot tell.</p>
+          <div className="context-fields-grid">
+            <label className="field-label" htmlFor="symptom-duration">How long have you experienced them?
+              <select id="symptom-duration" value={duration} onChange={(event) => setDuration(event.target.value as Duration)}>
+                <option value="not_sure">Not sure</option>
+                <option value="less_than_24_hours">Less than 24 hours</option>
+                <option value="one_to_three_days">1–3 days</option>
+                <option value="four_to_seven_days">4–7 days</option>
+                <option value="more_than_one_week">More than a week</option>
+              </select>
+            </label>
+            <label className="field-label" htmlFor="symptom-severity">How would you describe the severity?
+              <select id="symptom-severity" value={severity} onChange={(event) => setSeverity(event.target.value as Severity)}>
+                <option value="not_sure">Not sure</option>
+                <option value="mild">Mild</option>
+                <option value="moderate">Moderate</option>
+                <option value="severe">Severe</option>
+              </select>
+            </label>
+            <label className="field-label" htmlFor="symptom-onset">How did they begin?
+              <select id="symptom-onset" value={onset} onChange={(event) => setOnset(event.target.value as Onset)}>
+                <option value="not_sure">Not sure</option>
+                <option value="sudden">Suddenly</option>
+                <option value="gradual">Gradually</option>
+                <option value="comes_and_goes">They come and go</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button className="button button-primary symptom-submit" disabled={loading || !text.trim()} type="submit">
-          {loading ? "Reviewing phrases..." : "Review symptom phrases"} <span aria-hidden="true">→</span>
+          {loading ? "Reviewing information..." : "Review symptom information"} <span aria-hidden="true">→</span>
         </button>
       </form>
 
@@ -113,6 +150,14 @@ export function SymptomChecker() {
               ))}
             </div>
           )}
+
+          <div className="reported-context-summary">
+            <h3>Your reported context</h3>
+            <p>Duration: <strong>{result.reported_context.duration.replaceAll("_", " ")}</strong></p>
+            <p>Severity: <strong>{result.reported_context.severity.replaceAll("_", " ")}</strong></p>
+            <p>Onset: <strong>{result.reported_context.onset.replaceAll("_", " ")}</strong></p>
+            <small>These are self-reported details. The system has not interpreted or verified them.</small>
+          </div>
 
           {result.unrecognized_text_present && <p className="symptom-empty">Some or all of your wording was outside the supported vocabulary. Please do not rely on this tool to interpret it.</p>}
           <div className="non-diagnostic-note"><strong>No disease prediction was performed.</strong><p>{result.disclaimer}</p><small>Vocabulary version {result.taxonomy_version}</small></div>
