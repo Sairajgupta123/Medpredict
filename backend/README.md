@@ -123,6 +123,8 @@ Every review action must include a reason of 8–1,000 characters. The decision 
 audit event are committed in the same database transaction. Each event records target type,
 target key, previous status, new status, reason, authenticated reviewer ID, and server timestamp.
 The history is append-only through the API; there are no update or delete endpoints.
+Database constraints also validate both the previous and new lifecycle states and reject
+blank audit target keys or reasons.
 
 Authorized reviewers can inspect pending work and the latest history:
 
