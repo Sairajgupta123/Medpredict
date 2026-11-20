@@ -161,7 +161,7 @@ def audit_skin_manifest(
         if patient_values.eq("").any():
             blockers.append("patient_id_values_missing")
         valid_patients = frame.loc[
-            patient_values.ne("") & frame["label"].ne()
+            patient_values.ne("") & frame["label"].ne("")
         ].copy()
         patient_support = {
             str(label): int(
