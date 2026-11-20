@@ -311,3 +311,17 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 @media (max-width: 700px) {
   .context-fields-grid { grid-template-columns: 1fr; }
 }
+
+.symptom-human-review { margin-top: 22px; padding: 22px; border: 1px solid #dfe9e1; border-radius: 13px; background: #fbfdfb; }
+.human-review-intro h3 { margin: 0 0 7px; font: 700 16px var(--font-display); }
+.human-review-intro p { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.human-review-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .8fr); align-items: center; gap: 18px; padding: 13px 0; border-top: 1px solid #e8eee9; }
+.human-review-term { display: grid; gap: 5px; }
+.human-review-term strong { color: #29483b; font-size: 13px; }
+.human-review-term small { color: #7b8d82; font-size: 10px; }
+.human-review-item .field-label { gap: 5px; font-size: 10px; }
+.human-review-item select { padding: 9px 10px; font-size: 11px; }
+.human-review-counts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.human-review-counts span { padding: 7px 10px; border-radius: 20px; background: #edf4ee; color: #4e7059; font-size: 10px; font-weight: 650; }
+.human-review-note { margin: 13px 0 0; color: #798a80; font-size: 10px; line-height: 1.6; }
+@media (max-width: 600px) { .human-review-item { grid-template-columns: 1fr; gap: 10px; } .symptom-human-review { padding: 17px; } }
