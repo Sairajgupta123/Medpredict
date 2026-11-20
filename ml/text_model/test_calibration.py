@@ -8,6 +8,7 @@ from ml.text_model.calibration import (
     calibration_metrics,
     fit_temperature,
     selective_predictions,
+    select_threshold_for_coverage,
 )
 
 
@@ -58,3 +59,20 @@ def test_calibration_rejects_invalid_values() -> None:
         calibration_metrics([[0.8, 0.2]], [2])
     with pytest.raises(ValueError, match="positive and finite"):
         apply_temperature([[0.8, 0.2]], temperature=0)
+
+
+def test_threshold_is_selected_from_validation_probabilities() -> None:
+    result = select_threshold_for_coverage(
+        [[0.9, 0.1], [0.8, 0.2], [0.55, 0.45], [0.51, 0.49]],
+        minimum_coverage=0.5,
+    )
+    assert result["threshold"] > 0.5
+    assert result["achieved_validation_coverage"] >= 0.5
+    assert result["validation_sample_count"] == 4
+
+
+def test_threshold_rejects_invalid_coverage_target() -> None:
+    with pytest.raises(ValueError, match="minimum_coverage"):
+        select_threshold_for_coverage(
+            [[0.8, 0.2]], minimum_coverage=0
+        )
