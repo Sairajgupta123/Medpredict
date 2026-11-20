@@ -104,7 +104,7 @@ def _scope_status(normalized_text: str, start: int) -> str:
         r"\bwithout$",
         r"\b(?:deny|denies|denied)$",
         r"\b(?:do not|does not|did not|dont|doesnt|didnt)\s+"
-        r"(?:have\s+)?(?:any\s+|a\s+|an\s+)?$",
+        r"(?:have)?(?:\s+(?:any|a|an))?$",
     )
     if any(re.search(pattern, context) for pattern in negation_patterns):
         return "negated_or_denied_context"
