@@ -5,18 +5,22 @@ from pathlib import Path
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from app.db.base import Base
 from app import models  # noqa: F401 - register ORM metadata
+from app.db.base import Base
 
 
 BACKEND_DIR = Path(__file__).parents[1]
 
 
-def test_initial_migration_files_exist() -> None:
+def test_migration_files_exist() -> None:
     versions = BACKEND_DIR / "alembic" / "versions"
-    assert (versions / "0001_initial_schema.py").is_file()
-    assert (versions / "0002_reviewed_medical_knowledge.py").is_file()
-    assert (versions / "0003_reviewed_symptom_catalog.py").is_file()
+    for name in (
+        "0001_initial_schema.py",
+        "0002_reviewed_medical_knowledge.py",
+        "0003_reviewed_symptom_catalog.py",
+        "0004_prediction_history_consent.py",
+    ):
+        assert (versions / name).is_file()
 
 
 def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
@@ -26,21 +30,23 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0003_reviewed_symptom_catalog"
-    assert heads[0].down_revision == "0002_reviewed_medical_knowledge"
+    assert heads[0].revision == "0004_prediction_history_consent"
+    assert heads[0].down_revision == "0003_reviewed_symptom_catalog"
 
-    knowledge = script.get_revision("0002_reviewed_medical_knowledge")
-    assert knowledge is not None
-    assert knowledge.down_revision == "0001_initial_schema"
-
-    initial = script.get_revision("0001_initial_schema")
-    assert initial is not None
-    assert initial.down_revision is None
+    expected = {
+        "0003_reviewed_symptom_catalog": "0002_reviewed_medical_knowledge",
+        "0002_reviewed_medical_knowledge": "0001_initial_schema",
+        "0001_initial_schema": None,
+    }
+    for revision, parent in expected.items():
+        current = script.get_revision(revision)
+        assert current is not None
+        assert current.down_revision == parent
 
 
 def test_migration_sources_cover_registered_orm_tables() -> None:
     versions = BACKEND_DIR / "alembic" / "versions"
-    migration_text = "\\n".join(
+    migration_text = "\n".join(
         path.read_text(encoding="utf-8")
         for path in sorted(versions.glob("*.py"))
     )
@@ -49,6 +55,7 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0001_initial_schema",
         "0002_reviewed_medical_knowledge",
         "0003_reviewed_symptom_catalog",
+        "0004_prediction_history_consent",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
