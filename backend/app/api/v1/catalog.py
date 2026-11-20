@@ -6,12 +6,13 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.api.dependencies import CatalogReviewer, DbSession
-from app.models.catalog import Disease, DiseaseSymptom, Symptom
+from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.schemas.catalog import (
     CatalogItemRead,
     CatalogListResponse,
     DiseaseSymptomItemRead,
     CatalogReviewRequest,
+    CatalogReviewEventRead,
 )
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
@@ -138,8 +139,16 @@ def list_approved_disease_symptoms(
         for link, symptom in rows
     ]
 
-def _apply_review_decision(item, payload: CatalogReviewRequest, reviewer) -> dict:
-    """Apply a reviewer decision and bind approval metadata to the actor."""
+def _apply_review_decision(
+    item,
+    payload: CatalogReviewRequest,
+    reviewer,
+    db,
+    target_type: str,
+    target_key: str,
+) -> dict:
+    """Apply a decision and append an immutable audit event in the same transaction."""
+    previous_status = item.review_status
     item.review_status = payload.status
     if payload.status == "approved":
         item.reviewed_by = str(reviewer.id)
@@ -147,6 +156,17 @@ def _apply_review_decision(item, payload: CatalogReviewRequest, reviewer) -> dic
     else:
         item.reviewed_by = None
         item.reviewed_at = None
+
+    db.add(
+        CatalogReviewEvent(
+            target_type=target_type,
+            target_key=target_key,
+            previous_status=previous_status,
+            new_status=payload.status,
+            reason=payload.reason.strip(),
+            reviewer_id=reviewer.id,
+        )
+    )
     return {
         "review_status": item.review_status,
         "reviewed_by": item.reviewed_by,
@@ -165,7 +185,7 @@ def review_disease(
     item = db.scalar(select(Disease).where(Disease.code == disease_code))
     if item is None:
         raise HTTPException(status_code=404, detail="Disease not found.")
-    result = _apply_review_decision(item, payload, reviewer)
+    result = _apply_review_decision(item, payload, reviewer, db, "disease", disease_code)
     db.commit()
     return result
 
@@ -181,7 +201,7 @@ def review_symptom(
     item = db.scalar(select(Symptom).where(Symptom.code == symptom_code))
     if item is None:
         raise HTTPException(status_code=404, detail="Symptom not found.")
-    result = _apply_review_decision(item, payload, reviewer)
+    result = _apply_review_decision(item, payload, reviewer, db, "symptom", symptom_code)
     db.commit()
     return result
 
@@ -202,7 +222,34 @@ def review_disease_symptom_link(
     item = db.get(DiseaseSymptom, (disease.id, symptom.id))
     if item is None:
         raise HTTPException(status_code=404, detail="Disease-symptom link not found.")
-    result = _apply_review_decision(item, payload, reviewer)
+    result = _apply_review_decision(item, payload, reviewer, db, "disease_symptom", f"{disease_code}:{symptom_code}")
     db.commit()
     return result
+
+@router.get(
+    "/review/history",
+    response_model=list[CatalogReviewEventRead],
+)
+def list_catalog_review_history(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+    target_type: str | None = Query(
+        default=None, pattern="^(disease|symptom|disease_symptom)$"
+    ),
+    target_key: str | None = Query(default=None, min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[CatalogReviewEventRead]:
+    """Return append-only review history to authorized catalog reviewers."""
+    statement = select(CatalogReviewEvent)
+    if target_type:
+        statement = statement.where(CatalogReviewEvent.target_type == target_type)
+    if target_key:
+        statement = statement.where(CatalogReviewEvent.target_key == target_key)
+    events = db.scalars(
+        statement.order_by(
+            CatalogReviewEvent.created_at.desc(),
+            CatalogReviewEvent.id.desc(),
+        ).limit(limit)
+    ).all()
+    return [CatalogReviewEventRead.model_validate(event) for event in events]
 
