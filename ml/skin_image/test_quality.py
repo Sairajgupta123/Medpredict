@@ -37,3 +37,12 @@ def test_quality_reports_decode_failure_without_exposing_path(tmp_path) -> None:
     assert result["accepted_by_quality_checks"] is False
     assert result["flags"] == ["image_decode_failed"]
     assert "missing-image.jpg" not in str(result)
+
+
+def test_quality_policy_rejects_invalid_thresholds() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="Luminance thresholds"):
+        ImageQualityPolicy(min_mean_luminance=200, max_mean_luminance=100)
+    with pytest.raises(ValueError, match="positive"):
+        ImageQualityPolicy(min_width=0)
