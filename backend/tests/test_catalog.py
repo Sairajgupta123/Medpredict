@@ -825,6 +825,18 @@ def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
     scope_id = granted.json()["id"]
     assert granted.json()["reviewer_email"] == "reviewer-reviewer@example.com"
 
+    duplicate_grant = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json={
+            "reviewer_id": reviewer_id,
+            "scope_type": "disease",
+            "scope_key": "DIS_SCOPE_ALLOWED",
+            "reason": "Duplicate active assignment should be rejected.",
+        },
+    )
+    assert duplicate_grant.status_code == 409
+
     allowed = client.patch(
         "/api/v1/catalog/review/diseases/DIS_SCOPE_ALLOWED",
         headers=reviewer_headers,
@@ -866,12 +878,39 @@ def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
     )
     assert after_revoke.status_code == 403
 
+    regranted = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json={
+            "reviewer_id": reviewer_id,
+            "scope_type": "disease",
+            "scope_key": "DIS_SCOPE_ALLOWED",
+            "reason": "Restore the assignment for a new review period.",
+        },
+    )
+    assert regranted.status_code == 201
+    assert regranted.json()["id"] == scope_id
+    assert regranted.json()["revoked_at"] is None
+
+    allowed_again = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_SCOPE_ALLOWED",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "in_review",
+            "status": "approved",
+            "reason": "Review resumed after the scope was restored.",
+        },
+    )
+    assert allowed_again.status_code == 200
+
     history = client.get(
         "/api/v1/admin/reviewer-scopes/history",
         headers=admin_headers,
     )
     assert history.status_code == 200
-    assert {event["event_type"] for event in history.json()} == {"granted", "revoked"}
+    assert [event["event_type"] for event in history.json()] == [
+        "granted", "revoked", "granted"
+    ]
 
 
 def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
