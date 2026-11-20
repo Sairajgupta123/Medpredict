@@ -1,0 +1,123 @@
+{
+  "taxonomy_version": "0.1.0",
+  "status": "initial_research_vocabulary_not_clinically_validated",
+  "language": "en",
+  "normalization_policy": {
+    "case_insensitive": true,
+    "unicode_compatibility_normalization": true,
+    "punctuation_treated_as_separator": true,
+    "substring_matching": false,
+    "overlapping_aliases": "prefer_longest_match",
+    "clinical_interpretation": "not_performed"
+  },
+  "symptoms": [
+    {
+      "id": "SYM_HEADACHE",
+      "label": "Headache",
+      "category": "pain",
+      "aliases": ["headache", "head pain", "pain in my head", "my head hurts"]
+    },
+    {
+      "id": "SYM_FEVER",
+      "label": "Fever",
+      "category": "general",
+      "aliases": ["fever", "high temperature", "temperature", "feeling feverish", "body feels hot"]
+    },
+    {
+      "id": "SYM_COUGH",
+      "label": "Cough",
+      "category": "respiratory",
+      "aliases": ["cough", "coughing", "dry cough", "wet cough"]
+    },
+    {
+      "id": "SYM_SHORTNESS_OF_BREATH",
+      "label": "Shortness of breath",
+      "category": "respiratory",
+      "aliases": ["shortness of breath", "difficulty breathing", "trouble breathing", "cannot breathe properly", "can't breathe properly", "breathlessness", "breathing difficulty"]
+    },
+    {
+      "id": "SYM_CHEST_PAIN",
+      "label": "Chest pain",
+      "category": "pain",
+      "aliases": ["chest pain", "pain in my chest", "chest discomfort"]
+    },
+    {
+      "id": "SYM_SORE_THROAT",
+      "label": "Sore throat",
+      "category": "respiratory",
+      "aliases": ["sore throat", "throat pain", "painful throat", "throat hurts"]
+    },
+    {
+      "id": "SYM_RUNNY_NOSE",
+      "label": "Runny nose",
+      "category": "respiratory",
+      "aliases": ["runny nose", "nose running", "nasal discharge"]
+    },
+    {
+      "id": "SYM_NAUSEA",
+      "label": "Nausea",
+      "category": "digestive",
+      "aliases": ["nausea", "feeling nauseous", "feel like vomiting", "feeling like vomiting", "queasy"]
+    },
+    {
+      "id": "SYM_VOMITING",
+      "label": "Vomiting",
+      "category": "digestive",
+      "aliases": ["vomiting", "throwing up", "threw up", "being sick"]
+    },
+    {
+      "id": "SYM_DIARRHEA",
+      "label": "Diarrhea",
+      "category": "digestive",
+      "aliases": ["diarrhea", "diarrhoea", "loose motions", "loose stools", "watery stool"]
+    },
+    {
+      "id": "SYM_ABDOMINAL_PAIN",
+      "label": "Abdominal pain",
+      "category": "pain",
+      "aliases": ["abdominal pain", "stomach pain", "belly pain", "pain in my abdomen", "tummy ache"]
+    },
+    {
+      "id": "SYM_FATIGUE",
+      "label": "Fatigue",
+      "category": "general",
+      "aliases": ["fatigue", "tiredness", "feeling tired", "very tired", "low energy", "exhaustion"]
+    },
+    {
+      "id": "SYM_JOINT_PAIN",
+      "label": "Joint pain",
+      "category": "pain",
+      "aliases": ["joint pain", "painful joints", "aching joints"]
+    },
+    {
+      "id": "SYM_MUSCLE_PAIN",
+      "label": "Muscle pain",
+      "category": "pain",
+      "aliases": ["muscle pain", "muscle aches", "body aches", "body pain", "myalgia"]
+    },
+    {
+      "id": "SYM_SKIN_RASH",
+      "label": "Skin rash",
+      "category": "skin",
+      "aliases": ["skin rash", "rash", "itchy rash", "red spots on skin", "skin irritation"]
+    },
+    {
+      "id": "SYM_ITCHING",
+      "label": "Itching",
+      "category": "skin",
+      "aliases": ["itching", "itchy skin", "skin itching", "pruritus"]
+    },
+    {
+      "id": "SYM_DIZZINESS",
+      "label": "Dizziness",
+      "category": "neurological",
+      "aliases": ["dizziness", "dizzy", "lightheaded", "feeling faint"]
+    },
+    {
+      "id": "SYM_SWELLING",
+      "label": "Swelling",
+      "category": "general",
+      "aliases": ["swelling", "swollen", "inflammation"]
+    }
+  ]
+}
