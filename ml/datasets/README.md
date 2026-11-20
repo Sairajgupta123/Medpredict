@@ -78,8 +78,11 @@ Run the aggregate audit from the repository root:
 python -m ml.datasets.audit_skin_manifest --manifest path/to/manifest.csv --image-root path/to/images
 ```
 
-The audit checks missing/duplicate manifest values, group counts, path traversal, missing files,
-image decoding, supported formats and exact duplicate image content. Its JSON output excludes raw
-image paths and group identifiers. It does not verify source authenticity, license, diagnostic
-labels, skin-tone coverage or clinical suitability. Keep the manifest and all images in approved
+The audit checks missing/duplicate manifest values, patient/lesion group counts, path traversal,
+missing files, image decoding, supported formats and exact duplicate image content. It adds an
+aggregate `training_readiness` section that blocks reviewer sign-off when patient grouping is
+missing, any class has fewer than three distinct patients, files are invalid, or exact duplicate
+image content is present. Its JSON output excludes raw image paths and group identifiers. A passing
+technical audit is not automatic training approval and does not verify source authenticity, license,
+diagnostic labels, skin-tone coverage or clinical suitability. Keep the manifest and all images in approved
 local/private storage; do not commit them to Git.
