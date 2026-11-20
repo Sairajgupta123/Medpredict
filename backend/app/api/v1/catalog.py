@@ -3,10 +3,11 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, or_, select
 
 from app.api.dependencies import CatalogReviewer, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
+from app.models.reviewer_scope import CatalogReviewerScope
 from app.schemas.catalog import (
     CatalogItemRead,
     CatalogListResponse,
@@ -17,6 +18,42 @@ from app.schemas.catalog import (
 )
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
+
+
+def _reviewer_scope_exists(reviewer, target_type: str, target_key_expression):
+    """Build a SQL predicate for an active matching reviewer scope."""
+    return select(CatalogReviewerScope.id).where(
+        CatalogReviewerScope.reviewer_id == reviewer.id,
+        CatalogReviewerScope.scope_type == target_type,
+        CatalogReviewerScope.revoked_at.is_(None),
+        or_(
+            CatalogReviewerScope.scope_key.is_(None),
+            CatalogReviewerScope.scope_key == target_key_expression,
+        ),
+    ).exists()
+
+
+def _require_item_scope(reviewer, db, target_type: str, target_key: str) -> None:
+    """Enforce exact or type-wide grants before a reviewer can change an item."""
+    if reviewer.role == "admin":
+        return
+    allowed = db.scalar(
+        select(CatalogReviewerScope.id).where(
+            CatalogReviewerScope.reviewer_id == reviewer.id,
+            CatalogReviewerScope.scope_type == target_type,
+            CatalogReviewerScope.revoked_at.is_(None),
+            or_(
+                CatalogReviewerScope.scope_key.is_(None),
+                CatalogReviewerScope.scope_key == target_key,
+            ),
+        ).limit(1)
+    )
+    if allowed is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Your reviewer account is not assigned to this catalog scope.",
+        )
+
 
 
 def _list_catalog_items(
@@ -194,6 +231,7 @@ def review_disease(
     item = db.scalar(select(Disease).where(Disease.code == disease_code).with_for_update())
     if item is None:
         raise HTTPException(status_code=404, detail="Disease not found.")
+    _require_item_scope(reviewer, db, "disease", disease_code)
     result = _apply_review_decision(item, payload, reviewer, db, "disease", disease_code)
     db.commit()
     return result
@@ -210,6 +248,7 @@ def review_symptom(
     item = db.scalar(select(Symptom).where(Symptom.code == symptom_code).with_for_update())
     if item is None:
         raise HTTPException(status_code=404, detail="Symptom not found.")
+    _require_item_scope(reviewer, db, "symptom", symptom_code)
     result = _apply_review_decision(item, payload, reviewer, db, "symptom", symptom_code)
     db.commit()
     return result
@@ -238,7 +277,13 @@ def review_disease_symptom_link(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Disease-symptom link not found.")
-    result = _apply_review_decision(item, payload, reviewer, db, "disease_symptom", f"{disease_code}:{symptom_code}")
+    _require_item_scope(
+        reviewer, db, "disease_symptom", f"{disease_code}:{symptom_code}"
+    )
+    result = _apply_review_decision(
+        item, payload, reviewer, db, "disease_symptom",
+        f"{disease_code}:{symptom_code}"
+    )
     db.commit()
     return result
 
@@ -264,7 +309,12 @@ def list_catalog_review_queue(
     if target_type in (None, "disease"):
         diseases = db.scalars(
             select(Disease)
-            .where(Disease.review_status.in_(statuses))
+            .where(
+                Disease.review_status.in_(statuses),
+                True if reviewer.role == "admin" else _reviewer_scope_exists(
+                    reviewer, "disease", Disease.code
+                ),
+            )
             .order_by(Disease.created_at.asc(), Disease.code.asc())
             .limit(limit)
         ).all()
@@ -283,7 +333,12 @@ def list_catalog_review_queue(
     if target_type in (None, "symptom"):
         symptoms = db.scalars(
             select(Symptom)
-            .where(Symptom.review_status.in_(statuses))
+            .where(
+                Symptom.review_status.in_(statuses),
+                True if reviewer.role == "admin" else _reviewer_scope_exists(
+                    reviewer, "symptom", Symptom.code
+                ),
+            )
             .order_by(Symptom.created_at.asc(), Symptom.code.asc())
             .limit(limit)
         ).all()
@@ -304,7 +359,14 @@ def list_catalog_review_queue(
             select(DiseaseSymptom, Disease, Symptom)
             .join(Disease, Disease.id == DiseaseSymptom.disease_id)
             .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
-            .where(DiseaseSymptom.review_status.in_(statuses))
+            .where(
+                DiseaseSymptom.review_status.in_(statuses),
+                True if reviewer.role == "admin" else _reviewer_scope_exists(
+                    reviewer,
+                    "disease_symptom",
+                    Disease.code + literal(":") + Symptom.code,
+                ),
+            )
             .order_by(Disease.code.asc(), Symptom.code.asc())
             .limit(limit)
         ).all()
