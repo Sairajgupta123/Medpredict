@@ -23,3 +23,11 @@ class CatalogListResponse(BaseModel):
     total: int = Field(ge=0)
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)
+
+class DiseaseSymptomItemRead(BaseModel):
+    """An approved symptom association for an approved disease."""
+
+    symptom: CatalogItemRead
+    relevance_weight: float
+
+
