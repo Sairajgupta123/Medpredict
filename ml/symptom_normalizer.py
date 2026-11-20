@@ -1,8 +1,7 @@
 """Conservative symptom phrase normalization for MediPredict.
 
-This module maps explicitly listed phrases to vocabulary identifiers. It does not infer
-conditions, negate symptoms, assess severity, triage emergencies, or interpret clinical context.
-Unrecognized text is never echoed in the returned result.
+This module maps explicitly curated phrases to vocabulary identifiers. It is not a clinical NLP
+system: it cannot reliably resolve negation, time, uncertainty, severity, or conversational scope.
 """
 
 from __future__ import annotations
@@ -17,6 +16,19 @@ from typing import Any
 
 DEFAULT_TAXONOMY_PATH = Path(__file__).with_name("symptom_taxonomy.json")
 MAX_INPUT_CHARACTERS = 4_000
+NEGATION_CUES = {
+    "no", "not", "without", "denies", "denied", "deny",
+    "do not have", "does not have", "did not have", "don't have",
+    "doesn't have", "didn't have", "dont have", "doesnt have",
+}
+HISTORICAL_CUES = {
+    "previously", "earlier", "last week", "last month", "yesterday",
+    "used to have", "had",
+}
+UNCERTAINTY_CUES = {
+    "maybe", "might have", "may have", "possibly", "perhaps",
+    "think i have", "think i might have", "not sure if",
+}
 
 
 @dataclass(frozen=True)
@@ -31,8 +43,8 @@ def normalize_phrase(value: str) -> str:
     """Normalize a phrase for exact token-boundary matching."""
     value = unicodedata.normalize("NFKC", value).casefold()
     value = value.replace("’", "'")
-    value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
-    return " ".join(value.split())
+    value = re.sub(r"[^\w']+", " ", value, flags=re.UNICODE)
+    return " ".join(value.split()).replace("'", "")
 
 
 def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
@@ -52,19 +64,18 @@ def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
         if symptom.id in seen_ids:
             raise ValueError(f"Duplicate symptom identifier: {symptom.id}")
         seen_ids.add(symptom.id)
-
         if not symptom.aliases:
             raise ValueError(f"Symptom {symptom.id} has no aliases")
         for alias in symptom.aliases:
-            normalized = normalize_phrase(alias)
-            if not normalized:
+            normalized_alias = normalize_phrase(alias)
+            if not normalized_alias:
                 raise ValueError(f"Symptom {symptom.id} has an empty alias")
-            existing = seen_aliases.get(normalized)
+            existing = seen_aliases.get(normalized_alias)
             if existing and existing != symptom.id:
                 raise ValueError(
-                    f"Alias collision for normalized phrase: {normalized!r}"
+                    f"Alias collision for normalized phrase: {normalized_alias!r}"
                 )
-            seen_aliases[normalized] = symptom.id
+            seen_aliases[normalized_alias] = symptom.id
         symptoms.append(symptom)
 
     if not symptoms:
@@ -72,11 +83,29 @@ def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
     return tuple(symptoms)
 
 
+def _mention_context(normalized_text: str, start: int) -> str:
+    """Return a bounded prefix window for conservative cue detection."""
+    prefix = normalized_text[:start].split()
+    return " ".join(prefix[-5:])
+
+
+def _scope_status(normalized_text: str, start: int) -> str:
+    """Flag obvious nearby negation/history/uncertainty without claiming full NLP."""
+    context = _mention_context(normalized_text, start)
+    if any(context.endswith(cue) for cue in NEGATION_CUES):
+        return "negated_or_denied_context"
+    if any(context.endswith(cue) for cue in HISTORICAL_CUES):
+        return "possibly_historical_context"
+    if any(cue in context for cue in UNCERTAINTY_CUES):
+        return "uncertain_context"
+    return "explicit_mention_unresolved"
+
+
 def normalize_symptoms(
     text: str,
     taxonomy: tuple[Symptom, ...] | None = None,
 ) -> dict[str, Any]:
-    """Extract explicit symptom mentions; do not infer missing or negated concepts."""
+    """Extract curated phrases and flag obvious contextual cues for human review."""
     if not isinstance(text, str):
         raise TypeError("Symptom input must be a string")
     if len(text) > MAX_INPUT_CHARACTERS:
@@ -87,6 +116,7 @@ def normalize_symptoms(
         return {
             "taxonomy_version": "0.1.0",
             "matched_symptoms": [],
+            "contextual_mentions": [],
             "unrecognized_text_present": False,
             "review_required": True,
             "reason": "empty_input",
@@ -95,7 +125,7 @@ def normalize_symptoms(
 
     symptoms = taxonomy if taxonomy is not None else load_taxonomy()
     padded_text = f" {normalized} "
-    candidates: list[tuple[int, int, Symptom, str]] = []
+    candidates: list[tuple[int, int, Symptom]] = []
 
     for symptom in symptoms:
         for alias in symptom.aliases:
@@ -103,35 +133,45 @@ def normalize_symptoms(
             needle = f" {phrase} "
             start = padded_text.find(needle)
             while start >= 0:
-                candidates.append((start, len(needle), symptom, phrase))
+                candidates.append((start, len(needle), symptom))
                 start = padded_text.find(needle, start + 1)
 
-    # Longest-first selection prevents a shorter phrase from masking a longer one.
     accepted_spans: list[tuple[int, int]] = []
-    accepted: dict[str, Symptom] = {}
-    for start, width, symptom, _phrase in sorted(
+    accepted: dict[str, tuple[Symptom, str]] = {}
+    for start, width, symptom in sorted(
         candidates, key=lambda candidate: (-candidate[1], candidate[0])
     ):
         end = start + width
         if any(start < other_end and other_start < end for other_start, other_end in accepted_spans):
             continue
         accepted_spans.append((start, end))
-        accepted[symptom.id] = symptom
+        # Subtract the leading padding character before inspecting the original normalized text.
+        status = _scope_status(normalized, max(0, start - 1))
+        accepted[symptom.id] = (symptom, status)
 
-    matched = [
-        {
+    matched = []
+    contextual = []
+    for symptom, status in sorted(
+        accepted.values(), key=lambda item: item[0].id
+    ):
+        item = {
             "id": symptom.id,
             "label": symptom.label,
             "category": symptom.category,
         }
-        for symptom in sorted(accepted.values(), key=lambda item: item.id)
-    ]
+        if status == "explicit_mention_unresolved":
+            matched.append(item)
+        else:
+            contextual.append({**item, "context_flag": status})
 
     return {
         "taxonomy_version": "0.1.0",
         "matched_symptoms": matched,
-        "unrecognized_text_present": not bool(matched),
+        "contextual_mentions": contextual,
+        "unrecognized_text_present": not bool(matched or contextual),
         "review_required": True,
-        "reason": "explicit_phrase_matches" if matched else "no_supported_phrase_match",
+        "reason": "explicit_phrase_matches" if matched else (
+            "context_requires_review" if contextual else "no_supported_phrase_match"
+        ),
         "clinical_interpretation_performed": False,
     }
