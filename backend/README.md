@@ -167,6 +167,21 @@ changes require a separate DBA-controlled process outside the application. Do no
 SQL in a production database. Reviewer role assignment alone does not establish clinical
 qualification; the organization must verify credentials and scope before granting it.
 
+### Administrator governance overview
+
+Administrators can inspect operational account and catalog lifecycle metrics through:
+
+```http
+GET /api/v1/admin/governance?history_limit=20
+```
+
+This endpoint requires an authenticated account with the `admin` role. It returns active and
+inactive account counts by role, disease/symptom/association counts by review status, and a
+bounded list of recent reviewer-role provisioning events. It does not expose account email
+addresses, password data, or role mutation actions. Patients and reviewers receive HTTP 403.
+The endpoint is an operational monitoring view; it does not certify reviewer qualifications
+or establish clinical validation of any catalog content.
+
 ## Database foundation
 
 - SQLAlchemy 2.x declarative base: `app.db.base.Base`
