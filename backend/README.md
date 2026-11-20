@@ -52,6 +52,22 @@ From the `backend/` directory:
 pytest
 ```
 
+## Authentication foundation
+
+The API currently provides:
+- `POST /api/v1/auth/register` — register with email and password; returns a short-lived bearer token.
+- `POST /api/v1/auth/login` — authenticate using JSON email/password credentials.
+- `GET /api/v1/auth/me` — return the current account profile; requires an Authorization bearer token.
+
+Passwords are hashed using Argon2. Access tokens are signed JWTs with an issuer, token type,
+issued-at timestamp, and expiration. The access-token lifetime is configurable through
+`ACCESS_TOKEN_EXPIRE_MINUTES` (default 30 minutes). Production startup rejects the built-in
+development secret and requires a secret of at least 32 characters.
+
+Email verification, password reset, refresh tokens, token revocation, account deletion, rate limiting,
+and multi-factor authentication are not implemented yet. Logout on a stateless access token is not
+represented as a fake server-side action; revocation/refresh-token design is a separate security step.
+
 ## Database foundation
 
 - SQLAlchemy 2.x declarative base: `app.db.base.Base`
@@ -68,6 +84,6 @@ Each API request that uses `get_db` receives its own session, which is closed af
 ## Current scope and safety
 
 This milestone adds an initial ORM schema draft only. No migration has been applied, no patient data
-is being stored, and authentication or disease prediction is not implemented.
+is being stored, and email verification, password reset, refresh-token rotation, token revocation, and disease prediction are not implemented.
 Do not place real patient data in development or test databases. Production secrets and database
 credentials must be stored in the deployment environment, never committed to Git.
