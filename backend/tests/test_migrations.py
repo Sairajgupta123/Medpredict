@@ -31,7 +31,7 @@ def test_migration_files_exist() -> None:
         "0013_catalog_references.py",
         "0014_medical_reference_audit.py",
         "0014_password_reset_tokens.py",
-        "0015_merge_ref_reset_heads.py",
+        "0015_merge_reference_and_reset_heads.py",
     ):
         assert (versions / name).is_file()
 
