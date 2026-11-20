@@ -985,6 +985,14 @@ def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
             "symptom": 0,
             "disease_symptom": 0,
         },
+        "is_unrestricted": False,
+        "assignments": [
+            {
+                "scope_type": "disease",
+                "scope_key": "DIS_WORKLOAD_ASSIGNED",
+                "granted_at": initial.json()["assignments"][0]["granted_at"],
+            }
+        ],
         "activity": {
             "total_decisions": 0,
             "approved_decisions": 0,
@@ -1017,6 +1025,7 @@ def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
     )
     assert isolated.status_code == 200
     assert isolated.json()["activity"]["total_decisions"] == 0
+    assert isolated.json()["assignments"] == []
 
 
 def test_reviewer_workload_requires_catalog_reviewer_role(
