@@ -379,9 +379,33 @@ def read_reviewer_workload(
         ) or 0
     )
 
+    active_scopes = []
+    if reviewer.role != "admin":
+        scope_rows = db.scalars(
+            select(CatalogReviewerScope)
+            .where(
+                CatalogReviewerScope.reviewer_id == reviewer.id,
+                CatalogReviewerScope.revoked_at.is_(None),
+            )
+            .order_by(
+                CatalogReviewerScope.scope_type.asc(),
+                CatalogReviewerScope.scope_key.asc(),
+            )
+        ).all()
+        active_scopes = [
+            {
+                "scope_type": scope.scope_type,
+                "scope_key": scope.scope_key,
+                "granted_at": scope.granted_at,
+            }
+            for scope in scope_rows
+        ]
+
     return {
         "pending_total": sum(pending_by_type.values()),
         "pending_by_type": pending_by_type,
+        "is_unrestricted": reviewer.role == "admin",
+        "assignments": active_scopes,
         "activity": {
             "total_decisions": total_decisions,
             "approved_decisions": approved_decisions,
