@@ -125,3 +125,30 @@ Only the signed-in user's display name is currently editable. Email changes, pas
 The initial migration file is committed but has not been applied to a live PostgreSQL database in this workspace. No patient data is being stored, and email verification, password reset, refresh-token rotation, token revocation, and disease prediction are not implemented.
 Do not place real patient data in development or test databases. Production secrets and database
 credentials must be stored in the deployment environment, never committed to Git.
+
+
+## Reviewed medical knowledge API
+
+The public knowledge endpoint returns general-care information only when all publication gates pass:
+- The recommendation is marked active and approved.
+- Its validity window includes the current date.
+- At least one linked medical reference is approved.
+- The requested locale matches the recommendation locale.
+
+Endpoint:
+
+```http
+GET /api/v1/knowledge/diseases/{disease_code}/recommendations?locale=en&category=general_care
+```
+
+Supported categories are `general_care`, `precautions`, `lifestyle`, `diet`,
+`when_to_seek_care`, and `emergency_signs`. Supported urgency labels are `routine`, `prompt`,
+`urgent`, and `emergency`.
+
+Knowledge records default to draft/unpublished. There is intentionally no public write endpoint or
+seeded medical advice. A qualified reviewer must verify the source, wording, applicability, locale,
+validity period and approval metadata before content can be published. This initial module does not
+store medication instructions or dosage advice.
+
+The endpoint is a source-backed education layer, not a diagnosis or treatment plan. Emergency
+information must be carefully reviewed and localized before any production use.
