@@ -113,10 +113,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
     ? params.history_type
     : "all";
   const historyFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.history_from ?? "")
-    ? params.history_from
+    ? params.history_from ?? ""
     : "";
   const historyTo = /^\d{4}-\d{2}-\d{2}$/.test(params.history_to ?? "")
-    ? params.history_to
+    ? params.history_to ?? ""
     : "";
 
   const [
