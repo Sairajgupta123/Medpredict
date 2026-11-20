@@ -59,4 +59,7 @@ class SymptomNormalizeResponse(BaseModel):
     reason: str
     reported_context: ReportedSymptomContext
     clinical_interpretation_performed: Literal[False] = False
+    model_inference_performed: Literal[False] = False
+    disease_prediction_performed: Literal[False] = False
+    research_only: Literal[True] = True
     disclaimer: str
