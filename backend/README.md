@@ -127,11 +127,35 @@ Authorized reviewers can inspect the latest history:
 Filters are optional; `limit` is bounded to 1–100. Patients cannot access the review history.
 The audit record is operational traceability, not proof of clinical validity or reviewer credentials.
 
-There is intentionally no public endpoint to grant reviewer/admin roles. Role provisioning
-must be performed through a controlled, authenticated operational process by an authorized
-database administrator, with identity verification and an audit trail. Do not promote accounts
-through ad-hoc SQL in a production database. Reviewer role assignment alone does not establish
-clinical qualification; the organization must verify credentials and scope before granting it.
+There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
+access can be provisioned or revoked with the backend operational CLI after applying migrations.
+Run from `backend/` using a trusted operations shell:
+
+PowerShell:
+```powershell
+$env:MEDIPREDICT_ROLE_PROVISIONING_OPERATOR = "operator identity from your approved operations process"
+python -m scripts.provision_catalog_reviewer --email reviewer@example.org --role reviewer --reason "Verified reviewer appointment and scope"
+```
+
+macOS/Linux:
+```bash
+export MEDIPREDICT_ROLE_PROVISIONING_OPERATOR="operator identity from your approved operations process"
+python -m scripts.provision_catalog_reviewer --email reviewer@example.org --role reviewer --reason "Verified reviewer appointment and scope"
+```
+
+The command requires an existing active account, verified email for reviewer grants, a reason,
+and exact-email interactive confirmation. Use `--role patient` to revoke reviewer access and
+`--dry-run` to validate a proposed change without committing it. The command records the
+previous/new role, target account, operator identity, reason, and server timestamp in the
+append-only `role_provisioning_events` table in the same transaction as the role update.
+The operator identity is asserted by the trusted shell environment; it is not independently
+authenticated by the application. Restrict database credentials and shell access to authorized
+operations personnel, and preserve database backups and audit records.
+
+This CLI deliberately cannot grant the `admin` role. Admin bootstrap or changes require a
+separate DBA-controlled process outside the application. Do not promote accounts through ad-hoc
+SQL in a production database. Reviewer role assignment alone does not establish clinical
+qualification; the organization must verify credentials and scope before granting it.
 
 ## Database foundation
 
