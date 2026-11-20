@@ -115,6 +115,7 @@ def train_skin_model(
     from torch import nn
     from torch.utils.data import DataLoader
 
+    from ml.skin_image.class_weights import calculate_class_weights
     from ml.skin_image.data import SkinImageDataset
     from ml.skin_image.metrics import classification_metrics
     from ml.skin_image.model import build_mobilenet_v3
@@ -167,7 +168,19 @@ def train_skin_model(
         variant=variant,
         pretrained=pretrained,
     ).to(device)
-    criterion = nn.CrossEntropyLoss()
+    training_labels = [
+        class_to_index[label] for label in train_frame["label"].tolist()
+    ]
+    weight_report = calculate_class_weights(
+        training_labels,
+        class_count=len(class_names),
+    )
+    class_weights = torch.tensor(
+        weight_report["class_weights"],
+        dtype=torch.float32,
+        device=device,
+    )
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -234,6 +247,7 @@ def train_skin_model(
         "test_metrics": test_metrics,
         "class_names": class_names,
         "class_to_index": class_to_index,
+        "training_class_balance": weight_report,
         "partition_row_counts": {
             "train": len(train_frame),
             "validation": len(validation_frame),
