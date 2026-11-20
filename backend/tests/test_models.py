@@ -10,6 +10,9 @@ from app.models import (  # noqa: F401 - imports register model metadata
     SkinImageAnalysis,
     Symptom,
     User,
+    CareRecommendation,
+    MedicalReference,
+    RecommendationReference,
 )
 
 
@@ -23,6 +26,9 @@ def test_all_initial_tables_are_registered() -> None:
         "prediction_results",
         "skin_image_analyses",
         "prediction_feedback",
+        "medical_references",
+        "care_recommendations",
+        "recommendation_references",
     }
     assert expected.issubset(set(Base.metadata.tables))
 
@@ -42,3 +48,16 @@ def test_result_probability_has_numeric_precision() -> None:
     probability_type = PredictionResult.__table__.c.probability.type
     assert probability_type.precision == 7
     assert probability_type.scale == 6
+
+
+def test_knowledge_content_defaults_to_unpublished() -> None:
+    assert CareRecommendation.is_active.default.arg is False
+    assert CareRecommendation.review_status.default.arg == "draft"
+    assert MedicalReference.review_status.default.arg == "draft"
+
+
+def test_recommendation_reference_has_composite_identity() -> None:
+    primary_key_columns = set(
+        RecommendationReference.__table__.primary_key.columns.keys()
+    )
+    assert primary_key_columns == {"recommendation_id", "reference_id"}
