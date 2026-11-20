@@ -1,5 +1,8 @@
 """Authenticated API tests for prediction-history privacy controls."""
 
+from datetime import datetime, timezone
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -59,14 +62,21 @@ def _prediction(user_id, *, modality="text", input_text=None) -> Prediction:
             input_storage_consent=input_text is not None,
         )
         db.add(item)
+        if input_text is not None:
+            db.add(
+                PredictionConsentEvent(
+                    prediction_id=item.id,
+                    purpose="prediction_history",
+                    action="granted",
+                    policy_version="history-v1",
+                    captured_at=datetime.now(timezone.utc),
+                )
+            )
         db.commit()
         db.refresh(item)
         return item
     finally:
         db.close()
-
-
-import pytest
 
 
 @pytest.fixture()
