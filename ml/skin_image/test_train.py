@@ -53,3 +53,25 @@ def test_training_rejects_invalid_validation_coverage_before_loading_torch(tmp_p
             tmp_path / "output",
             target_validation_coverage=0,
         )
+
+
+def test_training_blocks_dataset_with_missing_image_files(tmp_path) -> None:
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_id": [f"image-{i}" for i in range(6)],
+            "image_path": [f"missing-{i}.jpg" for i in range(6)],
+            "label": ["class_a"] * 3 + ["class_b"] * 3,
+            "patient_id": [f"patient-{i}" for i in range(6)],
+        }
+    ).to_csv(manifest, index=False)
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+
+    # A technically incomplete dataset must be rejected before torch/model initialization.
+    with pytest.raises(ValueError, match="image_files_missing_or_unsafe"):
+        train_skin_model(
+            manifest,
+            image_root,
+            tmp_path / "output",
+        )
