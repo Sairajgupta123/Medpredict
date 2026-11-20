@@ -447,3 +447,73 @@ export async function getReviewerWorkload(): Promise<{
   }
 }
 
+
+
+export type PendingCatalogEntry = {
+  entry: {
+    target_type: "disease" | "symptom" | "disease_symptom";
+    target_key: string;
+    name: string;
+    description: string | null;
+    status: string;
+    is_active: boolean;
+    created_at: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    related_entries: Array<{
+      target_type: "disease" | "symptom";
+      target_key: string;
+      name: string;
+      status: string;
+    }>;
+    relevance_weight: number | null;
+  };
+  evidence: {
+    references: Array<{
+      title: string;
+      url: string;
+      source: string | null;
+    }>;
+    reference_support: "not_implemented" | "available";
+    message: string;
+  };
+};
+
+export async function getPendingCatalogEntry(
+  targetType: string,
+  targetKey: string,
+): Promise<{ data: PendingCatalogEntry | null; error: string | null }> {
+  const token = await getSessionToken();
+  if (!token) return { data: null, error: "Your session has expired. Please sign in again." };
+  if (
+    !["disease", "symptom", "disease_symptom"].includes(targetType) ||
+    !targetKey ||
+    targetKey.length > 200
+  ) {
+    return { data: null, error: "This catalog inspection link is invalid." };
+  }
+
+  const params = new URLSearchParams({ target_type: targetType, target_key: targetKey });
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/queue/entry?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      return {
+        data: null,
+        error: response.status === 404
+          ? "This pending catalog entry is unavailable."
+          : response.status === 403
+            ? "Your account is not assigned to inspect this catalog scope."
+            : "The catalog entry could not be loaded. Please try again.",
+      };
+    }
+    return { data: await response.json() as PendingCatalogEntry, error: null };
+  } catch {
+    return { data: null, error: "The MediPredict server is unavailable." };
+  }
+}
