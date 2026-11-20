@@ -15,8 +15,8 @@ from typing import Any
 import pandas as pd
 
 
-EMAIL_PATTERN = re.compile(r"\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b")
-PHONE_PATTERN = re.compile(r"(?<!\\w)(?:\\+?\\d[\\d .()-]{7,}\\d)(?!\\w)")
+EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
+PHONE_PATTERN = re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)")
 
 
 def _normalized_text(values: pd.Series) -> pd.Series:
@@ -26,7 +26,7 @@ def _normalized_text(values: pd.Series) -> pd.Series:
         .astype(str)
         .str.strip()
         .str.lower()
-        .str.replace(r"\\s+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
     )
 
 
