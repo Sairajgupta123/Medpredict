@@ -154,16 +154,33 @@ export type CatalogReviewEvent = {
   created_at: string;
 };
 
-export async function getCatalogReviewHistory(): Promise<{
+export type ReviewHistoryFilters = {
+  q?: string;
+  target_type?: string;
+  date_from?: string;
+  date_to?: string;
+};
+
+export async function getCatalogReviewHistory(
+  filters: ReviewHistoryFilters = {},
+): Promise<{
   items: CatalogReviewEvent[];
   error: string | null;
 }> {
   const token = await getSessionToken();
   if (!token) return { items: [], error: "Your session has expired. Please sign in again." };
 
+  const params = new URLSearchParams({ limit: "100" });
+  if (filters.q) params.set("q", filters.q);
+  if (filters.target_type && filters.target_type !== "all") {
+    params.set("target_type", filters.target_type);
+  }
+  if (filters.date_from) params.set("date_from", filters.date_from);
+  if (filters.date_to) params.set("date_to", filters.date_to);
+
   try {
     const response = await fetch(
-      `${API_BASE_URL}/catalog/review/history?limit=20`,
+      `${API_BASE_URL}/catalog/review/history?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
@@ -180,6 +197,51 @@ export async function getCatalogReviewHistory(): Promise<{
     return { items: await response.json() as CatalogReviewEvent[], error: null };
   } catch {
     return { items: [], error: "The MediPredict server is unavailable." };
+  }
+}
+
+export type ReviewedCatalogEntry = {
+  event: CatalogReviewEvent;
+  entry: {
+    target_type: "disease" | "symptom" | "disease_symptom";
+    target_key: string;
+    name: string;
+    description: string | null;
+    status: string;
+    created_at: string | null;
+    relevance_weight: number | null;
+  };
+};
+
+export async function getReviewedCatalogEntry(eventId: string): Promise<{
+  data: ReviewedCatalogEntry | null;
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) return { data: null, error: "Your session has expired. Please sign in again." };
+  if (!/^[0-9a-f-]{36}$/i.test(eventId)) {
+    return { data: null, error: "This review history link is invalid." };
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/history/${encodeURIComponent(eventId)}/entry`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      return {
+        data: null,
+        error: response.status === 404
+          ? "This catalog entry is unavailable or is not part of your review history."
+          : "The reviewed catalog entry could not be loaded.",
+      };
+    }
+    return { data: await response.json() as ReviewedCatalogEntry, error: null };
+  } catch {
+    return { data: null, error: "The MediPredict server is unavailable." };
   }
 }
 
