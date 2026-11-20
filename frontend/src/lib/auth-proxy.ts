@@ -469,15 +469,111 @@ export type PendingCatalogEntry = {
     relevance_weight: number | null;
   };
   evidence: {
-    references: Array<{
-      title: string;
-      url: string;
-      source: string | null;
-    }>;
+    references: CatalogReferenceItem[];
     reference_support: "not_implemented" | "available";
     message: string;
   };
 };
+
+export type CatalogReferenceItem = {
+  id: string;
+  reference_id: string;
+  title: string;
+  publisher: string;
+  url: string;
+  evidence_type: string;
+  version: string;
+  published_on: string | null;
+  accessed_on: string;
+  review_status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  next_review_due: string | null;
+  link_reason: string;
+  linked_by: string;
+  linked_at: string;
+};
+
+export type ReviewableMedicalReference = Omit<
+  CatalogReferenceItem,
+  "id" | "link_reason" | "linked_by" | "linked_at"
+> & { id: string };
+
+export async function getReviewableMedicalReferences(q = ""): Promise<{
+  items: ReviewableMedicalReference[];
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) return { items: [], error: "Your session has expired. Please sign in again." };
+  const params = new URLSearchParams({ limit: "50" });
+  if (q.trim()) params.set("q", q.trim());
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/references?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
+    );
+    if (!response.ok) {
+      return { items: [], error: "The medical source registry could not be loaded." };
+    }
+    return { items: await response.json() as ReviewableMedicalReference[], error: null };
+  } catch {
+    return { items: [], error: "The MediPredict server is unavailable." };
+  }
+}
+
+export async function attachCatalogReference(
+  targetType: string, targetKey: string, referenceId: string, reason: string,
+): Promise<{ error: string | null }> {
+  const token = await getSessionToken();
+  if (!token) return { error: "Your session has expired. Please sign in again." };
+  try {
+    const response = await fetch(`${API_BASE_URL}/catalog/review/queue/entry/references`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        target_type: targetType, target_key: targetKey, reference_id: referenceId, reason,
+      }),
+      cache: "no-store",
+    });
+    if (response.ok) return { error: null };
+    if (response.status === 409) return { error: "This source is already attached." };
+    if (response.status === 403) return { error: "Your reviewer scope does not permit this action." };
+    return { error: "The source could not be attached. Check the source and reason." };
+  } catch {
+    return { error: "The MediPredict server is unavailable." };
+  }
+}
+
+export async function removeCatalogReference(
+  linkId: string, reason: string,
+): Promise<{ error: string | null }> {
+  const token = await getSessionToken();
+  if (!token) return { error: "Your session has expired. Please sign in again." };
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/queue/entry/references/${encodeURIComponent(linkId)}/remove`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ reason }),
+        cache: "no-store",
+      },
+    );
+    if (response.ok) return { error: null };
+    if (response.status === 403) return { error: "Your reviewer scope does not permit this action." };
+    return { error: "The source link could not be removed." };
+  } catch {
+    return { error: "The MediPredict server is unavailable." };
+  }
+}
 
 export async function getPendingCatalogEntry(
   targetType: string,
