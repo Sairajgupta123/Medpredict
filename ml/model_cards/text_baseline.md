@@ -63,3 +63,7 @@ a leakage-aware evaluation.
 - Clinical/domain reviewer: Pending
 - ML evaluation reviewer: Pending
 - API integration approval: Not granted
+
+- Balanced accuracy is computed as mean per-class sensitivity over the complete configured
+  label taxonomy. A class absent from an evaluation partition contributes zero sensitivity
+  rather than disappearing from the metric; always inspect per-class support alongside it.
