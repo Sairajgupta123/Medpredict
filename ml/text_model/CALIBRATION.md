@@ -16,9 +16,16 @@
 5. Freeze both values and evaluate once on an untouched external test cohort.
 6. Report discrimination, calibration, coverage, per-class sensitivity/specificity and subgroup results.
 
-The current exploratory comparison runner does not yet create a dedicated validation partition or
-wire these helpers into training. Do not fit calibration or choose thresholds on the comparison
-test partition. The helper is not connected to the backend or user interface.
+The three-way comparison runner now integrates the validation-only calibration and threshold workflow.
+It selects a candidate by validation macro-F1, fits scalar temperature using the selected model's
+validation probabilities, derives the technical coverage cutoff from validation only, freezes the
+choices, and evaluates the test partition once. The report contains raw and calibrated test
+metrics, calibration metrics, coverage and accepted-subset performance. The selected local artifact
+stores the vectorizer, estimator, label encoder, fitted temperature and threshold together.
+
+A maximum temperature-scaled model score is not a disease probability or medical certainty.
+Abstention reduces forced predictions but does not make the remaining predictions clinically safe.
+These utilities are research-only and require representative, independently reviewed data.
 
 A maximum temperature-scaled model score is not a disease probability or medical certainty.
 Abstention reduces forced predictions but does not make the remaining predictions clinically safe.
