@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 
 from ml.skin_image.quality import ImageQualityPolicy, inspect_image_quality
 
@@ -64,29 +64,16 @@ def predict_skin_image(
 
     try:
         import torch
-        from torchvision import transforms
     except ImportError as exc:
         raise RuntimeError(
             "Install the optional skin dependencies from ml/requirements-skin.txt"
         ) from exc
 
-    from ml.skin_image.data import IMAGENET_MEAN, IMAGENET_STD
+    from ml.skin_image.data import build_image_transform, prepare_rgb_image
     from ml.skin_image.selective import apply_abstention
 
-    oriented = ImageOps.exif_transpose(image).convert("RGB")
-    canvas = ImageOps.pad(
-        oriented,
-        (image_size, image_size),
-        method=Image.Resampling.BILINEAR,
-        color=(128, 128, 128),
-        centering=(0.5, 0.5),
-    )
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-        ]
-    )
+    canvas = prepare_rgb_image(image, image_size)
+    transform = build_image_transform(training=False, image_size=image_size)
     tensor = transform(canvas).unsqueeze(0).to(device)
 
     model = model.to(device)
