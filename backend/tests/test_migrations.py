@@ -19,6 +19,9 @@ def test_migration_files_exist() -> None:
         "0002_reviewed_medical_knowledge.py",
         "0003_reviewed_symptom_catalog.py",
         "0004_prediction_history_consent.py",
+        "0004_knowledge_review_due_dates.py",
+        "0005_merge_knowledge_and_consent_heads.py",
+        "0006_disease_catalog_review.py",
     ):
         assert (versions / name).is_file()
 
@@ -30,10 +33,22 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0004_prediction_history_consent"
-    assert heads[0].down_revision == "0003_reviewed_symptom_catalog"
+    assert heads[0].revision == "0006_disease_catalog_review"
+    assert heads[0].down_revision == "0005_merge_knowledge_consent"
+
+    merge = script.get_revision("0005_merge_knowledge_consent")
+    assert merge is not None
+    assert set(merge.down_revision) == {
+        "0004_knowledge_review_due_dates",
+        "0004_prediction_history_consent",
+        "0004_knowledge_review_due_dates",
+        "0005_merge_knowledge_consent",
+        "0006_disease_catalog_review",
+    }
 
     expected = {
+        "0004_knowledge_review_due_dates": "0003_reviewed_symptom_catalog",
+        "0004_prediction_history_consent": "0003_reviewed_symptom_catalog",
         "0003_reviewed_symptom_catalog": "0002_reviewed_medical_knowledge",
         "0002_reviewed_medical_knowledge": "0001_initial_schema",
         "0001_initial_schema": None,
