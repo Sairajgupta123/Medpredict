@@ -34,6 +34,15 @@ def test_inference_validates_class_mapping_and_thresholds() -> None:
             minimum_confidence=0.7,
             temperature=1.0,
         )
+
+    with pytest.raises(ValueError, match="non-empty"):
+        predict_skin_image(
+            NeverCalledModel(),
+            image,
+            class_names=["class_a", " "],
+            minimum_confidence=0.7,
+            temperature=1.0,
+        )
     with pytest.raises(ValueError, match="positive and finite"):
         predict_skin_image(
             NeverCalledModel(),
