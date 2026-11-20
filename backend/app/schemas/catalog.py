@@ -37,6 +37,7 @@ class DiseaseSymptomItemRead(BaseModel):
 class CatalogReviewRequest(BaseModel):
     """Reviewer decision for a disease, symptom, or their association."""
 
+    expected_status: str = Field(pattern="^(draft|in_review|approved|retired)$")
     status: str = Field(pattern="^(draft|in_review|approved|retired)$")
     reason: str = Field(min_length=8, max_length=1000)
 
