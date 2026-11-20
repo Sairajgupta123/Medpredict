@@ -71,3 +71,10 @@ performance. The maximum softmax score is not automatically calibrated and is no
 See `QUALITY_AND_ABSTENTION.md`. Thresholds must be selected using validation data and evaluated
 on an untouched test set. Calibration, validated out-of-distribution detection and modality checks
 remain future work.
+
+## Probability calibration
+
+`ml.skin_image.calibration` adds validation-fitted scalar temperature scaling, negative log
+likelihood, multiclass Brier score and top-label expected calibration error. Follow
+`CALIBRATION.md`: fit temperature on validation logits only and evaluate on an untouched test set.
+The helper is not yet wired into the training runner; no calibration result is claimed.
