@@ -12,6 +12,19 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
 
+def _validate_unit_interval(value: float, name: str, *, allow_zero: bool = True) -> float:
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, float, np.integer, np.floating))
+        or not np.isfinite(value)
+        or (value < 0 if allow_zero else value <= 0)
+        or value > 1
+    ):
+        boundary = "[0, 1]" if allow_zero else "(0, 1]"
+        raise ValueError(f"{name} must be a finite number in {boundary}")
+    return float(value)
+
+
 def apply_abstention(
     probabilities: list[list[float]] | np.ndarray,
     *,
@@ -27,8 +40,9 @@ def apply_abstention(
         raise ValueError("probabilities must be between 0 and 1")
     if not np.allclose(values.sum(axis=1), 1.0, atol=1e-5):
         raise ValueError("Each probability row must sum to 1")
-    if not 0.0 <= minimum_confidence <= 1.0:
-        raise ValueError("minimum_confidence must be between 0 and 1")
+    minimum_confidence = _validate_unit_interval(
+        minimum_confidence, "minimum_confidence"
+    )
 
     confidence = values.max(axis=1)
     predictions = values.argmax(axis=1)
@@ -129,8 +143,9 @@ def select_threshold_for_coverage(
         raise ValueError("validation_probabilities must be between 0 and 1")
     if not np.allclose(values.sum(axis=1), 1.0, atol=1e-5):
         raise ValueError("Each validation probability row must sum to 1")
-    if not np.isfinite(minimum_coverage) or not 0 < minimum_coverage <= 1:
-        raise ValueError("minimum_coverage must be in (0, 1]")
+    minimum_coverage = _validate_unit_interval(
+        minimum_coverage, "minimum_coverage", allow_zero=False
+    )
 
     confidence = values.max(axis=1)
     ordered = np.sort(confidence)[::-1]
