@@ -39,7 +39,12 @@ class ImageQualityPolicy:
             self.max_clipped_pixel_fraction,
             self.min_laplacian_variance,
         )
-        if not all(np.isfinite(value) for value in numeric_thresholds):
+        if not all(
+            not isinstance(value, (bool, np.bool_))
+            and isinstance(value, (int, float, np.integer, np.floating))
+            and np.isfinite(value)
+            for value in numeric_thresholds
+        ):
             raise ValueError("Image-quality thresholds must be finite numbers")
         if not 0 <= self.min_mean_luminance < self.max_mean_luminance <= 255:
             raise ValueError("Luminance thresholds must satisfy 0 <= min < max <= 255")
