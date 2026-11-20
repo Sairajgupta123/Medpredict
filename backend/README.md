@@ -126,15 +126,21 @@ The history is append-only through the API; there are no update or delete endpoi
 Database constraints also validate both the previous and new lifecycle states and reject
 blank audit target keys or reasons.
 
-Authorized reviewers can inspect pending work and the latest history:
+Authorized reviewers can inspect pending work, filter decision history, and open a reviewed catalog entry:
 
 - `GET /api/v1/catalog/review/queue?status=draft&status=in_review&limit=50`
-- `GET /api/v1/catalog/review/history?target_type=disease&target_key=DIS_CODE&limit=50`
+- `GET /api/v1/catalog/review/history?target_type=disease&date_from=2026-01-01&date_to=2026-12-31&q=source&limit=100`
+- `GET /api/v1/catalog/review/history/{event_id}/entry`
 
 The queue is restricted to reviewers/admins and includes draft and in-review entries by default.
 Use the optional `target_type` filter (`disease`, `symptom`, or `disease_symptom`) and repeat
 the `status` query parameter to select one or more valid lifecycle states. The total `limit`
-is bounded to 1–100. Patients cannot access the queue or review history.
+is bounded to 1–100. History supports category, exact target key, free-text search over target
+key and decision reason, and inclusive UTC date boundaries. A reversed date range is rejected.
+Reviewers can see only events created under their own account; administrators can inspect all
+events. The entry-detail endpoint checks the event owner before returning the current disease,
+symptom, or relationship record, so a reviewer cannot use another reviewer's event ID to read
+catalog details. Patients cannot access the queue or review history.
 The audit record is operational traceability, not proof of clinical validity or reviewer credentials.
 
 There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
