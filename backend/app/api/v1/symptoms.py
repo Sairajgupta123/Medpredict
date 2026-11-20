@@ -27,6 +27,7 @@ def normalize_symptom_text(
 
     return SymptomNormalizeResponse(
         **result,
+        reported_context=payload.reported_context,
         disclaimer=(
             "This tool only recognizes a limited set of symptom phrases. "
             "It does not understand all medical context and does not diagnose, "
