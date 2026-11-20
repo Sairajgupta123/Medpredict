@@ -27,6 +27,14 @@ class CatalogReviewerScope(Base):
             name="ck_catalog_reviewer_scopes_type",
         ),
         CheckConstraint(
+            "scope_key IS NULL OR length(trim(scope_key)) >= 1",
+            name="ck_catalog_reviewer_scopes_key",
+        ),
+        CheckConstraint(
+            "length(trim(grant_reason)) >= 8",
+            name="ck_catalog_reviewer_scopes_grant_reason",
+        ),
+        CheckConstraint(
             "(revoked_at IS NULL AND revoked_by IS NULL AND revoke_reason IS NULL) "
             "OR (revoked_at IS NOT NULL AND revoked_by IS NOT NULL "
             "AND length(trim(revoke_reason)) >= 8)",
@@ -73,6 +81,10 @@ class CatalogReviewerScopeEvent(Base):
         CheckConstraint(
             "scope_type IN ('disease', 'symptom', 'disease_symptom')",
             name="ck_catalog_reviewer_scope_events_scope_type",
+        ),
+        CheckConstraint(
+            "scope_key IS NULL OR length(trim(scope_key)) >= 1",
+            name="ck_catalog_reviewer_scope_events_key",
         ),
         CheckConstraint(
             "length(trim(reason)) >= 8",
