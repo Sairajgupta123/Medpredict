@@ -116,3 +116,59 @@ def test_audit_rejects_header_only_csv(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="no data rows"):
         audit_dataset(path)
+
+
+def test_audit_blocks_symptom_training_without_patient_grouping(tmp_path) -> None:
+    path = tmp_path / "ungrouped.csv"
+    pd.DataFrame(
+        {
+            "symptom_text": ["fever and cough", "itchy rash", "headache", "joint pain"],
+            "condition_label": ["A", "A", "B", "B"],
+        }
+    ).to_csv(path, index=False)
+    report = audit_dataset(path)
+    assert report["training_readiness"]["ready_for_human_dataset_review"] is False
+    assert "patient_or_source_group_id_missing" in report[
+        "training_readiness"
+    ]["blocking_reasons"]
+    assert report["training_readiness"]["automatic_training_approval"] is False
+
+
+def test_audit_accepts_only_technically_complete_grouped_fixture(tmp_path) -> None:
+    path = tmp_path / "grouped.csv"
+    rows = []
+    for label in ("A", "B"):
+        for index in range(3):
+            rows.append(
+                {
+                    "symptom_text": f"unique description {label} {index}",
+                    "condition_label": label,
+                    "group_id": f"group-{label}-{index}",
+                }
+            )
+    pd.DataFrame(rows).to_csv(path, index=False)
+    report = audit_dataset(path)
+    assert report["training_readiness"]["ready_for_human_dataset_review"] is True
+    assert report["training_readiness"]["automatic_training_approval"] is False
+
+
+def test_audit_blocks_possible_contact_details_and_group_label_conflicts(tmp_path) -> None:
+    path = tmp_path / "unsafe.csv"
+    pd.DataFrame(
+        {
+            "symptom_text": [
+                "contact person@example.com about fever",
+                "unique rash",
+                "unique cough",
+                "unique headache",
+            ],
+            "condition_label": ["A", "A", "B", "B"],
+            "group_id": ["shared", "a2", "shared", "b2"],
+        }
+    ).to_csv(path, index=False)
+    report = audit_dataset(path)
+    reasons = report["training_readiness"]["blocking_reasons"]
+    assert "possible_direct_contact_identifiers_detected" in reasons
+    assert "source_groups_associated_with_multiple_labels" in reasons
+    rendered = json.dumps(report)
+    assert "person@example.com" not in rendered
