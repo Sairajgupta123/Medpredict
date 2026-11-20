@@ -32,3 +32,24 @@ def test_training_rejects_missing_manifest(tmp_path) -> None:
             image_root,
             tmp_path / "output",
         )
+
+
+def test_training_rejects_invalid_validation_coverage_before_loading_torch(tmp_path) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_path": ["one.jpg"],
+            "label": ["class_a"],
+            "patient_id": ["patient-1"],
+        }
+    ).to_csv(manifest, index=False)
+
+    with pytest.raises(ValueError, match="target_validation_coverage"):
+        train_skin_model(
+            manifest,
+            image_root,
+            tmp_path / "output",
+            target_validation_coverage=0,
+        )
