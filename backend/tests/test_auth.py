@@ -326,3 +326,53 @@ def test_reviewer_provisioning_cli_requires_verified_email(
     assert provision_catalog_reviewer.main() == 1
     assert "verified account email" in capsys.readouterr().err
 
+def test_reviewer_provisioning_cli_cannot_modify_admin_accounts(
+    client: TestClient, monkeypatch, capsys
+) -> None:
+    import sys
+
+    from app.core.security import hash_password
+    from app.models.user import User
+    from scripts import provision_catalog_reviewer
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            User(
+                email="protected-admin@example.com",
+                password_hash=hash_password("StrongPass123!"),
+                email_verified=True,
+                role="admin",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setenv(
+        "MEDIPREDICT_ROLE_PROVISIONING_OPERATOR", "operations@example.org"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "provision_catalog_reviewer",
+            "--email",
+            "protected-admin@example.com",
+            "--role",
+            "patient",
+            "--reason",
+            "Attempted role change test.",
+        ],
+    )
+
+    assert provision_catalog_reviewer.main() == 1
+    assert "Admin accounts cannot be changed" in capsys.readouterr().err
+
+    db = TestingSessionLocal()
+    try:
+        account = db.query(User).filter_by(email="protected-admin@example.com").one()
+        assert account.role == "admin"
+    finally:
+        db.close()
+
