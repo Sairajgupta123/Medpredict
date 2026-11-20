@@ -1,14 +1,17 @@
-"""Read-only endpoints for curated diseases and symptoms."""
+"""Public catalog reads and authorized catalog review actions."""
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
-from app.api.dependencies import DbSession
+from app.api.dependencies import CatalogReviewer, DbSession
 from app.models.catalog import Disease, DiseaseSymptom, Symptom
 from app.schemas.catalog import (
     CatalogItemRead,
     CatalogListResponse,
     DiseaseSymptomItemRead,
+    CatalogReviewRequest,
 )
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
@@ -134,4 +137,72 @@ def list_approved_disease_symptoms(
         )
         for link, symptom in rows
     ]
+
+def _apply_review_decision(item, payload: CatalogReviewRequest, reviewer) -> dict:
+    """Apply a reviewer decision and bind approval metadata to the actor."""
+    item.review_status = payload.status
+    if payload.status == "approved":
+        item.reviewed_by = str(reviewer.id)
+        item.reviewed_at = datetime.now(timezone.utc)
+    else:
+        item.reviewed_by = None
+        item.reviewed_at = None
+    return {
+        "review_status": item.review_status,
+        "reviewed_by": item.reviewed_by,
+        "reviewed_at": item.reviewed_at,
+    }
+
+
+@router.patch("/review/diseases/{disease_code}")
+def review_disease(
+    disease_code: str,
+    payload: CatalogReviewRequest,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Change disease publication state; only provisioned reviewers may act."""
+    item = db.scalar(select(Disease).where(Disease.code == disease_code))
+    if item is None:
+        raise HTTPException(status_code=404, detail="Disease not found.")
+    result = _apply_review_decision(item, payload, reviewer)
+    db.commit()
+    return result
+
+
+@router.patch("/review/symptoms/{symptom_code}")
+def review_symptom(
+    symptom_code: str,
+    payload: CatalogReviewRequest,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Change symptom publication state; only provisioned reviewers may act."""
+    item = db.scalar(select(Symptom).where(Symptom.code == symptom_code))
+    if item is None:
+        raise HTTPException(status_code=404, detail="Symptom not found.")
+    result = _apply_review_decision(item, payload, reviewer)
+    db.commit()
+    return result
+
+
+@router.patch("/review/diseases/{disease_code}/symptoms/{symptom_code}")
+def review_disease_symptom_link(
+    disease_code: str,
+    symptom_code: str,
+    payload: CatalogReviewRequest,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Review a disease-symptom association using an authorized reviewer."""
+    disease = db.scalar(select(Disease).where(Disease.code == disease_code))
+    symptom = db.scalar(select(Symptom).where(Symptom.code == symptom_code))
+    if disease is None or symptom is None:
+        raise HTTPException(status_code=404, detail="Disease or symptom not found.")
+    item = db.get(DiseaseSymptom, (disease.id, symptom.id))
+    if item is None:
+        raise HTTPException(status_code=404, detail="Disease-symptom link not found.")
+    result = _apply_review_decision(item, payload, reviewer)
+    db.commit()
+    return result
 
