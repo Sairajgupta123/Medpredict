@@ -427,86 +427,99 @@ def list_catalog_review_queue(
         default=None, pattern="^(disease|symptom|disease_symptom)$"
     ),
     statuses: list[str] = Query(default=["draft", "in_review"], alias="status"),
-    limit: int = Query(default=50, ge=1, le=100),
+    q: str | None = Query(default=None, min_length=1, max_length=120),
+    offset: int = Query(default=0, ge=0, le=10000),
+    limit: int = Query(default=20, ge=1, le=50),
 ) -> list[CatalogReviewQueueItemRead]:
-    """List pending catalog entries for authorized reviewers only."""
+    """Return a stable, scope-filtered page of catalog entries for reviewers."""
     allowed_statuses = {"draft", "in_review", "approved", "retired"}
     if not statuses or any(value not in allowed_statuses for value in statuses):
         raise HTTPException(status_code=422, detail="Unsupported review status filter.")
 
+    search = f"%{q.strip()}%" if q and q.strip() else None
+    window = offset + limit + 1
     queue: list[CatalogReviewQueueItemRead] = []
     if target_type in (None, "disease"):
-        diseases = db.scalars(
-            select(Disease)
-            .where(
-                Disease.review_status.in_(statuses),
-                True if reviewer.role == "admin" else _reviewer_scope_exists(
-                    reviewer, "disease", Disease.code
-                ),
+        statement = select(Disease).where(
+            Disease.review_status.in_(statuses),
+            True if reviewer.role == "admin" else _reviewer_scope_exists(
+                reviewer, "disease", Disease.code
+            ),
+        )
+        if search:
+            statement = statement.where(
+                or_(Disease.code.ilike(search), Disease.name.ilike(search),
+                    Disease.description.ilike(search))
             )
-            .order_by(Disease.created_at.asc(), Disease.code.asc())
-            .limit(limit)
+        diseases = db.scalars(
+            statement.order_by(Disease.created_at.asc(), Disease.code.asc())
+            .limit(window)
         ).all()
         queue.extend(
             CatalogReviewQueueItemRead(
-                target_type="disease",
-                target_key=item.code,
-                name=item.name,
-                description=item.description,
-                status=item.review_status,
+                target_type="disease", target_key=item.code, name=item.name,
+                description=item.description, status=item.review_status,
                 created_at=item.created_at,
             )
             for item in diseases
         )
 
     if target_type in (None, "symptom"):
-        symptoms = db.scalars(
-            select(Symptom)
-            .where(
-                Symptom.review_status.in_(statuses),
-                True if reviewer.role == "admin" else _reviewer_scope_exists(
-                    reviewer, "symptom", Symptom.code
-                ),
+        statement = select(Symptom).where(
+            Symptom.review_status.in_(statuses),
+            True if reviewer.role == "admin" else _reviewer_scope_exists(
+                reviewer, "symptom", Symptom.code
+            ),
+        )
+        if search:
+            statement = statement.where(
+                or_(Symptom.code.ilike(search), Symptom.name.ilike(search),
+                    Symptom.description.ilike(search))
             )
-            .order_by(Symptom.created_at.asc(), Symptom.code.asc())
-            .limit(limit)
+        symptoms = db.scalars(
+            statement.order_by(Symptom.created_at.asc(), Symptom.code.asc())
+            .limit(window)
         ).all()
         queue.extend(
             CatalogReviewQueueItemRead(
-                target_type="symptom",
-                target_key=item.code,
-                name=item.name,
-                description=item.description,
-                status=item.review_status,
+                target_type="symptom", target_key=item.code, name=item.name,
+                description=item.description, status=item.review_status,
                 created_at=item.created_at,
             )
             for item in symptoms
         )
 
     if target_type in (None, "disease_symptom"):
-        links = db.execute(
+        statement = (
             select(DiseaseSymptom, Disease, Symptom)
             .join(Disease, Disease.id == DiseaseSymptom.disease_id)
             .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
             .where(
                 DiseaseSymptom.review_status.in_(statuses),
                 True if reviewer.role == "admin" else _reviewer_scope_exists(
-                    reviewer,
-                    "disease_symptom",
+                    reviewer, "disease_symptom",
                     Disease.code + literal(":") + Symptom.code,
                 ),
             )
-            .order_by(Disease.code.asc(), Symptom.code.asc())
-            .limit(limit)
+        )
+        if search:
+            statement = statement.where(
+                or_(
+                    (Disease.code + literal(":") + Symptom.code).ilike(search),
+                    Disease.name.ilike(search),
+                    Symptom.name.ilike(search),
+                )
+            )
+        links = db.execute(
+            statement.order_by(Disease.code.asc(), Symptom.code.asc())
+            .limit(window)
         ).all()
         queue.extend(
             CatalogReviewQueueItemRead(
                 target_type="disease_symptom",
                 target_key=f"{disease.code}:{symptom.code}",
                 name=f"{disease.name} — {symptom.name}",
-                description=None,
-                status=link.review_status,
-                created_at=None,
+                description=None, status=link.review_status, created_at=None,
             )
             for link, disease, symptom in links
         )
@@ -519,7 +532,7 @@ def list_catalog_review_queue(
             item.target_key,
         )
     )
-    return queue[:limit]
+    return queue[offset : offset + limit + 1]
 
 
 @router.get(
