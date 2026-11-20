@@ -51,3 +51,27 @@ def test_inference_validates_class_mapping_and_thresholds() -> None:
             minimum_confidence=0.7,
             temperature=0,
         )
+
+@pytest.mark.parametrize(
+    ("parameter", "value", "message"),
+    [
+        ("temperature", True, "positive and finite"),
+        ("temperature", float("nan"), "positive and finite"),
+        ("minimum_confidence", True, "finite number"),
+        ("minimum_confidence", float("inf"), "finite number"),
+        ("image_size", 224.5, "integer"),
+        ("image_size", True, "integer"),
+    ],
+)
+def test_inference_rejects_invalid_numeric_parameters(
+    parameter: str, value: object, message: str
+) -> None:
+    image = Image.new("RGB", (256, 256), color=(100, 110, 120))
+    kwargs = {
+        "class_names": ["class_a", "class_b"],
+        "minimum_confidence": 0.7,
+        "temperature": 1.0,
+    }
+    kwargs[parameter] = value
+    with pytest.raises(ValueError, match=message):
+        predict_skin_image(NeverCalledModel(), image, **kwargs)
