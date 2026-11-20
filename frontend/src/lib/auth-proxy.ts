@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.MEDIPREDICT_API_INTERNAL_URL?.replace(/\/$/, "") ??
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
   "http://localhost:8000/api/v1";
@@ -102,3 +102,44 @@ export async function getSessionUser(): Promise<{
   if (!backendResponse.ok) return { user: null };
   return { user: await backendResponse.json() };
 }
+
+export async function getSessionToken(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(SESSION_COOKIE)?.value ?? null;
+}
+
+export type CatalogReviewQueueItem = {
+  target_type: "disease" | "symptom" | "disease_symptom";
+  target_key: string;
+  name: string;
+  description: string | null;
+  status: string;
+  created_at: string | null;
+};
+
+export async function getCatalogReviewQueue(): Promise<{
+  items: CatalogReviewQueueItem[];
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) return { items: [], error: "Your session has expired. Please sign in again." };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/catalog/review/queue`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return {
+        items: [],
+        error: response.status === 403
+          ? "Your account does not have catalog reviewer access."
+          : "The review queue could not be loaded. Please try again.",
+      };
+    }
+    return { items: await response.json() as CatalogReviewQueueItem[], error: null };
+  } catch {
+    return { items: [], error: "The MediPredict server is unavailable." };
+  }
+}
+
