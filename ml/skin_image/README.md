@@ -88,3 +88,14 @@ an uncertainty status, or an image-quality rejection. See `INFERENCE.md`.
 The helper is not connected to the FastAPI backend. The caller must provide a trained model, exact
 class order, validation-fitted temperature and validation-selected threshold. No model has been
 trained, and this helper is not approved for patient-facing use.
+
+## Class imbalance and per-class rates
+
+The trainer calculates balanced inverse-frequency class weights from the training partition only
+and supplies them to the cross-entropy loss. The experiment report records training class counts
+and the resulting weights. Validation and test labels are never used to calculate these weights.
+
+Evaluation reports one-vs-rest sensitivity (recall) and specificity for each class, alongside
+macro-F1, balanced accuracy and the confusion matrix. Interpret every rate with its support count;
+a missing class in an evaluation partition is not evidence of perfect performance. Weighting is an
+experiment setting, not a guarantee of improved minority-class or clinical performance.
