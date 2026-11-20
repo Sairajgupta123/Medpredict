@@ -10,6 +10,7 @@ Expected CSV columns:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import warnings
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Any
 
 import joblib
 import pandas as pd
+import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -66,44 +68,76 @@ def load_dataset(path: Path) -> pd.DataFrame:
     return frame
 
 
+def _group_split(
+    frame: pd.DataFrame,
+    groups: pd.Series,
+    test_size: float,
+    random_state: int,
+    method: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Split without allowing the same group to cross train and test."""
+    if groups.eq("").any():
+        raise ValueError("Grouping values contain blanks; resolve them before splitting.")
+    if groups.nunique() < 2:
+        raise ValueError("At least two distinct groups are required for group splitting.")
+
+    splitter = GroupShuffleSplit(
+        n_splits=1, test_size=test_size, random_state=random_state
+    )
+    train_indices, test_indices = next(
+        splitter.split(frame, frame["condition_label"], groups)
+    )
+    train_frame = frame.iloc[train_indices].copy()
+    test_frame = frame.iloc[test_indices].copy()
+    expected_labels = set(frame["condition_label"])
+    if set(train_frame["condition_label"]) != expected_labels:
+        raise ValueError(
+            "The group split left at least one class out of training. "
+            "Review group distribution or collect more representative examples."
+        )
+    if set(test_frame["condition_label"]) != expected_labels:
+        raise ValueError(
+            "The group split left at least one class out of testing. "
+            "Collect more independent groups per class or redesign the split."
+        )
+    return train_frame, test_frame, method
+
+
 def split_dataset(
     frame: pd.DataFrame, test_size: float, random_state: int
 ) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Create a group-aware split when grouping identifiers are available."""
+    """Prefer source groups, then duplicate-text groups, before row splitting."""
     if "group_id" in frame.columns:
         groups = frame["group_id"].fillna("").astype(str).str.strip()
-        if groups.eq("").any():
-            raise ValueError(
-                "group_id contains blank values. Resolve missing group identifiers "
-                "before group-aware evaluation."
-            )
-        if groups.nunique() < 2:
-            raise ValueError("At least two distinct group_id values are required.")
+        return _group_split(
+            frame, groups, test_size, random_state, "group_shuffle_split"
+        )
 
-        splitter = GroupShuffleSplit(
-            n_splits=1, test_size=test_size, random_state=random_state
+    normalized_text = (
+        frame["symptom_text"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(r"\\s+", " ", regex=True)
+    )
+    if normalized_text.duplicated(keep=False).any():
+        warnings.warn(
+            "No group_id found. Repeated normalized symptom descriptions are kept "
+            "in one partition, but patient/source leakage cannot be ruled out.",
+            RuntimeWarning,
+            stacklevel=2,
         )
-        train_indices, test_indices = next(
-            splitter.split(frame, frame["condition_label"], groups)
+        return _group_split(
+            frame,
+            normalized_text,
+            test_size,
+            random_state,
+            "normalized_text_group_split_provisional",
         )
-        train_frame = frame.iloc[train_indices].copy()
-        test_frame = frame.iloc[test_indices].copy()
-        if set(train_frame["condition_label"]) != set(frame["condition_label"]):
-            raise ValueError(
-                "The group split left at least one class out of training. "
-                "Review group distribution or collect more representative data."
-            )
-        if set(test_frame["condition_label"]) != set(frame["condition_label"]):
-            raise ValueError(
-                "The group split left at least one class out of the test set. "
-                "Collect more independent groups per class or redesign the split."
-            )
-        return train_frame, test_frame, "group_shuffle_split"
 
     warnings.warn(
-        "No group_id column found. Using a stratified row split for exploration only. "
-        "Patient/source leakage cannot be ruled out; do not use this score as final "
-        "medical model evidence.",
+        "No group_id or repeated normalized descriptions found. Using a stratified "
+        "row split for exploration only; patient/source leakage cannot be ruled out.",
         RuntimeWarning,
         stacklevel=2,
     )
@@ -210,14 +244,22 @@ def main() -> None:
     metrics_path = args.output_dir / "metrics.json"
 
     joblib.dump(model, model_path)
+    dataset_hash = hashlib.sha256(args.data.read_bytes()).hexdigest()
     metrics_payload = {
         "purpose": "research_baseline_not_for_clinical_use",
-        "dataset_path": str(args.data),
+        "dataset_file_name": args.data.name,
+        "dataset_sha256": dataset_hash,
         "dataset_rows_after_validation": int(len(frame)),
         "class_count": int(frame["condition_label"].nunique()),
         "split_method": split_method,
+        "random_state": args.random_state,
+        "test_size": args.test_size,
         "train_rows": int(len(train_frame)),
         "test_rows": int(len(test_frame)),
+        "library_versions": {
+            "pandas": pd.__version__,
+            "scikit_learn": sklearn.__version__,
+        },
         "metrics": metrics,
     }
     metrics_path.write_text(
