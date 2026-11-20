@@ -272,6 +272,10 @@ def compare_text_models(
             "max_features_per_vectorizer": 100_000,
         },
         "candidate_models": list(fitted.keys()),
+        "candidate_parameters": {
+            name: estimator.get_params(deep=False)
+            for name, estimator in fitted.items()
+        },
         "include_xgboost": include_xgboost,
         "selection_metric": "validation_macro_f1",
         "random_state": random_state,
