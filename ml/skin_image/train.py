@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import random
 from pathlib import Path
 from typing import Any
@@ -170,6 +171,8 @@ def train_skin_model(
 
     # Load the optional deep-learning stack only after inexpensive manifest preflight checks.
     import torch
+    import scipy
+    import PIL
     from torch import nn
     from torch.utils.data import DataLoader
 
@@ -369,8 +372,18 @@ def train_skin_model(
             for label in grouped.size().index
         }
 
+    runtime_versions = {
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "pytorch": str(torch.__version__),
+        "scipy": scipy.__version__,
+        "pillow": PIL.__version__,
+    }
     report = {
         "status": "research_experiment_only",
+        "runtime_versions": runtime_versions,
+        "manifest_file_name": manifest_path.name,
         "model": f"{architecture}-{variant}",
         "device": str(device),
         "seed": seed,
@@ -434,8 +447,10 @@ def train_skin_model(
             "mean": [0.485, 0.456, 0.406],
             "std": [0.229, 0.224, 0.225],
         },
+        "manifest_file_name": manifest_path.name,
         "manifest_sha256": manifest_digest,
         "experiment_config_sha256": config_digest,
+        "runtime_versions": runtime_versions,
         "checkpoint_file": checkpoint_path.name,
         "best_epoch": best_epoch,
         "selection_metric": "validation_macro_f1",
