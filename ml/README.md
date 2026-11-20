@@ -47,3 +47,25 @@ These outputs are local and ignored by Git. Never load a model artifact from an 
 The baseline is not wired into the public prediction API. API integration requires a separately
 reviewed model card, validation protocol, uncertainty/abstention behavior, privacy review and
 explicit approval.
+
+## Symptom normalization (initial vocabulary)
+
+A conservative English phrase matcher is available in `ml/symptom_normalizer.py`.
+It maps explicitly curated phrases to versioned symptom IDs from
+`ml/symptom_taxonomy.json`.
+
+Example:
+
+```python
+from ml.symptom_normalizer import normalize_symptoms
+
+result = normalize_symptoms("My head hurts and I have a cough.")
+print(result["matched_symptoms"])
+```
+
+The matcher flags a few obvious nearby negation, historical and uncertainty cues for review.
+It cannot reliably understand clinical context, negation, timing, severity, multilingual text,
+or emergencies. Every result requires review. It does not diagnose or perform triage and is
+not yet connected to the backend API or model training pipeline.
+
+See `ml/SYMPTOM_NORMALIZATION.md` for its scope and limitations.
