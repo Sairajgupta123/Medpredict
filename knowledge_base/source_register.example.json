@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "notice": "Example structure only. Replace with a verified source record; this file is not an endorsement.",
+  "sources": [
+    {
+      "source_id": "SRC_EXAMPLE_001",
+      "title": "Example source title",
+      "publisher": "Example public health organization",
+      "url": "https://example.org/source",
+      "evidence_type": "public_guideline",
+      "version_or_publication_date": "2026-01",
+      "accessed_on": "2026-11-20",
+      "license_or_reuse_terms": "Verify with publisher before reuse",
+      "content_sha256": null,
+      "reviewer_id": null,
+      "review_status": "draft",
+      "reviewed_at": null,
+      "next_review_due": null,
+      "notes": "Placeholder only; not a real medical source."
+    }
+  ]
+}
