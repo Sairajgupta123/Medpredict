@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.main import app
 from app.core.security import create_access_token
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
-from app.models.user import User
+from app.models.user import RoleProvisioningEvent, User
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -687,4 +687,64 @@ def test_catalog_review_event_rejects_invalid_transition_metadata(
     finally:
         db.rollback()
         db.close()
+
+def test_admin_governance_overview_is_admin_only_and_reports_audited_state(
+    client: TestClient,
+) -> None:
+    admin_headers = _user_headers("admin")
+    patient_headers = _user_headers("patient")
+
+    db = TestingSessionLocal()
+    try:
+        target = User(
+            email="governance-target@example.com",
+            password_hash="test-only-not-used",
+            role="reviewer",
+            email_verified=True,
+        )
+        disease = Disease(code="DIS_GOVERNANCE", name="Governance Test Condition")
+        symptom = Symptom(code="SYM_GOVERNANCE", name="Governance Test Symptom")
+        db.add_all([target, disease, symptom])
+        db.flush()
+        db.add(
+            RoleProvisioningEvent(
+                target_user_id=target.id,
+                previous_role="patient",
+                new_role="reviewer",
+                operator_identity="operations@example.org",
+                reason="Verified reviewer appointment and scope.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    denied = client.get(
+        "/api/v1/admin/governance",
+        headers=patient_headers,
+    )
+    assert denied.status_code == 403
+
+    reviewer_denied = client.get(
+        "/api/v1/admin/governance",
+        headers=_user_headers("reviewer"),
+    )
+    assert reviewer_denied.status_code == 403
+
+    response = client.get(
+        "/api/v1/admin/governance",
+        headers=admin_headers,
+        params={"history_limit": 10},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accounts"]["reviewer"]["active"] == 1
+    assert body["catalog"]["diseases"]["draft"] == 1
+    assert body["catalog"]["symptoms"]["draft"] == 1
+    assert len(body["recent_role_changes"]) == 1
+    event = body["recent_role_changes"][0]
+    assert event["previous_role"] == "patient"
+    assert event["new_role"] == "reviewer"
+    assert event["operator_identity"] == "operations@example.org"
+    assert "password" not in event
 
