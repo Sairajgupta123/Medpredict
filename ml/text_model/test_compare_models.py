@@ -26,3 +26,32 @@ def test_default_candidates_include_logistic_regression_and_random_forest() -> N
     assert isinstance(candidates["random_forest"], RandomForestClassifier)
     assert candidates["logistic_regression"].class_weight == "balanced"
     assert candidates["random_forest"].class_weight == "balanced_subsample"
+
+@pytest.mark.parametrize("value", [True, False, "0.2", float("nan"), float("inf")])
+def test_comparison_rejects_invalid_partition_fraction_types(tmp_path, value) -> None:
+    with pytest.raises(ValueError, match="test_size"):
+        compare_text_models(
+            tmp_path / "missing.csv",
+            tmp_path / "out",
+            test_size=value,
+        )
+
+
+@pytest.mark.parametrize("value", [True, "0.9", float("nan"), float("inf"), 0])
+def test_comparison_rejects_invalid_validation_coverage_types(tmp_path, value) -> None:
+    with pytest.raises(ValueError, match="target_validation_coverage"):
+        compare_text_models(
+            tmp_path / "missing.csv",
+            tmp_path / "out",
+            target_validation_coverage=value,
+        )
+
+
+@pytest.mark.parametrize("value", [True, "0.5", float("nan"), float("inf")])
+def test_comparison_rejects_invalid_explicit_confidence_types(tmp_path, value) -> None:
+    with pytest.raises(ValueError, match="minimum_confidence"):
+        compare_text_models(
+            tmp_path / "missing.csv",
+            tmp_path / "out",
+            minimum_confidence=value,
+        )
