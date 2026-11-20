@@ -17,6 +17,25 @@ import numpy as np
 import pandas as pd
 
 
+def ensure_skin_artifacts_do_not_exist(
+    output_dir: Path, filenames: list[str]
+) -> None:
+    """Refuse to replace evidence from an earlier skin-image experiment."""
+    if output_dir.exists() and not output_dir.is_dir():
+        raise FileExistsError(f"Output path is not a directory: {output_dir}")
+    existing = (
+        [name for name in filenames if (output_dir / name).exists()]
+        if output_dir.is_dir()
+        else []
+    )
+    if existing:
+        raise FileExistsError(
+            "Refusing to overwrite existing skin experiment artifact(s): "
+            f"{', '.join(sorted(existing))}. Choose a new output directory or "
+            "move the previous artifacts explicitly."
+        )
+
+
 def _seed_everything(seed: int) -> None:
     import torch
 
@@ -93,6 +112,17 @@ def train_skin_model(
         raise FileNotFoundError("Manifest file does not exist")
     if not image_root.is_dir():
         raise NotADirectoryError("Image root directory does not exist")
+
+    model_slug = architecture if variant == "default" else f"{architecture}_{variant}"
+    ensure_skin_artifacts_do_not_exist(
+        output_dir,
+        [
+            "experiment_config.json",
+            f"skin_{model_slug}_best.pt",
+            "model_metadata.json",
+            "experiment_report.json",
+        ],
+    )
 
     manifest = pd.read_csv(manifest_path)
     required = {"image_path", "label", "patient_id"}
@@ -247,7 +277,6 @@ def train_skin_model(
     best_macro_f1 = -1.0
     best_epoch = 0
     history: list[dict[str, float]] = []
-    model_slug = architecture if variant == "default" else f"{architecture}_{variant}"
     checkpoint_path = output_dir / f"skin_{model_slug}_best.pt"
 
     for epoch in range(1, epochs + 1):
