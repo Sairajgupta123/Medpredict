@@ -18,6 +18,10 @@ class MedicalReferenceRead(BaseModel):
     published_on: date | None
     accessed_on: date
     next_review_due: date | None
+    review_status: str
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
 
 
 class CareRecommendationRead(BaseModel):
@@ -92,3 +96,26 @@ class CatalogReferenceRead(BaseModel):
     link_reason: str
     linked_by: UUID
     linked_at: datetime
+
+
+class MedicalReferenceCreate(BaseModel):
+    """Administrator-created source metadata; new records always start as drafts."""
+
+    title: str = Field(min_length=3, max_length=300)
+    publisher: str = Field(min_length=2, max_length=200)
+    url: HttpUrl
+    evidence_type: str = Field(min_length=2, max_length=80)
+    version: str = Field(default="1", min_length=1, max_length=80)
+    published_on: date | None = None
+    accessed_on: date = Field(default_factory=date.today)
+    license_name: str | None = Field(default=None, max_length=200)
+    content_sha256: str | None = Field(default=None, pattern="^[a-fA-F0-9]{64}$")
+    next_review_due: date | None = None
+
+    @field_validator("title", "publisher", "evidence_type", "version")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value must not be blank")
+        return cleaned
