@@ -385,3 +385,68 @@ def test_reviewer_provisioning_cli_cannot_modify_admin_accounts(
     finally:
         db.close()
 
+def test_reviewer_cannot_be_demoted_while_active_catalog_scopes_remain(
+    client: TestClient, monkeypatch, capsys
+) -> None:
+    import sys
+
+    from app.core.security import hash_password
+    from app.models.reviewer_scope import CatalogReviewerScope
+    from app.models.user import User
+    from scripts import provision_catalog_reviewer
+
+    monkeypatch.setattr(
+        provision_catalog_reviewer, "SessionLocal", TestingSessionLocal
+    )
+    db = TestingSessionLocal()
+    try:
+        reviewer = User(
+            email="scoped-reviewer-demotion@example.com",
+            password_hash=hash_password("StrongPass123!"),
+            email_verified=True,
+            role="reviewer",
+        )
+        db.add(reviewer)
+        db.flush()
+        db.add(
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="disease",
+                scope_key=None,
+                granted_by=reviewer.id,
+                grant_reason="Test reviewer scope assignment.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setenv(
+        "MEDIPREDICT_ROLE_PROVISIONING_OPERATOR", "operations@example.org"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "provision_catalog_reviewer",
+            "--email",
+            "scoped-reviewer-demotion@example.com",
+            "--role",
+            "patient",
+            "--reason",
+            "Reviewer access is being revoked.",
+        ],
+    )
+
+    assert provision_catalog_reviewer.main() == 1
+    assert "Revoke all active catalog scopes" in capsys.readouterr().err
+
+    db = TestingSessionLocal()
+    try:
+        account = db.query(User).filter_by(
+            email="scoped-reviewer-demotion@example.com"
+        ).one()
+        assert account.role == "reviewer"
+    finally:
+        db.close()
+
