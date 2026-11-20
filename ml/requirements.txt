@@ -3,3 +3,4 @@ scikit-learn>=1.4,<2.0
 joblib>=1.4,<2.0
 Pillow>=10.4,<13.0
 pytest>=8.0,<9.0
+scipy>=1.11,<2.0
