@@ -60,6 +60,29 @@ def load_dataset(path: Path) -> pd.DataFrame:
     if frame["condition_label"].nunique() < 2:
         raise ValueError("At least two distinct condition labels are required.")
 
+    normalized_text = (
+        frame["symptom_text"]
+        .str.lower()
+        .str.replace(r"\\s+", " ", regex=True)
+    )
+    label_counts_per_description = (
+        pd.DataFrame(
+            {
+                "normalized_text": normalized_text,
+                "condition_label": frame["condition_label"],
+            }
+        )
+        .groupby("normalized_text")["condition_label"]
+        .nunique()
+    )
+    conflicting_descriptions = int((label_counts_per_description > 1).sum())
+    if conflicting_descriptions:
+        raise ValueError(
+            "Dataset contains normalized symptom descriptions assigned to "
+            f"multiple condition labels ({conflicting_descriptions} conflicts). "
+            "Resolve or explicitly review these ambiguous records before training."
+        )
+
     return frame
 
 
