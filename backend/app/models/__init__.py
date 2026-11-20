@@ -4,6 +4,7 @@ Importing this module registers every model with the shared SQLAlchemy metadata.
 """
 
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
+from app.models.catalog_reference import CatalogReference, CatalogReferenceEvent
 from app.models.feedback import PredictionFeedback
 from app.models.knowledge import (
     CareRecommendation,
@@ -22,6 +23,8 @@ from app.models.user import RoleProvisioningEvent, User
 __all__ = [
     "CareRecommendation",
     "CatalogReviewEvent",
+    "CatalogReference",
+    "CatalogReferenceEvent",
     "CatalogReviewerScope",
     "CatalogReviewerScopeEvent",
     "Disease",
