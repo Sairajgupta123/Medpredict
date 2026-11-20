@@ -1,5 +1,6 @@
 """Tests for safety-gated skin image inference."""
 
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -89,7 +90,7 @@ def _valid_checkpoint_and_metadata():
         json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     checkpoint = {
-        "model_state_dict": {},
+        "model_state_dict": {"classifier.weight": np.ones((2, 2), dtype=np.float32)},
         "class_names": ["class_a", "class_b"],
         "class_to_index": {"class_a": 0, "class_b": 1},
         "architecture": "mobilenet_v3",
@@ -173,4 +174,26 @@ def test_checkpoint_validation_requires_validation_selected_threshold() -> None:
     checkpoint, metadata = _valid_checkpoint_and_metadata()
     checkpoint["threshold_selection_partition"] = "test"
     with pytest.raises(ValueError, match="validation data only"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
+@pytest.mark.parametrize(
+    ("state_dict", "message"),
+    [
+        ({}, "non-empty mapping"),
+        ({"": np.ones((1,), dtype=np.float32)}, "non-empty strings"),
+        ({"weight": np.asarray(["not-a-weight"])}, "numeric tensor"),
+        ({"weight": np.asarray([float("nan")])}, "non-finite values"),
+        ({"weight": np.asarray([float("inf")])}, "non-finite values"),
+        ({"weight": np.asarray([], dtype=np.float32)}, "non-empty numeric tensor"),
+    ],
+)
+def test_checkpoint_validation_rejects_invalid_model_weights(
+    state_dict: dict, message: str
+) -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint["model_state_dict"] = state_dict
+    with pytest.raises(ValueError, match=message):
         validate_skin_checkpoint(checkpoint, metadata)
