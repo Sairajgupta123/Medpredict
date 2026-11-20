@@ -38,7 +38,7 @@ def predict_skin_image(
         or not np.isfinite(temperature)
         or temperature <= 0
     ):
-        raise ValueError("temperature must be a positive finite number")
+        raise ValueError("temperature must be positive and finite")
     if (
         isinstance(minimum_confidence, bool)
         or not isinstance(minimum_confidence, (int, float, np.integer, np.floating))
