@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CatalogItemRead(BaseModel):
@@ -39,6 +39,15 @@ class CatalogReviewRequest(BaseModel):
 
     status: str = Field(pattern="^(draft|in_review|approved|retired)$")
     reason: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        """Reject whitespace-only reasons and store normalized text."""
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("reason must contain at least 8 non-whitespace characters")
+        return cleaned
 
 
 class CatalogReviewEventRead(BaseModel):
