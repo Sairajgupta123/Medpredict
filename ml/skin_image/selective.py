@@ -107,3 +107,43 @@ def selective_classification_metrics(
             "validation data, then evaluated once on untouched test data."
         ),
     }
+
+
+def select_threshold_for_coverage(
+    validation_probabilities: list[list[float]] | np.ndarray,
+    *,
+    minimum_coverage: float,
+) -> dict[str, float | int | str]:
+    """Select an abstention cutoff using validation confidence scores only.
+
+    This targets technical coverage, not clinical safety or a minimum accuracy guarantee.
+    """
+    values = np.asarray(validation_probabilities, dtype=np.float64)
+    if values.ndim != 2 or values.shape[0] == 0 or values.shape[1] < 2:
+        raise ValueError(
+            "validation_probabilities must be a non-empty 2D array with at least two classes"
+        )
+    if not np.isfinite(values).all():
+        raise ValueError("validation_probabilities must contain only finite values")
+    if (values < 0).any() or (values > 1).any():
+        raise ValueError("validation_probabilities must be between 0 and 1")
+    if not np.allclose(values.sum(axis=1), 1.0, atol=1e-5):
+        raise ValueError("Each validation probability row must sum to 1")
+    if not np.isfinite(minimum_coverage) or not 0 < minimum_coverage <= 1:
+        raise ValueError("minimum_coverage must be in (0, 1]")
+
+    confidence = values.max(axis=1)
+    ordered = np.sort(confidence)[::-1]
+    index = max(0, int(np.ceil(minimum_coverage * len(ordered))) - 1)
+    threshold = float(ordered[index])
+    achieved = float(np.mean(confidence >= threshold))
+    return {
+        "minimum_coverage_target": float(minimum_coverage),
+        "threshold": threshold,
+        "achieved_validation_coverage": achieved,
+        "validation_sample_count": int(len(confidence)),
+        "note": (
+            "Threshold selected for technical validation coverage only. It is not a clinical "
+            "safety threshold; report selective risk and coverage on an untouched test cohort."
+        ),
+    }
