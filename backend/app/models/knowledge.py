@@ -42,6 +42,7 @@ class MedicalReference(Base):
     review_status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
     reviewed_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_review_due: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -92,6 +93,7 @@ class CareRecommendation(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_review_due: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     references: Mapped[list["RecommendationReference"]] = relationship(
