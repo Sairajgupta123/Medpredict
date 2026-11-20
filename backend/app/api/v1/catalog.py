@@ -31,8 +31,16 @@ def _list_catalog_items(
     # symptom catalogue is a separate publication channel and must never expose
     # drafts, in-review records, or retired entries.
     if model in (Disease, Symptom):
-        statement = statement.where(model.review_status == "approved")
-        count_statement = count_statement.where(model.review_status == "approved")
+        statement = statement.where(
+            model.review_status == "approved",
+            model.reviewed_by.is_not(None),
+            model.reviewed_at.is_not(None),
+        )
+        count_statement = count_statement.where(
+            model.review_status == "approved",
+            model.reviewed_by.is_not(None),
+            model.reviewed_at.is_not(None),
+        )
 
     cleaned_query = query.strip() if query else ""
     if cleaned_query:
