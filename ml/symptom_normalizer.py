@@ -88,7 +88,7 @@ def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
 def _mention_context(normalized_text: str, start: int) -> str:
     """Return a bounded prefix window for conservative cue detection."""
     prefix = normalized_text[:start].split()
-    return " ".join(prefix[-5:])
+    return " ".join(prefix[-8:])
 
 
 def _scope_status(normalized_text: str, start: int) -> str:
