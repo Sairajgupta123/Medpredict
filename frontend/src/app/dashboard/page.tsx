@@ -6,8 +6,8 @@ const modules = [
   {
     number: "01",
     title: "Symptom checker",
-    description: "Describe symptoms in your own words. The guided analysis experience and evaluated model connection are being developed.",
-    status: "Coming in a later milestone",
+    description: "Try a limited symptom phrase recognizer. It does not predict disease or interpret all medical context.",
+    status: "Phrase review prototype available",
     icon: "✳",
   },
   {
@@ -54,7 +54,7 @@ export default async function DashboardPage() {
           </div>
           <h1>{user ? `Welcome, ${user.display_name || "back"}.` : "Your health information,"}<br /><em>organized with care.</em></h1>
           <p>This workspace is under active development. The cards below show the planned modules and their current implementation stage.</p>
-          <div className="workspace-notice"><span aria-hidden="true">i</span><div><strong>{user ? "Signed-in workspace" : "Preview environment"}</strong><small>Prediction, image upload and personalized medical guidance are not available in this frontend milestone.</small></div></div>
+          <div className="workspace-notice"><span aria-hidden="true">i</span><div><strong>{user ? "Signed-in workspace" : "Preview environment"}</strong><small>The symptom prototype recognizes phrases only; disease prediction, image analysis and personalized guidance are not available.</small></div></div>
         </div>
       </section>
       <section className="container dashboard-modules">
