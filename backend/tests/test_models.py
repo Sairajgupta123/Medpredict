@@ -73,3 +73,12 @@ def test_recommendation_reference_has_composite_identity() -> None:
         RecommendationReference.__table__.primary_key.columns.keys()
     )
     assert primary_key_columns == {"recommendation_id", "reference_id"}
+
+def test_disease_symptom_links_default_to_unreviewed_and_require_audit() -> None:
+    assert DiseaseSymptom.review_status.default.arg == "draft"
+    constraints = {
+        constraint.name for constraint in DiseaseSymptom.__table__.constraints
+    }
+    assert "ck_disease_symptoms_review_status" in constraints
+    assert "ck_disease_symptoms_approval_audit" in constraints
+
