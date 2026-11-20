@@ -1,6 +1,7 @@
 """Public catalog reads and authorized catalog review actions."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, literal, or_, select
@@ -532,9 +533,15 @@ def list_catalog_review_history(
         default=None, pattern="^(disease|symptom|disease_symptom)$"
     ),
     target_key: str | None = Query(default=None, min_length=1, max_length=200),
-    limit: int = Query(default=50, ge=1, le=100),
+    q: str | None = Query(default=None, min_length=1, max_length=120),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=100),
 ) -> list[CatalogReviewEventRead]:
-    """Return append-only review history to authorized catalog reviewers."""
+    """Return filterable append-only review history to authorized reviewers."""
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from must not be after date_to.")
+
     statement = select(CatalogReviewEvent)
     if reviewer.role != "admin":
         statement = statement.where(CatalogReviewEvent.reviewer_id == reviewer.id)
@@ -542,6 +549,26 @@ def list_catalog_review_history(
         statement = statement.where(CatalogReviewEvent.target_type == target_type)
     if target_key:
         statement = statement.where(CatalogReviewEvent.target_key == target_key)
+    if q:
+        pattern = f"%{q.strip()}%"
+        statement = statement.where(
+            or_(
+                CatalogReviewEvent.target_key.ilike(pattern),
+                CatalogReviewEvent.reason.ilike(pattern),
+            )
+        )
+    if date_from:
+        statement = statement.where(
+            CatalogReviewEvent.created_at >= datetime.combine(
+                date_from, time.min, tzinfo=timezone.utc
+            )
+        )
+    if date_to:
+        statement = statement.where(
+            CatalogReviewEvent.created_at < datetime.combine(
+                date_to + timedelta(days=1), time.min, tzinfo=timezone.utc
+            )
+        )
     events = db.scalars(
         statement.order_by(
             CatalogReviewEvent.created_at.desc(),
@@ -549,4 +576,74 @@ def list_catalog_review_history(
         ).limit(limit)
     ).all()
     return [CatalogReviewEventRead.model_validate(event) for event in events]
+
+
+@router.get("/review/history/{event_id}/entry")
+def read_reviewed_catalog_entry(
+    event_id: UUID,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Read the catalog entry attached to an event visible to this reviewer."""
+    event = db.scalar(
+        select(CatalogReviewEvent).where(CatalogReviewEvent.id == event_id)
+    )
+    if event is None or (
+        reviewer.role != "admin" and event.reviewer_id != reviewer.id
+    ):
+        raise HTTPException(status_code=404, detail="Review history entry not found.")
+
+    if event.target_type == "disease":
+        item = db.scalar(select(Disease).where(Disease.code == event.target_key))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Catalog entry no longer exists.")
+        entry = {
+            "target_type": "disease",
+            "target_key": item.code,
+            "name": item.name,
+            "description": item.description,
+            "status": item.review_status,
+            "created_at": item.created_at,
+            "relevance_weight": None,
+        }
+    elif event.target_type == "symptom":
+        item = db.scalar(select(Symptom).where(Symptom.code == event.target_key))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Catalog entry no longer exists.")
+        entry = {
+            "target_type": "symptom",
+            "target_key": item.code,
+            "name": item.name,
+            "description": item.description,
+            "status": item.review_status,
+            "created_at": item.created_at,
+            "relevance_weight": None,
+        }
+    else:
+        disease_code, separator, symptom_code = event.target_key.partition(":")
+        if not separator or not disease_code or not symptom_code:
+            raise HTTPException(status_code=404, detail="Catalog entry no longer exists.")
+        row = db.execute(
+            select(DiseaseSymptom, Disease, Symptom)
+            .join(Disease, Disease.id == DiseaseSymptom.disease_id)
+            .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+            .where(Disease.code == disease_code, Symptom.code == symptom_code)
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Catalog entry no longer exists.")
+        link, disease, symptom = row
+        entry = {
+            "target_type": "disease_symptom",
+            "target_key": event.target_key,
+            "name": f"{disease.name} — {symptom.name}",
+            "description": None,
+            "status": link.review_status,
+            "created_at": None,
+            "relevance_weight": link.relevance_weight,
+        }
+
+    return {
+        "event": CatalogReviewEventRead.model_validate(event),
+        "entry": entry,
+    }
 
