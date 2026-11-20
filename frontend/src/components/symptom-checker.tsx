@@ -9,6 +9,7 @@ type Onset = "sudden" | "gradual" | "comes_and_goes" | "not_sure";
 type SymptomItem = { id: string; label: string; category: string };
 type ContextualMention = SymptomItem & { context_flag: string };
 type ReportedContext = { duration: Duration; severity: Severity; onset: Onset };
+type ReviewStatus = "present" | "not_present" | "unsure";
 type NormalizeResult = {
   taxonomy_version: string;
   matched_symptoms: SymptomItem[];
@@ -51,6 +52,7 @@ export function SymptomChecker() {
   const [catalog, setCatalog] = useState<SymptomCatalog | null>(null);
   const [catalogError, setCatalogError] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [reviewStatuses, setReviewStatuses] = useState<Record<string, ReviewStatus>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -99,12 +101,26 @@ export function SymptomChecker() {
         return;
       }
       setResult(body);
+      const reviewItems = [...body.matched_symptoms, ...body.contextual_mentions];
+      setReviewStatuses(Object.fromEntries(reviewItems.map((item) => [item.id, "unsure" as ReviewStatus])));
     } catch {
       setError("Unable to connect to MediPredict. Please try again later.");
     } finally {
       setLoading(false);
     }
   }
+
+  const reviewItems = result
+    ? [...result.matched_symptoms, ...result.contextual_mentions]
+    : [];
+  const reviewCounts = reviewItems.reduce(
+    (counts, item) => {
+      const status = reviewStatuses[item.id] ?? "unsure";
+      counts[status] += 1;
+      return counts;
+    },
+    { present: 0, not_present: 0, unsure: 0 },
+  );
 
   const groupedSymptoms = (catalog?.symptoms ?? []).reduce<Record<string, SymptomItem[]>>((groups, item) => {
     (groups[item.category] ??= []).push(item);
@@ -199,25 +215,47 @@ export function SymptomChecker() {
             <div><div className="eyebrow">TEXT REVIEW COMPLETE</div><h2>Recognized phrases</h2></div>
             <span className="review-pill">Human review required</span>
           </div>
-          {result.matched_symptoms.length > 0 ? (
-            <div className="recognized-list">
-              {result.matched_symptoms.map((item) => (
-                <div className="recognized-item" key={item.id}><span className="recognized-check">✓</span><strong>{item.label}</strong><small>{item.category}</small></div>
-              ))}
+          {reviewItems.length > 0 ? (
+            <div className="symptom-human-review">
+              <div className="human-review-intro">
+                <h3>Confirm what you meant</h3>
+                <p>Phrase matching can misunderstand context. For each item, choose the option that best reflects your experience. Nothing is assumed to be present until you review it.</p>
+              </div>
+              {reviewItems.map((item) => {
+                const contextFlag = "context_flag" in item ? item.context_flag : null;
+                return (
+                  <div className="human-review-item" key={item.id}>
+                    <div className="human-review-term">
+                      <strong>{item.label}</strong>
+                      <small>{contextFlag ? (contextLabels[contextFlag] ?? "Context needs review") : item.category}</small>
+                    </div>
+                    <label className="field-label" htmlFor={`review-${item.id}`}>
+                      Your confirmation
+                      <select
+                        id={`review-${item.id}`}
+                        value={reviewStatuses[item.id] ?? "unsure"}
+                        onChange={(event) => setReviewStatuses((current) => ({
+                          ...current,
+                          [item.id]: event.target.value as ReviewStatus,
+                        }))}
+                      >
+                        <option value="unsure">Not sure / needs review</option>
+                        <option value="present">I am experiencing this</option>
+                        <option value="not_present">I am not experiencing this</option>
+                      </select>
+                    </label>
+                  </div>
+                );
+              })}
+              <div className="human-review-counts" aria-live="polite">
+                <span>{reviewCounts.present} confirmed by you</span>
+                <span>{reviewCounts.not_present} marked absent</span>
+                <span>{reviewCounts.unsure} still unsure</span>
+              </div>
+              <p className="human-review-note">These are your own confirmations for this page only. They are not saved, sent as a diagnosis, or interpreted by a medical model.</p>
             </div>
           ) : (
-            <p className="symptom-empty">No supported symptom phrases were confidently recognized from this limited vocabulary. This does not mean that no symptoms are present.</p>
-          )}
-
-          {result.contextual_mentions.length > 0 && (
-            <div className="context-review">
-              <h3>Mentions that need your review</h3>
-              {result.contextual_mentions.map((item, index) => (
-                <div className="context-item" key={`${item.id}-${index}`}>
-                  <strong>{item.label}</strong><span>{contextLabels[item.context_flag] ?? "Context needs review"}</span>
-                </div>
-              ))}
-            </div>
+            <p className="symptom-empty">No supported symptom phrases were confidently recognized from this limited vocabulary. This does not mean that no symptoms are present. Please review your original description with a healthcare professional if you are concerned.</p>
           )}
 
           <div className="reported-context-summary">
