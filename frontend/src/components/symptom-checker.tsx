@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type Duration = "less_than_24_hours" | "one_to_three_days" | "four_to_seven_days" | "more_than_one_week" | "not_sure";
 type Severity = "mild" | "moderate" | "severe" | "not_sure";
@@ -19,6 +19,12 @@ type NormalizeResult = {
   clinical_interpretation_performed: false;
   disclaimer: string;
 };
+type SymptomCatalog = {
+  taxonomy_version: string;
+  status: string;
+  symptoms: SymptomItem[];
+  disclaimer: string;
+};
 
 const contextLabels: Record<string, string> = {
   negated_or_denied_context: "Mentioned as absent or denied",
@@ -27,14 +33,51 @@ const contextLabels: Record<string, string> = {
   explicit_mention_unresolved: "Context needs review",
 };
 
+const categoryLabels: Record<string, string> = {
+  pain: "Pain",
+  general: "General",
+  respiratory: "Respiratory",
+  digestive: "Digestive",
+  skin: "Skin",
+  neurological: "Neurological",
+};
+
 export function SymptomChecker() {
   const [text, setText] = useState("");
   const [duration, setDuration] = useState<Duration>("not_sure");
   const [severity, setSeverity] = useState<Severity>("not_sure");
   const [onset, setOnset] = useState<Onset>("not_sure");
   const [result, setResult] = useState<NormalizeResult | null>(null);
+  const [catalog, setCatalog] = useState<SymptomCatalog | null>(null);
+  const [catalogError, setCatalogError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/symptoms/catalog", { headers: { Accept: "application/json" }, cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json() as SymptomCatalog & { detail?: string };
+        if (!response.ok) throw new Error(body.detail ?? "Could not load the symptom list.");
+        if (active) setCatalog(body);
+      })
+      .catch((cause: unknown) => {
+        if (active) setCatalogError(cause instanceof Error ? cause.message : "Could not load the symptom list.");
+      });
+    return () => { active = false; };
+  }, []);
+
+  function addSymptom(item: SymptomItem) {
+    setText((current) => {
+      const sentence = current.trim();
+      const addition = item.label.toLowerCase();
+      if (!sentence) return `I am experiencing ${addition}.`;
+      const withoutEnding = sentence.replace(/[.!?]+$/, "");
+      return `${withoutEnding}, ${addition}.`;
+    });
+    setSelectedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,6 +106,11 @@ export function SymptomChecker() {
     }
   }
 
+  const groupedSymptoms = (catalog?.symptoms ?? []).reduce<Record<string, SymptomItem[]>>((groups, item) => {
+    (groups[item.category] ??= []).push(item);
+    return groups;
+  }, {});
+
   return (
     <div className="symptom-workspace">
       <div className="symptom-intro">
@@ -72,6 +120,27 @@ export function SymptomChecker() {
       </div>
 
       <form className="symptom-form" onSubmit={handleSubmit}>
+        <section className="symptom-catalog-picker" aria-labelledby="catalog-picker-title">
+          <div className="catalog-picker-heading">
+            <div><h2 id="catalog-picker-title">Choose from supported symptoms</h2><p>You can select terms to add them to your description, or write in your own words below.</p></div>
+            {catalog && <span>{catalog.symptoms.length} terms</span>}
+          </div>
+          {catalogError && <p className="catalog-load-error" role="status">{catalogError} You can still enter a description manually.</p>}
+          {!catalog && !catalogError && <p className="catalog-loading">Loading the supported symptom list…</p>}
+          {catalog && Object.entries(groupedSymptoms).map(([category, items]) => (
+            <div className="catalog-category" key={category}>
+              <h3>{categoryLabels[category] ?? category}</h3>
+              <div className="catalog-chip-list">
+                {items.map((item) => {
+                  const selected = selectedIds.includes(item.id);
+                  return <button className={selected ? "catalog-chip selected" : "catalog-chip"} disabled={selected} key={item.id} onClick={() => addSymptom(item)} type="button" aria-pressed={selected}>{selected ? "✓ " : "+ "}{item.label}</button>;
+                })}
+              </div>
+            </div>
+          ))}
+          {catalog && <small className="catalog-disclaimer">Vocabulary v{catalog.taxonomy_version} · {catalog.status.replaceAll("_", " ")}</small>}
+        </section>
+
         <label className="field-label" htmlFor="symptom-description">
           Your symptom description
           <textarea
