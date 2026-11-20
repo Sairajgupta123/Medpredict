@@ -28,7 +28,7 @@ logs. Keep the manifest and images in approved private storage.
 ## Run an offline research experiment
 
 ```bash
-python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10
+python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10 --target-validation-coverage 0.90
 ```
 
 The trainer creates deterministic, class-aware patient-grouped 70/15/15 approximate partitions.
