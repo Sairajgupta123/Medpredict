@@ -1,57 +1,56 @@
-"""Tests for aggregate dataset audit utility."""
+"""Tests for aggregate-only dataset audit output."""
 
 import json
 
 import pandas as pd
-import pytest
 
 from ml.datasets.audit_csv import audit_dataset
 
 
-def test_audit_reports_aggregate_quality_without_raw_text(tmp_path) -> None:
-    path = tmp_path / "symptoms.csv"
+def test_audit_reports_quality_without_exposing_raw_text(tmp_path) -> None:
+    path = tmp_path / "sample.csv"
     pd.DataFrame(
         {
             "symptom_text": [
-                " Fever   and cough ",
-                "fever and cough",
-                "rash",
-                "headache and nausea",
-                "sore throat",
-                "joint pain",
+                "Fever and cough",
+                "  fever   and cough ",
+                "person@example.com with headache",
+                "Call +1 555 123 4567 for details",
             ],
-            "condition_label": ["A", "A", "A", "B", "B", "B"],
-            "group_id": ["p1", "p2", "p3", "p4", "p5", "p6"],
+            "condition_label": ["A", "A", "B", "B"],
+            "group_id": ["p1", "p1", "p2", "p3"],
         }
     ).to_csv(path, index=False)
 
-    report = audit_dataset(path, "symptom_text", "condition_label", "group_id")
+    report = audit_dataset(path)
+    rendered = json.dumps(report)
 
-    assert report["raw_row_count"] == 6
-    assert report["usable_row_count"] == 6
-    assert report["class_count"] == 2
-    assert report["normalized_duplicate_text_rows"] == 1
-    assert report["group_audit"]["unique_group_count"] == 6
-    assert "Fever" not in json.dumps(report)
-
-
-def test_audit_rejects_missing_columns(tmp_path) -> None:
-    path = tmp_path / "bad.csv"
-    pd.DataFrame({"text": ["fever"], "label": ["A"]}).to_csv(path, index=False)
-    with pytest.raises(ValueError, match="Missing required columns"):
-        audit_dataset(path, "symptom_text", "condition_label")
+    assert report["row_count"] == 4
+    assert report["symptom_text"]["normalized_duplicate_rows"] == 1
+    assert report["symptom_text"]["possible_email_pattern_rows"] == 1
+    assert report["symptom_text"]["possible_phone_pattern_rows"] == 1
+    assert report["grouping"]["unique_nonblank_groups"] == 3
+    assert "person@example.com" not in rendered
+    assert "Fever and cough" not in rendered
+    assert "p1" not in rendered
 
 
-def test_audit_flags_missing_group_ids(tmp_path) -> None:
-    path = tmp_path / "groups.csv"
+def test_audit_reports_missing_values_and_label_imbalance(tmp_path) -> None:
+    path = tmp_path / "missing.csv"
     pd.DataFrame(
         {
-            "symptom_text": ["one", "two", "three", "four"],
-            "condition_label": ["A", "A", "B", "B"],
-            "group_id": ["g1", "", "g3", "g4"],
+            "symptom_text": ["cough", None, "fever"],
+            "condition_label": ["A", "A", "B"],
         }
     ).to_csv(path, index=False)
 
-    report = audit_dataset(path, "symptom_text", "condition_label", "group_id")
-    assert report["group_audit"]["blank_group_rows"] == 1
-    assert any("Blank group identifiers" in item for item in report["warnings"])
+    report = audit_dataset(path)
+    assert report["null_counts"]["symptom_text"] == 1
+    assert report["labels"]["class_counts"] == {"A": 2, "B": 1}
+
+
+def test_audit_rejects_missing_file(tmp_path) -> None:
+    import pytest
+
+    with pytest.raises(FileNotFoundError):
+        audit_dataset(tmp_path / "missing.csv")
