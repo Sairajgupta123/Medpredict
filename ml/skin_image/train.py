@@ -38,6 +38,7 @@ def _run_epoch(model, loader, criterion, device, optimizer=None):
     total_loss = 0.0
     actual: list[int] = []
     predicted: list[int] = []
+    collected_logits: list[np.ndarray] = []
 
     for images, labels in loader:
         images = images.to(device)
@@ -55,10 +56,17 @@ def _run_epoch(model, loader, criterion, device, optimizer=None):
         total_loss += float(loss.item()) * int(labels.size(0))
         actual.extend(labels.detach().cpu().tolist())
         predicted.extend(logits.argmax(dim=1).detach().cpu().tolist())
+        if not training:
+            collected_logits.append(logits.detach().cpu().numpy())
 
     if not actual:
         raise ValueError("A training/evaluation partition is empty")
-    return total_loss / len(actual), actual, predicted
+    logits_array = (
+        np.concatenate(collected_logits, axis=0)
+        if collected_logits
+        else np.empty((0, 0), dtype=np.float32)
+    )
+    return total_loss / len(actual), actual, predicted, logits_array
 
 
 def train_skin_model(
@@ -123,6 +131,12 @@ def train_skin_model(
     from ml.skin_image.data import SkinImageDataset
     from ml.skin_image.metrics import classification_metrics
     from ml.skin_image.model import build_skin_classifier
+    from ml.skin_image.calibration import calibration_metrics, fit_temperature
+    from ml.skin_image.selective import (
+        select_threshold_for_coverage,
+        selective_classification_metrics,
+    )
+    from scipy.special import softmax
 
     _seed_everything(seed)
     train_dataset = SkinImageDataset(
@@ -220,10 +234,10 @@ def train_skin_model(
     checkpoint_path = output_dir / f"skin_{model_slug}_best.pt"
 
     for epoch in range(1, epochs + 1):
-        train_loss, _, _ = _run_epoch(
+        train_loss, _, _, _ = _run_epoch(
             model, train_loader, criterion, device, optimizer
         )
-        validation_loss, y_true, y_pred = _run_epoch(
+        validation_loss, y_true, y_pred, _ = _run_epoch(
             model, validation_loader, criterion, device
         )
         validation_metrics = classification_metrics(
@@ -254,17 +268,49 @@ def train_skin_model(
                     "manifest_sha256": manifest_digest,
                     "experiment_config_sha256": config_digest,
                     "experiment_config": experiment_config,
+                    "calibration_temperature": calibration_temperature
+                    if "calibration_temperature" in locals() else None,
+                    "abstention_threshold": abstention_threshold
+                    if "abstention_threshold" in locals() else None,
                 },
                 checkpoint_path,
             )
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
-    test_loss, y_true, y_pred = _run_epoch(
+    validation_loss, validation_targets, _, validation_logits = _run_epoch(
+        model, validation_loader, criterion, device
+    )
+    test_loss, y_true, y_pred, test_logits = _run_epoch(
         model, test_loader, criterion, device
     )
     test_metrics = classification_metrics(
         y_true, y_pred, class_names=class_names
+    )
+
+    # Calibration and abstention are fitted only on the validation partition.
+    calibration_temperature = fit_temperature(
+        validation_logits, validation_targets
+    )
+    validation_probabilities = softmax(
+        validation_logits / calibration_temperature, axis=1
+    )
+    threshold_selection = select_threshold_for_coverage(
+        validation_probabilities,
+        minimum_coverage=0.90,
+    )
+    abstention_threshold = float(threshold_selection["threshold"])
+    test_probabilities = softmax(test_logits / calibration_temperature, axis=1)
+    validation_calibration = calibration_metrics(
+        validation_logits, validation_targets,
+        temperature=calibration_temperature,
+    )
+    test_calibration = calibration_metrics(
+        test_logits, y_true, temperature=calibration_temperature,
+    )
+    test_selective_metrics = selective_classification_metrics(
+        y_true, test_probabilities,
+        minimum_confidence=abstention_threshold,
     )
 
     def class_support(frame: pd.DataFrame) -> dict[str, dict[str, int]]:
@@ -287,6 +333,17 @@ def train_skin_model(
         "best_validation_macro_f1": best_macro_f1,
         "test_loss": test_loss,
         "test_metrics": test_metrics,
+        "calibration": {
+            "temperature": calibration_temperature,
+            "fit_partition": "validation_only",
+            "validation_metrics": validation_calibration,
+            "test_metrics": test_calibration,
+        },
+        "abstention": {
+            "threshold_selection": threshold_selection,
+            "selection_partition": "validation_only",
+            "test_metrics": test_selective_metrics,
+        },
         "class_names": class_names,
         "class_to_index": class_to_index,
         "training_class_balance": weight_report,
@@ -340,6 +397,9 @@ def train_skin_model(
         "partition_class_support": report["partition_class_support"],
         "intended_use": "offline_research_only",
         "clinical_validation": False,
+        "calibration_temperature": calibration_temperature,
+        "abstention_threshold": abstention_threshold,
+        "threshold_selection_partition": "validation_only",
     }
     (output_dir / "model_metadata.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
