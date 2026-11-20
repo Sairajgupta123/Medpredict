@@ -14,7 +14,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.core.security import create_access_token
-from app.models.catalog import Disease, DiseaseSymptom, Symptom
+from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.user import User
 
 test_engine = create_engine(
@@ -658,4 +658,33 @@ def test_stale_catalog_review_decision_returns_conflict_without_audit_event(
     events = history.json()
     assert len(events) == 1
     assert events[0]["new_status"] == "approved"
+
+@pytest.mark.parametrize(
+    ("previous_status", "target_key"),
+    [("unknown", "DIS_AUDIT_CONSTRAINT"), ("draft", "   ")],
+)
+def test_catalog_review_event_rejects_invalid_transition_metadata(
+    client: TestClient,
+    previous_status: str,
+    target_key: str,
+) -> None:
+    headers = _user_headers("reviewer")
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(email="reviewer-reviewer@example.com").one()
+        db.add(
+            CatalogReviewEvent(
+                target_type="disease",
+                target_key=target_key,
+                previous_status=previous_status,
+                new_status="approved",
+                reason="Evidence and scope were reviewed.",
+                reviewer_id=reviewer.id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
+    finally:
+        db.rollback()
+        db.close()
 
