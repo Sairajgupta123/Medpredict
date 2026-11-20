@@ -384,7 +384,8 @@ def test_patient_cannot_review_catalog_items(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_REVIEW_DENIED",
         headers=headers,
-        json={"status": "approved", "reason": "Reviewed against approved source."},
+        json={"expected_status": "draft",
+            "status": "approved", "reason": "Reviewed against approved source."},
     )
     assert response.status_code == 403
 
@@ -411,7 +412,8 @@ def test_reviewer_can_approve_disease_with_server_assigned_audit(
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_REVIEW_OK",
         headers=headers,
-        json={"status": "approved", "reason": "Clinical source and scope reviewed."},
+        json={"expected_status": "draft",
+            "status": "approved", "reason": "Clinical source and scope reviewed."},
     )
     assert response.status_code == 200
     body = response.json()
@@ -469,7 +471,8 @@ def test_admin_can_review_disease_symptom_link(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_LINK_REVIEW/symptoms/SYM_LINK_REVIEW",
         headers=_user_headers("admin"),
-        json={"status": "approved", "reason": "Relationship evidence reviewed."},
+        json={"expected_status": "draft",
+            "status": "approved", "reason": "Relationship evidence reviewed."},
     )
     assert response.status_code == 200
     assert response.json()["review_status"] == "approved"
@@ -488,6 +491,7 @@ def test_review_decision_is_written_to_audit_history(client: TestClient) -> None
         "/api/v1/catalog/review/diseases/DIS_AUDIT_HISTORY",
         headers=headers,
         json={
+            "expected_status": "draft",
             "status": "approved",
             "reason": "Evidence and scope reviewed by assigned reviewer.",
         },
@@ -545,7 +549,8 @@ def test_review_rejects_whitespace_only_reason(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_BLANK_REASON",
         headers=_user_headers("reviewer"),
-        json={"status": "approved", "reason": "         "},
+        json={"expected_status": "draft",
+            "status": "approved", "reason": "         "},
     )
     assert response.status_code == 422
 
@@ -609,4 +614,48 @@ def test_reviewer_queue_filters_status_and_rejects_patient(
     )
     assert filtered.status_code == 200
     assert filtered.json() == []
+
+def test_stale_catalog_review_decision_returns_conflict_without_audit_event(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_STALE_REVIEW", name="Stale Review Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer")
+    first = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_STALE_REVIEW",
+        headers=headers,
+        json={
+            "expected_status": "draft",
+            "status": "approved",
+            "reason": "Evidence checked and approval recorded.",
+        },
+    )
+    assert first.status_code == 200
+
+    stale = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_STALE_REVIEW",
+        headers=headers,
+        json={
+            "expected_status": "draft",
+            "status": "retired",
+            "reason": "Attempted stale decision after review.",
+        },
+    )
+    assert stale.status_code == 409
+    assert "changed after you opened it" in stale.json()["detail"]
+
+    history = client.get(
+        "/api/v1/catalog/review/history",
+        headers=headers,
+        params={"target_type": "disease", "target_key": "DIS_STALE_REVIEW"},
+    )
+    assert history.status_code == 200
+    events = history.json()
+    assert len(events) == 1
+    assert events[0]["new_status"] == "approved"
 
