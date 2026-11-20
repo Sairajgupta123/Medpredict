@@ -132,6 +132,63 @@ def audit_dataset(path: Path) -> dict[str, Any]:
                 (group_labels > 1).sum()
             )
 
+    # A technical intake gate for symptom-model experiments. This is not dataset approval.
+    blockers: list[str] = []
+    required = {"symptom_text", "condition_label", "group_id"}
+    missing_required = sorted(required - set(frame.columns))
+    if missing_required:
+        blockers.append("required_columns_missing")
+    if "symptom_text" in frame.columns:
+        text_values = frame["symptom_text"].fillna("").astype(str).str.strip()
+        if text_values.eq("").any():
+            blockers.append("blank_symptom_text_rows")
+        if text_values.str.contains(EMAIL_PATTERN).any() or text_values.str.contains(PHONE_PATTERN).any():
+            blockers.append("possible_direct_contact_identifiers_detected")
+    if "condition_label" in frame.columns:
+        label_values = frame["condition_label"].fillna("").astype(str).str.strip()
+        if label_values.eq("").any():
+            blockers.append("blank_condition_labels")
+        if label_values.nunique() < 2:
+            blockers.append("fewer_than_two_condition_classes")
+    if "group_id" not in frame.columns:
+        group_support: dict[str, int] = {}
+        blockers.append("patient_or_source_group_id_missing")
+    else:
+        group_values = frame["group_id"].fillna("").astype(str).str.strip()
+        if group_values.eq("").any():
+            blockers.append("blank_patient_or_source_group_ids")
+        if "condition_label" in frame.columns:
+            paired_groups = pd.DataFrame(
+                {"group": group_values, "label": label_values}
+            )
+            paired_groups = paired_groups[paired_groups["group"].ne("")]
+            group_support = {
+                str(label): int(part["group"].nunique())
+                for label, part in paired_groups.groupby("label")
+            }
+            if any(count < 3 for count in group_support.values()):
+                blockers.append("one_or_more_classes_have_fewer_than_three_groups")
+            group_label_counts = paired_groups.groupby("group")["label"].nunique()
+            if (group_label_counts > 1).any():
+                blockers.append("source_groups_associated_with_multiple_labels")
+        else:
+            group_support = {}
+    if report.get("label_conflicts", {}).get("unique_texts_with_multiple_labels", 0):
+        blockers.append("normalized_symptom_text_has_conflicting_labels")
+
+    report["training_readiness"] = {
+        "ready_for_human_dataset_review": len(blockers) == 0,
+        "automatic_training_approval": False,
+        "blocking_reasons": sorted(set(blockers)),
+        "distinct_groups_per_class": group_support,
+        "minimum_groups_per_class": 3,
+        "notice": (
+            "This technical audit does not establish dataset rights, de-identification, "
+            "clinical label validity, representativeness or permission for model training. "
+            "Human review and source-specific approval remain mandatory."
+        ),
+    }
+
     return report
 
 
