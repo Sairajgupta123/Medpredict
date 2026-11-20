@@ -48,8 +48,11 @@ performance and external generalization with qualified reviewers. A separate unt
 cohort is still required for independent validation.
 
 The saved joblib bundle is a serialization artifact capable of executing code when loaded: never
-load one from an untrusted source. All outputs are research-only and are not connected to the
-prediction API or approved for clinical use.
+load one from an untrusted source. After deserialization, `ml.text_model.inference.validate_text_model_bundle`
+checks the required inference components, fitted estimator class indices, label-encoder order,
+research-only purpose marker, and finite calibration/abstention settings. This validation happens
+after deserialization and therefore does not make an untrusted joblib file safe to load. All outputs
+are research-only and are not connected to the prediction API or approved for clinical use.
 
 ## Experiment output safety
 
