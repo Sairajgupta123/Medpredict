@@ -102,3 +102,12 @@ on a new untouched external cohort before considering any future integration.
 The CSV audit's aggregate email/phone pattern checks and whitespace normalization have regression
 coverage. These heuristics may miss identifiers and can produce false positives; they are not a
 substitute for formal de-identification and privacy review.
+
+## Text probability calibration and abstention
+
+Validation-only helpers are available in `ml/text_model/calibration.py` for temperature scaling,
+NLL, multiclass Brier score, top-label ECE and confidence-based abstention. See
+`ml/text_model/CALIBRATION.md` for the required protocol. The current comparison runner does not
+yet create a dedicated validation partition or integrate these helpers; do not fit them on the
+comparison test set. The score is not a disease probability, and these research utilities are not
+connected to the application API.
