@@ -17,7 +17,7 @@ def _positive_finite_number(value: Any, name: str) -> float:
         or not np.isfinite(value)
         or value <= 0
     ):
-        raise ValueError(f"{name} must be a positive finite number")
+        raise ValueError(f"{name} must be positive and finite")
     return float(value)
 
 
