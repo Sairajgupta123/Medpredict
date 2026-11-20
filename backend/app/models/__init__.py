@@ -16,7 +16,7 @@ from app.models.prediction import (
     PredictionResult,
     SkinImageAnalysis,
 )
-from app.models.user import User
+from app.models.user import RoleProvisioningEvent, User
 
 __all__ = [
     "CareRecommendation",
@@ -29,6 +29,7 @@ __all__ = [
     "PredictionFeedback",
     "PredictionResult",
     "RecommendationReference",
+    "RoleProvisioningEvent",
     "SkinImageAnalysis",
     "Symptom",
     "User",
