@@ -38,7 +38,11 @@ The exact framework versions and interfaces will be documented as implementation
 
 ## Current status
 
-The repository foundation and detailed implementation are being developed incrementally. Features listed above are planned scope, not claims that they are already implemented.
+The repository foundation, FastAPI backend, SQLAlchemy schema, initial Alembic migration, authentication endpoints, profile management, read-only medical catalog APIs, and a research-only text classification baseline have been added on `develop`.
+
+The text baseline includes dataset validation, group-aware splitting when a grouping key is available, and imbalance-aware evaluation outputs. It is not connected to the public prediction API and has not been trained on an approved dataset. No clinical performance claims are made.
+
+Skin-image analysis, reviewed dataset ingestion, recommendation content, clinician-reviewed safety rules, and frontend workflows remain under development. Features listed above are planned scope unless explicitly identified as implemented.
 
 ## Safety notice
 
