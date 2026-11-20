@@ -41,9 +41,6 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
     assert set(merge.down_revision) == {
         "0004_knowledge_review_due_dates",
         "0004_prediction_history_consent",
-        "0004_knowledge_review_due_dates",
-        "0005_merge_knowledge_consent",
-        "0006_disease_catalog_review",
     }
 
     expected = {
@@ -71,6 +68,9 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0002_reviewed_medical_knowledge",
         "0003_reviewed_symptom_catalog",
         "0004_prediction_history_consent",
+        "0004_knowledge_review_due_dates",
+        "0005_merge_knowledge_consent",
+        "0006_disease_catalog_review",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
