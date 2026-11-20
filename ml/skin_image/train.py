@@ -25,6 +25,9 @@ def _seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def _run_epoch(model, loader, criterion, device, optimizer=None):
@@ -187,6 +190,27 @@ def train_skin_model(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    experiment_config = {
+        "architecture": architecture,
+        "variant": variant,
+        "pretrained": pretrained,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "seed": seed,
+        "num_workers": num_workers,
+        "image_size": 224,
+        "optimizer": "AdamW",
+        "loss": "weighted_cross_entropy",
+        "checkpoint_selection_metric": "validation_macro_f1",
+        "split_strategy": "patient_grouped_70_15_15_approximate",
+        "manifest_sha256": manifest_digest,
+    }
+    config_json = json.dumps(experiment_config, sort_keys=True, separators=(",", ":"))
+    config_digest = hashlib.sha256(config_json.encode("utf-8")).hexdigest()
+    (output_dir / "experiment_config.json").write_text(
+        json.dumps(experiment_config, indent=2), encoding="utf-8"
+    )
     best_macro_f1 = -1.0
     best_epoch = 0
     history: list[dict[str, float]] = []
@@ -226,6 +250,8 @@ def train_skin_model(
                     "seed": seed,
                     "best_epoch": best_epoch,
                     "manifest_sha256": manifest_digest,
+                    "experiment_config_sha256": config_digest,
+                    "experiment_config": experiment_config,
                 },
                 checkpoint_path,
             )
@@ -263,6 +289,8 @@ def train_skin_model(
             "test": int(test_frame["patient_id"].nunique()),
         },
         "manifest_sha256": manifest_digest,
+        "experiment_config": experiment_config,
+        "experiment_config_sha256": config_digest,
         "history": history,
         "limitations": [
             "No clinical validation is implied.",
@@ -272,6 +300,30 @@ def train_skin_model(
             "The test partition must not be used for model selection.",
         ],
     }
+    metadata = {
+        "artifact_format_version": 1,
+        "model_name": report["model"],
+        "architecture": architecture,
+        "variant": variant,
+        "class_names": class_names,
+        "class_to_index": class_to_index,
+        "image_size": 224,
+        "normalization": {
+            "name": "ImageNet",
+            "mean": [0.485, 0.456, 0.406],
+            "std": [0.229, 0.224, 0.225],
+        },
+        "manifest_sha256": manifest_digest,
+        "experiment_config_sha256": config_digest,
+        "checkpoint_file": checkpoint_path.name,
+        "best_epoch": best_epoch,
+        "selection_metric": "validation_macro_f1",
+        "intended_use": "offline_research_only",
+        "clinical_validation": False,
+    }
+    (output_dir / "model_metadata.json").write_text(
+        json.dumps(metadata, indent=2), encoding="utf-8"
+    )
     (output_dir / "experiment_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
     )
