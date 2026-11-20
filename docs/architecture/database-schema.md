@@ -48,7 +48,7 @@ erDiagram
 | `prediction_results` | Ranked candidate conditions | prediction, disease, rank, probability field, explanation |
 | `skin_image_analyses` | Metadata for image analysis | private object key, MIME type, SHA-256, class, confidence, quality/review flags |
 | `prediction_feedback` | Feedback about usefulness | prediction, helpful flag, comment, review status |
-| `medical_references` | Versioned source provenance | publisher, URL, evidence type, version, review status, reviewer |
+| `medical_references` | Versioned source provenance | publisher, URL, evidence type, version, review status, reviewer |\n| `medical_reference_events` | Immutable source lifecycle audit | registration/review event, previous/new status, actor, reason, timestamp |
 | `care_recommendations` | General-care information | disease, locale, category, urgency, version, approval and validity |
 | `recommendation_references` | Recommendation-to-source links | recommendation ID, reference ID, reviewer note |
 | `catalog_references` | Current source links for catalog entries | target type/key, reference ID, linking actor/reason, soft-removal metadata |
