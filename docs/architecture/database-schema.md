@@ -50,6 +50,24 @@ erDiagram
 | `care_recommendations` | General-care information | disease, locale, category, urgency, version, approval and validity |
 | `recommendation_references` | Recommendation-to-source links | recommendation ID, reference ID, reviewer note |
 
+## Prediction history API
+
+Authenticated history endpoints are mounted under `/api/v1/predictions/history`:
+
+- `GET /` lists only the signed-in user's records, with bounded pagination. Response schemas
+  deliberately omit raw symptom text, image object keys and other free-text health inputs.
+- `POST /{prediction_id}/revoke-consent` currently supports text-only history. It clears the
+  retained symptom narrative, removes associated ranked result details, and appends a versioned
+  revocation event. It does not delete the prediction's minimal audit metadata.
+- `DELETE /{prediction_id}` deletes an owned history item only when no external skin-image object
+  needs cleanup. It returns a conflict for image-backed records until an object-storage deletion
+  adapter exists. This avoids falsely reporting deletion while a private image might remain.
+
+All operations require a valid active-user bearer token and filter by both prediction ID and
+authenticated owner. An unknown ID and another user's ID produce the same not-found response.
+The history API does not create predictions; a separate inference workflow must explicitly
+capture a grant event before persisting health text.
+
 ## Key rules
 
 ### Prediction lifecycle and consent
@@ -61,11 +79,11 @@ erDiagram
 - Raw `input_text` must be null unless `input_storage_consent=true`; a database check constraint enforces this invariant.
 - The consent-event table records the purpose (`prediction_history`), action (`granted` or `revoked`), policy version and timestamp. It is an audit record, not a substitute for an explicit UI action.
 - A service must verify a matching grant event before writing health text or retaining history. A boolean alone is never proof of consent.
-- Revocation must stop future storage and trigger deletion of retained input text and associated user-visible history according to the approved deletion policy. Consent-event handling must not silently rewrite the prior decision.
-- History must be off by default. The user must be able to use symptom analysis without creating an account or saving a history record.
+- Revocation must stop future storage and remove retained text and result details. Current API supports text-only revocation; image/combined revocation waits for verified object deletion.
+- History is not created automatically by the symptom-normalization endpoint. Users must be able to use symptom analysis without an account or saved history.
 - Do not store raw symptom text, uploaded image bytes, or user-entered free text in application logs, analytics, traces, or error reports.
-- Before history APIs are enabled, define and enforce a retention period, scheduled purge, user export/deletion flow, backup expiry, and guest-session ownership mechanism. These workflows are not yet implemented.
-- A deletion request must remove linked prediction results, feedback, consent events and private image objects as applicable; foreign-key cascades alone cannot delete external object-storage files or backups.
+- A retention period, scheduled purge, export flow, backup expiry, and guest-session ownership mechanism must be defined before history is enabled broadly. These workflows are not yet implemented.
+- A deletion request must remove linked prediction results, feedback, consent events and private image objects as applicable; database cascades alone cannot delete external object-storage files or backups.
 
 ### Symptom catalog publication
 
@@ -102,9 +120,9 @@ erDiagram
 
 ## Deliberately deferred
 
-Generated reports, chat sessions/messages, deletion/export APIs, audit events beyond consent decisions,
-model registry/evaluation runs, admin roles, retention jobs and reviewer workflows remain deferred.
-They need their own access-control, provenance, threat-model and operational decisions before use.
+Automatic retention jobs, image-object deletion adapter, user export, full account deletion, chat sessions/messages,
+model registry/evaluation runs, admin roles and reviewer workflows remain deferred. They need their own
+access-control, provenance, threat-model and operational decisions before use.
 
 ## ORM source
 
