@@ -82,10 +82,13 @@ def train_skin_model(
     pretrained: bool = False,
     num_workers: int = 0,
     architecture: str = "mobilenet_v3",
+    target_validation_coverage: float = 0.90,
 ) -> dict[str, Any]:
     """Train a supported image architecture using identical split and evaluation rules."""
     if epochs < 1 or batch_size < 1 or learning_rate <= 0 or num_workers < 0:
         raise ValueError("epochs, batch_size and learning_rate must be positive")
+    if not np.isfinite(target_validation_coverage) or not 0 < target_validation_coverage <= 1:
+        raise ValueError("target_validation_coverage must be in (0, 1]")
     if not manifest_path.is_file():
         raise FileNotFoundError("Manifest file does not exist")
     if not image_root.is_dir():
@@ -220,6 +223,7 @@ def train_skin_model(
         "split_strategy": "class_aware_patient_grouped_70_15_15_candidate_search",
         "split_search_attempts": 64,
         "all_classes_required_in_each_partition": True,
+        "target_validation_coverage": target_validation_coverage,
         "manifest_sha256": manifest_digest,
     }
     config_json = json.dumps(experiment_config, sort_keys=True, separators=(",", ":"))
@@ -293,7 +297,7 @@ def train_skin_model(
     )
     threshold_selection = select_threshold_for_coverage(
         validation_probabilities,
-        minimum_coverage=0.90,
+        minimum_coverage=target_validation_coverage,
     )
     abstention_threshold = float(threshold_selection["threshold"])
     test_probabilities = softmax(test_logits / calibration_temperature, axis=1)
@@ -432,6 +436,7 @@ def main() -> None:
     )
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--target-validation-coverage", type=float, default=0.90)
     args = parser.parse_args()
 
     report = train_skin_model(
