@@ -54,6 +54,8 @@ pytest
 
 ## Authentication foundation
 
+See [`../docs/architecture/authentication.md`](../docs/architecture/authentication.md) for the flow, token claims, and security limitations.
+
 The API currently provides:
 - `POST /api/v1/auth/register` — register with email and password; returns a short-lived bearer token.
 - `POST /api/v1/auth/login` — authenticate using JSON email/password credentials.
