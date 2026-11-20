@@ -71,6 +71,8 @@ export function SymptomChecker() {
   }, []);
 
   function addSymptom(item: SymptomItem) {
+    setResult(null);
+    setReviewStatuses({});
     setText((current) => {
       const sentence = current.trim();
       const addition = item.label.toLowerCase();
@@ -162,7 +164,16 @@ export function SymptomChecker() {
           <textarea
             id="symptom-description"
             maxLength={4000}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              const nextText = event.target.value;
+              setText(nextText);
+              setResult(null);
+              setReviewStatuses({});
+              setSelectedIds((current) => current.filter((id) => {
+                const selected = catalog?.symptoms.find((item) => item.id === id);
+                return selected ? nextText.toLocaleLowerCase().includes(selected.label.toLocaleLowerCase()) : false;
+              }));
+            }}
             placeholder="For example: I have a headache and fever since yesterday..."
             required
             rows={6}
@@ -176,7 +187,7 @@ export function SymptomChecker() {
           <p className="context-helper">These are your own descriptions, not measurements or a medical assessment. Choose “Not sure” if you cannot tell.</p>
           <div className="context-fields-grid">
             <label className="field-label" htmlFor="symptom-duration">How long have you experienced them?
-              <select id="symptom-duration" value={duration} onChange={(event) => setDuration(event.target.value as Duration)}>
+              <select id="symptom-duration" value={duration} onChange={(event) => { setDuration(event.target.value as Duration); setResult(null); setReviewStatuses({}); }}>
                 <option value="not_sure">Not sure</option>
                 <option value="less_than_24_hours">Less than 24 hours</option>
                 <option value="one_to_three_days">1–3 days</option>
@@ -185,7 +196,7 @@ export function SymptomChecker() {
               </select>
             </label>
             <label className="field-label" htmlFor="symptom-severity">How would you describe the severity?
-              <select id="symptom-severity" value={severity} onChange={(event) => setSeverity(event.target.value as Severity)}>
+              <select id="symptom-severity" value={severity} onChange={(event) => { setSeverity(event.target.value as Severity); setResult(null); setReviewStatuses({}); }}>
                 <option value="not_sure">Not sure</option>
                 <option value="mild">Mild</option>
                 <option value="moderate">Moderate</option>
@@ -193,7 +204,7 @@ export function SymptomChecker() {
               </select>
             </label>
             <label className="field-label" htmlFor="symptom-onset">How did they begin?
-              <select id="symptom-onset" value={onset} onChange={(event) => setOnset(event.target.value as Onset)}>
+              <select id="symptom-onset" value={onset} onChange={(event) => { setOnset(event.target.value as Onset); setResult(null); setReviewStatuses({}); }}>
                 <option value="not_sure">Not sure</option>
                 <option value="sudden">Suddenly</option>
                 <option value="gradual">Gradually</option>
