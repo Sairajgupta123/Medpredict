@@ -34,6 +34,7 @@ def compare_architectures(
     seed: int = 42,
     pretrained: bool = False,
     num_workers: int = 0,
+    target_validation_coverage: float = 0.90,
 ) -> dict[str, Any]:
     """Train candidates with shared settings and rank only by validation macro-F1."""
     if not candidates:
@@ -57,6 +58,7 @@ def compare_architectures(
             pretrained=pretrained,
             num_workers=num_workers,
             architecture=architecture,
+            target_validation_coverage=target_validation_coverage,
         )
         experiments.append(
             {
@@ -86,7 +88,8 @@ def compare_architectures(
             "batch_size": batch_size,
             "learning_rate": learning_rate,
             "pretrained": pretrained,
-            "split_strategy": "patient_grouped_70_15_15_approximate",
+            "split_strategy": "class_aware_patient_grouped_70_15_15_candidate_search",
+            "target_validation_coverage": target_validation_coverage,
         },
         "ranking": ranking,
         "limitations": [
@@ -113,6 +116,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--target-validation-coverage", type=float, default=0.90)
     args = parser.parse_args()
 
     result = compare_architectures(
@@ -125,6 +129,7 @@ def main() -> None:
         seed=args.seed,
         pretrained=args.pretrained,
         num_workers=args.num_workers,
+        target_validation_coverage=args.target_validation_coverage,
     )
     print(
         json.dumps(
