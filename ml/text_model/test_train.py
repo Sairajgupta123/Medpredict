@@ -191,3 +191,13 @@ def test_artifact_guard_allows_fresh_output_directory(tmp_path) -> None:
     from ml.text_model.train import ensure_artifacts_do_not_exist
 
     ensure_artifacts_do_not_exist(tmp_path, ["model.joblib", "metrics.json"])
+
+def test_experiment_config_digest_is_stable_and_sensitive_to_changes() -> None:
+    from ml.text_model.train import experiment_config_sha256
+
+    first = {"random_state": 42, "test_size": 0.2}
+    reordered = {"test_size": 0.2, "random_state": 42}
+    changed = {"random_state": 43, "test_size": 0.2}
+
+    assert experiment_config_sha256(first) == experiment_config_sha256(reordered)
+    assert experiment_config_sha256(first) != experiment_config_sha256(changed)
