@@ -54,7 +54,7 @@ def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
     payload: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     version = payload.get("taxonomy_version")
     status = payload.get("status")
-    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Taxonomy must declare a semantic taxonomy_version")
     if not isinstance(status, str) or not status.strip():
         raise ValueError("Taxonomy must declare its governance status")
