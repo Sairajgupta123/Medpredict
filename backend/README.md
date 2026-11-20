@@ -129,16 +129,17 @@ credentials must be stored in the deployment environment, never committed to Git
 
 ## Symptom phrase normalization API
 
-The first symptom-input milestone is deliberately non-diagnostic:
+The symptom-input milestone is deliberately non-diagnostic:
 
-- `POST /api/v1/symptoms/normalize` accepts a text description up to 4,000 characters.
+- `POST /api/v1/symptoms/normalize` accepts a text description up to 4,000 characters and a required self-reported context object.
+- Context values are constrained to duration (`less_than_24_hours`, `one_to_three_days`, `four_to_seven_days`, `more_than_one_week`, `not_sure`), severity (`mild`, `moderate`, `severe`, `not_sure`) and onset (`sudden`, `gradual`, `comes_and_goes`, `not_sure`).
 - A versioned, curated vocabulary maps explicit phrases to canonical symptom identifiers.
 - Negated, historical and uncertain mentions are returned separately for manual review.
 - Unrecognized wording is not echoed in the response.
 - The request is processed in memory by this endpoint and is not written to prediction history.
-- The response always declares `clinical_interpretation_performed: false` and requires human review.
+- The response returns the supplied context unchanged and declares `clinical_interpretation_performed: false`.
 
-The normalizer is a conservative phrase matcher, not a clinically validated NLP model. It does not reliably resolve all negation, timeline, severity, uncertainty or conversational context. Do not use it to infer diseases, rank conditions, triage patients or recommend treatment. The vocabulary is research scaffolding and needs clinical review before broader use.
+The context fields are user descriptions only. They are not verified measurements, clinical severity scores or triage signals. The normalizer is a conservative phrase matcher, not a clinically validated NLP model. It does not reliably resolve all negation, timeline, severity, uncertainty or conversational context. Do not use it to infer diseases, rank conditions, triage patients or recommend treatment. The vocabulary is research scaffolding and needs clinical review before broader use.
 
 The taxonomy is packaged at `app/data/symptom_taxonomy.json` and included in built distributions through setuptools package data. The original research vocabulary and tests remain in the repository-level `ml/` directory.
 
