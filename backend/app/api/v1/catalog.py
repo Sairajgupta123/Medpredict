@@ -1,6 +1,6 @@
 """Public catalog reads and authorized catalog review actions."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, literal, or_, select
@@ -286,6 +286,110 @@ def review_disease_symptom_link(
     )
     db.commit()
     return result
+
+
+@router.get("/review/workload")
+def read_reviewer_workload(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Return scoped pending workload and the authenticated reviewer's own activity."""
+    scope_filters = {
+        "disease": (
+            True if reviewer.role == "admin"
+            else _reviewer_scope_exists(reviewer, "disease", Disease.code)
+        ),
+        "symptom": (
+            True if reviewer.role == "admin"
+            else _reviewer_scope_exists(reviewer, "symptom", Symptom.code)
+        ),
+        "disease_symptom": (
+            True if reviewer.role == "admin"
+            else _reviewer_scope_exists(
+                reviewer,
+                "disease_symptom",
+                Disease.code + literal(":") + Symptom.code,
+            )
+        ),
+    }
+    models = {
+        "disease": Disease,
+        "symptom": Symptom,
+        "disease_symptom": DiseaseSymptom,
+    }
+
+    pending_by_type: dict[str, int] = {}
+    for target_type, model in models.items():
+        pending_by_type[target_type] = int(
+            db.scalar(
+                select(func.count())
+                .select_from(model)
+                .where(
+                    model.review_status.in_(("draft", "in_review")),
+                    scope_filters[target_type],
+                )
+            ) or 0
+        )
+
+    activity = select(CatalogReviewEvent)
+    if reviewer.role != "admin":
+        activity = activity.where(CatalogReviewEvent.reviewer_id == reviewer.id)
+
+    total_decisions = int(
+        db.scalar(select(func.count()).select_from(activity.subquery())) or 0
+    )
+    approved_decisions = int(
+        db.scalar(
+            select(func.count())
+            .select_from(CatalogReviewEvent)
+            .where(
+                CatalogReviewEvent.new_status == "approved",
+                *(
+                    [CatalogReviewEvent.reviewer_id == reviewer.id]
+                    if reviewer.role != "admin" else []
+                ),
+            )
+        ) or 0
+    )
+    retired_decisions = int(
+        db.scalar(
+            select(func.count())
+            .select_from(CatalogReviewEvent)
+            .where(
+                CatalogReviewEvent.new_status == "retired",
+                *(
+                    [CatalogReviewEvent.reviewer_id == reviewer.id]
+                    if reviewer.role != "admin" else []
+                ),
+            )
+        ) or 0
+    )
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_decisions = int(
+        db.scalar(
+            select(func.count())
+            .select_from(CatalogReviewEvent)
+            .where(
+                CatalogReviewEvent.created_at >= recent_cutoff,
+                *(
+                    [CatalogReviewEvent.reviewer_id == reviewer.id]
+                    if reviewer.role != "admin" else []
+                ),
+            )
+        ) or 0
+    )
+
+    return {
+        "pending_total": sum(pending_by_type.values()),
+        "pending_by_type": pending_by_type,
+        "activity": {
+            "total_decisions": total_decisions,
+            "approved_decisions": approved_decisions,
+            "retired_decisions": retired_decisions,
+            "decisions_last_7_days": recent_decisions,
+        },
+    }
+
 
 @router.get(
     "/review/queue",
