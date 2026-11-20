@@ -1014,7 +1014,7 @@ def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
     assert updated.json()["activity"]["total_decisions"] == 1
     assert updated.json()["activity"]["approved_decisions"] == 1
 
-    other_reviewer = _user_headers("reviewer", email_suffix="workload-other")
+    other_reviewer = _user_headers("reviewer", email_suffix="workload-other", grant_scopes=False)
     isolated = client.get(
         "/api/v1/catalog/review/workload",
         headers=other_reviewer,
