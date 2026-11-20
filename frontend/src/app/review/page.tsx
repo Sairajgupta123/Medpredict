@@ -73,7 +73,13 @@ async function submitReview(formData: FormData) {
 }
 
 type ReviewPageProps = {
-  searchParams: Promise<{ updated?: string; error?: string }>;
+  searchParams: Promise<{
+    updated?: string;
+    error?: string;
+    q?: string;
+    type?: string;
+    status?: string;
+  }>;
 };
 
 export default async function ReviewPage({ searchParams }: ReviewPageProps) {
@@ -83,12 +89,26 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
 
-  const [{ items, error }, { items: history, error: historyError }, params] =
+  const [{ items: queueItems, error }, { items: history, error: historyError }, params] =
     await Promise.all([
       getCatalogReviewQueue(),
       getCatalogReviewHistory(),
       searchParams,
     ]);
+
+  const query = (params.q ?? "").trim().slice(0, 120);
+  const selectedType = ["disease", "symptom", "disease_symptom"].includes(params.type ?? "")
+    ? params.type
+    : "all";
+  const selectedStatus = ["draft", "in_review"].includes(params.status ?? "")
+    ? params.status
+    : "all";
+  const items = queueItems.filter((item) => {
+    const matchesType = selectedType === "all" || item.target_type === selectedType;
+    const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
+    const searchableText = [item.name, item.target_key, item.description ?? ""].join(" ").toLowerCase();
+    return matchesType && matchesStatus && searchableText.includes(query.toLowerCase());
+  });
 
   return (
     <main id="main-content" className="review-page">
@@ -114,14 +134,44 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
 
         <div className="review-section-heading">
           <div><span className="eyebrow">PENDING DECISIONS</span><h2>Catalog review queue</h2></div>
-          <span className="review-count">{items.length} {items.length === 1 ? "ITEM" : "ITEMS"}</span>
+          <span className="review-count">{items.length} OF {queueItems.length} ITEMS</span>
         </div>
+
+        <form method="get" className="review-filters" role="search" aria-label="Filter catalog review queue">
+          <label>
+            Search entries
+            <input type="search" name="q" defaultValue={query} maxLength={120} placeholder="Search name, code or description" />
+          </label>
+          <label>
+            Entry type
+            <select name="type" defaultValue={selectedType}>
+              <option value="all">All types</option>
+              <option value="disease">Diseases</option>
+              <option value="symptom">Symptoms</option>
+              <option value="disease_symptom">Disease–symptom links</option>
+            </select>
+          </label>
+          <label>
+            Review status
+            <select name="status" defaultValue={selectedStatus}>
+              <option value="all">All pending statuses</option>
+              <option value="draft">Draft</option>
+              <option value="in_review">In review</option>
+            </select>
+          </label>
+          <div className="review-filter-actions">
+            <button className="button button-primary" type="submit">Apply filters</button>
+            <Link href="/review" className="review-clear-filters">Clear</Link>
+          </div>
+        </form>
 
         {items.length === 0 && !error ? (
           <div className="review-empty">
             <span aria-hidden="true">✓</span>
-            <h3>No pending entries</h3>
-            <p>There are no draft or in-review catalog entries in your current queue.</p>
+            <h3>{queueItems.length === 0 ? "No pending entries" : "No matching entries"}</h3>
+            <p>{queueItems.length === 0
+              ? "There are no draft or in-review catalog entries in your current queue."
+              : "Try changing the search term or filters to see other pending entries."}</p>
           </div>
         ) : (
           <div className="review-list">
@@ -136,6 +186,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
                   <span className={`review-status review-status-${item.status}`}>{item.status.replaceAll("_", " ")}</span>
                 </div>
                 {item.description && <p className="review-description">{item.description}</p>}
+                <div className="review-item-meta">
+                  <span>Catalog entry</span>
+                  {item.created_at && <span>Added {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(item.created_at))}</span>}
+                </div>
                 <form action={submitReview} className="review-form">
                   <input type="hidden" name="target_type" value={item.target_type} />
                   <input type="hidden" name="target_key" value={item.target_key} />
