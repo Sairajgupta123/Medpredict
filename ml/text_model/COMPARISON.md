@@ -50,3 +50,13 @@ cohort is still required for independent validation.
 The saved joblib bundle is a serialization artifact capable of executing code when loaded: never
 load one from an untrusted source. All outputs are research-only and are not connected to the
 prediction API or approved for clinical use.
+
+## Experiment output safety
+
+The comparison runner refuses to overwrite an existing report or known candidate artifact in
+the selected output directory. Use a new, empty output directory for each experiment. Move or
+archive previous results explicitly before reusing a directory; the runner does not delete or
+replace prior experiment evidence.
+
+The simpler baseline trainer applies the same protection to `model.joblib` and `metrics.json`.
+Joblib files can execute code during deserialization, so load only artifacts from trusted storage.
