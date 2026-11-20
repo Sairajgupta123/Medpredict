@@ -4,7 +4,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.api.dependencies import DbSession
@@ -16,6 +16,7 @@ from app.models.knowledge import (
 )
 from app.schemas.knowledge import (
     CareRecommendationRead,
+    MedicalReferenceRead,
     RecommendationListResponse,
 )
 
@@ -93,26 +94,33 @@ def list_disease_recommendations(
         )
         .order_by(CareRecommendation.category, CareRecommendation.title)
     )
-    count_statement = (
-        select(func.count(CareRecommendation.id)).where(*filters)
-    )
     rows = db.scalars(statement).unique().all()
-    total = db.scalar(count_statement) or 0
 
-    # Return only approved references even if a recommendation has mixed provenance links.
+    # Serialize the link targets explicitly; link rows are not source records.
     items = []
     for item in rows:
-        approved_links = [
-            link for link in item.references
+        approved_sources = [
+            link.reference for link in item.references
             if link.reference.review_status == "approved"
         ]
-        if not approved_links:
+        if not approved_sources:
             continue
-        serialized = CareRecommendationRead.model_validate(item)
-        serialized.references = [
-            link.reference for link in approved_links
-        ]
-        items.append(serialized)
+        items.append(
+            CareRecommendationRead(
+                id=item.id,
+                code=item.code,
+                version=item.version,
+                locale=item.locale,
+                category=item.category,
+                urgency=item.urgency,
+                title=item.title,
+                content=item.content,
+                references=[
+                    MedicalReferenceRead.model_validate(source)
+                    for source in approved_sources
+                ],
+            )
+        )
 
     return RecommendationListResponse(
         items=items,
