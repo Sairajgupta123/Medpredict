@@ -112,10 +112,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const historyType = ["disease", "symptom", "disease_symptom"].includes(params.history_type ?? "")
     ? params.history_type
     : "all";
-  const historyFrom = /^\\d{4}-\\d{2}-\\d{2}$/.test(params.history_from ?? "")
+  const historyFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.history_from ?? "")
     ? params.history_from
     : "";
-  const historyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(params.history_to ?? "")
+  const historyTo = /^\d{4}-\d{2}-\d{2}$/.test(params.history_to ?? "")
     ? params.history_to
     : "";
 
@@ -282,7 +282,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         {items.length === 0 && !error ? (
           <div className="review-empty">
             <span aria-hidden="true">✓</span>
-            <h3>{items.length === 0 ? "No entries on this page" : "No matching entries"}</h3>
+            <h3>{pageNumber > 1 ? "No entries on this page" : "No matching entries"}</h3>
             <p>{pageNumber > 1
               ? "There are no more matching entries on this page. Go back to the previous page."
               : "There are no entries matching your current search and filters."}</p>
