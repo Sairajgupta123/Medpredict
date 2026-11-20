@@ -152,11 +152,32 @@ and symptom metadata for relationship reviews, and its lifecycle metadata. It en
 same active reviewer scope as review decisions and returns only `draft` or `in_review`
 records. A missing, out-of-scope, or no-longer-pending record is not exposed.
 
-The current catalog schema does not yet associate source/reference records with diseases,
-symptoms, or relationships. The inspection response states this explicitly and returns no
-fabricated citations. Reviewers must independently verify appropriate sources; a future
-reference-management feature is needed before source traceability can be represented
-inside the application. This limitation does not establish clinical validity.
+Catalog entries can be linked to existing `medical_references` through
+`catalog_references`. The association supports disease, symptom, and disease-symptom
+targets. Each link records the actor and a reason; removals are soft removals, and every
+link/remove action appends a `catalog_reference_events` audit record. Re-linking a removed
+source reactivates the existing association and appends a new event rather than deleting
+history.
+
+Reference registry endpoints:
+
+- `GET /api/v1/catalog/review/references?q=...` — reviewer/admin source search, including
+  source review state and review-due metadata.
+- `POST /api/v1/catalog/review/queue/entry/references` — attach an existing source to an
+  assigned pending catalog entry; requires a reason.
+- `POST /api/v1/catalog/review/queue/entry/references/{link_id}/remove` — remove an active
+  link with a reason.
+- `POST /api/v1/admin/medical-references` — administrator-only source registration.
+  New source records always start as `draft`.
+- `GET /api/v1/admin/medical-references` — administrator source registry search/filter.
+
+Link operations enforce the same active catalog reviewer scope as review decisions. The
+inspection response shows source publisher, URL, evidence type, version, publication/access
+dates, review state, reviewer metadata, due date, and the reason the source was linked.
+Source registration and attachment do not approve a source or prove clinical validity.
+The existing knowledge publication gate remains separate and continues to require approved,
+current source records. Migration `0013_catalog_references` creates the association and
+audit tables.
 
 
 There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
