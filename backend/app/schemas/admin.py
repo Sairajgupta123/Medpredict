@@ -60,7 +60,7 @@ class ReviewerScopeRead(BaseModel):
 
     id: UUID
     reviewer_id: UUID
-    reviewer_email: str
+    reviewer_email: str = ""
     scope_type: ReviewerScopeType
     scope_key: str | None
     granted_by: UUID
