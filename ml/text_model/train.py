@@ -118,7 +118,7 @@ def split_dataset(
         .astype(str)
         .str.strip()
         .str.lower()
-        .str.replace(r"\\s+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
     )
     if normalized_text.duplicated(keep=False).any():
         warnings.warn(
