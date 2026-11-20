@@ -6,7 +6,7 @@ from app.schemas.symptom_analysis import (
     SymptomNormalizeRequest,
     SymptomNormalizeResponse,
 )
-from ml.symptom_normalizer import normalize_symptoms
+from app.services.symptom_normalizer import normalize_symptoms
 
 router = APIRouter(prefix="/symptoms", tags=["Symptom Input"])
 
