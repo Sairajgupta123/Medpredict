@@ -411,7 +411,7 @@ def test_reviewer_can_approve_disease_with_server_assigned_audit(
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_REVIEW_OK",
         headers=headers,
-        json={"status": "approved"},
+        json={"status": "approved", "reason": "Clinical source and scope reviewed."},
     )
     assert response.status_code == 200
     body = response.json()
@@ -469,7 +469,7 @@ def test_admin_can_review_disease_symptom_link(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_LINK_REVIEW/symptoms/SYM_LINK_REVIEW",
         headers=_user_headers("admin"),
-        json={"status": "approved"},
+        json={"status": "approved", "reason": "Relationship evidence reviewed."},
     )
     assert response.status_code == 200
     assert response.json()["review_status"] == "approved"
@@ -531,6 +531,21 @@ def test_review_requires_a_reason(client: TestClient) -> None:
         "/api/v1/catalog/review/diseases/DIS_NO_REASON",
         headers=_user_headers("reviewer"),
         json={"status": "approved"},
+    )
+    assert response.status_code == 422
+
+def test_review_rejects_whitespace_only_reason(client: TestClient) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_BLANK_REASON", name="Blank Reason Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_BLANK_REASON",
+        headers=_user_headers("reviewer"),
+        json={"status": "approved", "reason": "         "},
     )
     assert response.status_code == 422
 
