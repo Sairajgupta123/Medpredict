@@ -378,3 +378,6 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .review-form-footer .button { width: 100%; }
 }
 
+.review-access-link { color: #47765a; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.review-access-link:hover { color: #174f40; text-decoration: underline; text-underline-offset: 3px; }
+
