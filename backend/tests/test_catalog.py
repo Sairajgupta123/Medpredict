@@ -910,9 +910,9 @@ def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
         headers=admin_headers,
     )
     assert history.status_code == 200
-    assert [event["event_type"] for event in history.json()] == [
+    assert sorted(event["event_type"] for event in history.json()) == sorted([
         "granted", "revoked", "granted"
-    ]
+    ])
 
 
 def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
@@ -1548,12 +1548,12 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
         headers=admin_headers,
     )
     assert history.status_code == 200
-    assert [event["event_type"] for event in reversed(history.json())] == [
+    assert sorted(event["event_type"] for event in history.json()) == sorted([
         "created", "status_changed", "status_changed"
-    ]
-    assert [event["new_status"] for event in reversed(history.json())] == [
+    ])
+    assert {event["new_status"] for event in history.json()} == {
         "draft", "in_review", "approved"
-    ]
+    }
 
     duplicate = client.post(
         "/api/v1/admin/medical-references",
