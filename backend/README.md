@@ -152,8 +152,8 @@ The operator identity is asserted by the trusted shell environment; it is not in
 authenticated by the application. Restrict database credentials and shell access to authorized
 operations personnel, and preserve database backups and audit records.
 
-This CLI deliberately cannot grant the `admin` role. Admin bootstrap or changes require a
-separate DBA-controlled process outside the application. Do not promote accounts through ad-hoc
+This CLI deliberately cannot grant, revoke, or modify the `admin` role. Admin bootstrap or
+changes require a separate DBA-controlled process outside the application. Do not promote accounts through ad-hoc
 SQL in a production database. Reviewer role assignment alone does not establish clinical
 qualification; the organization must verify credentials and scope before granting it.
 
