@@ -151,6 +151,67 @@ def audit_skin_manifest(
         "duplicate_groups_with_conflicting_labels": len(conflicting_duplicate_groups),
     }
 
+    # Training readiness is deliberately stricter than a successful file audit.
+    blockers: list[str] = []
+    if "patient_id" not in frame.columns:
+        blockers.append("patient_id_column_missing")
+        patient_support: dict[str, int] = {}
+    else:
+        patient_values = frame["patient_id"].fillna("").astype(str).str.strip()
+        if patient_values.eq("").any():
+            blockers.append("patient_id_values_missing")
+        valid_patients = frame.loc[
+            patient_values.ne("") & frame["label"].ne()
+        ].copy()
+        patient_support = {
+            str(label): int(
+                valid_patients.loc[valid_patients["label"].eq(label), "patient_id"]
+                .fillna("").astype(str).str.strip().nunique()
+            )
+            for label in sorted(valid_patients["label"].unique())
+        }
+        low_support = [
+            label for label, count in patient_support.items() if count < 3
+        ]
+        if low_support:
+            blockers.append("one_or_more_classes_have_fewer_than_three_patients")
+
+    if frame["image_id"].eq("").any():
+        blockers.append("image_id_values_missing")
+    if frame["image_id"].duplicated().any():
+        blockers.append("duplicate_image_ids")
+    if frame["image_path"].eq("").any():
+        blockers.append("image_paths_missing")
+    if frame["label"].eq("").any():
+        blockers.append("labels_missing")
+    if report["content_duplicates"]["duplicate_groups_with_conflicting_labels"]:
+        blockers.append("duplicate_image_content_has_conflicting_labels")
+    if not inspect_images:
+        blockers.append("image_integrity_inspection_not_performed")
+    else:
+        integrity = report["file_integrity"]
+        if integrity["missing_files"]:
+            blockers.append("image_files_missing_or_unsafe")
+        if integrity["decode_failures"]:
+            blockers.append("image_decode_failures")
+        if integrity["unsupported_formats"]:
+            blockers.append("unsupported_image_formats")
+        if integrity["zero_dimension_images"]:
+            blockers.append("invalid_image_dimensions")
+
+    report["training_readiness"] = {
+        "ready_for_reviewer_signoff": len(blockers) == 0,
+        "automatic_training_approval": False,
+        "blocking_reasons": blockers,
+        "distinct_patients_per_class": patient_support,
+        "minimum_patients_per_class": 3,
+        "notice": (
+            "Passing this technical audit does not approve dataset licensing, privacy, "
+            "clinical labels, representativeness, or use in a medical product. Human review "
+            "and source-specific permission checks remain mandatory."
+        ),
+    }
+
     return report
 
 
