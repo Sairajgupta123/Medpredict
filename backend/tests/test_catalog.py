@@ -908,3 +908,41 @@ def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_requir
     )
     assert response.status_code == 404
 
+def test_reviewer_history_is_limited_to_own_decisions(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_PRIVATE_REVIEW_HISTORY", name="Private Review History"))
+        db.commit()
+    finally:
+        db.close()
+
+    first_reviewer = _user_headers("reviewer")
+    second_reviewer = _user_headers("reviewer")
+    decision = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_PRIVATE_REVIEW_HISTORY",
+        headers=first_reviewer,
+        json={
+            "expected_status": "draft",
+            "status": "in_review",
+            "reason": "Initial review assigned and started.",
+        },
+    )
+    assert decision.status_code == 200
+
+    own_history = client.get(
+        "/api/v1/catalog/review/history",
+        headers=first_reviewer,
+        params={"target_key": "DIS_PRIVATE_REVIEW_HISTORY"},
+    )
+    other_history = client.get(
+        "/api/v1/catalog/review/history",
+        headers=second_reviewer,
+        params={"target_key": "DIS_PRIVATE_REVIEW_HISTORY"},
+    )
+    assert own_history.status_code == 200
+    assert len(own_history.json()) == 1
+    assert other_history.status_code == 200
+    assert other_history.json() == []
+
