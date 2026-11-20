@@ -162,3 +162,34 @@ def selective_predictions(
             "Maximum temperature-scaled model score, not a disease probability or medical certainty."
         ),
     }
+
+
+def select_threshold_for_coverage(
+    validation_probabilities: list[list[float]] | np.ndarray,
+    *,
+    minimum_coverage: float,
+    temperature: float = 1.0,
+) -> dict[str, float]:
+    """Choose a confidence cutoff on validation data for a requested coverage target.
+
+    The threshold is a technical operating point, not a clinically safe threshold.
+    """
+    if not np.isfinite(minimum_coverage) or not 0 < minimum_coverage <= 1:
+        raise ValueError("minimum_coverage must be in (0, 1]")
+    calibrated = apply_temperature(
+        validation_probabilities, temperature=temperature
+    )
+    confidence = np.sort(calibrated.max(axis=1))[::-1]
+    index = max(0, int(np.ceil(minimum_coverage * len(confidence))) - 1)
+    threshold = float(confidence[index])
+    achieved = float(np.mean(confidence >= threshold))
+    return {
+        "minimum_coverage_target": float(minimum_coverage),
+        "threshold": threshold,
+        "achieved_validation_coverage": achieved,
+        "validation_sample_count": int(len(confidence)),
+        "note": (
+            "Threshold selected for technical coverage only; validate selective risk "
+            "and clinical safety on an independent cohort."
+        ),
+    }
