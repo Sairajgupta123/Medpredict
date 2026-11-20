@@ -16,7 +16,7 @@ from app.main import app
 from app.core.security import create_access_token
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.catalog_reference import CatalogReferenceEvent
-from app.models.knowledge import MedicalReference
+from app.models.knowledge import MedicalReference, MedicalReferenceEvent
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
@@ -1486,6 +1486,7 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
         "published_on": "2026-01-15",
         "accessed_on": "2026-11-20",
         "content_sha256": "a" * 64,
+        "reason": "Register source metadata for evidence review.",
     }
     denied = client.post(
         "/api/v1/admin/medical-references",
@@ -1503,6 +1504,56 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
     assert created.status_code == 201
     assert created.json()["review_status"] == "draft"
     assert created.json()["reviewed_at"] is None
+    reference_id = created.json()["id"]
+
+    in_review = client.post(
+        f"/api/v1/admin/medical-references/{reference_id}/review",
+        headers=admin_headers,
+        json={
+            "expected_status": "draft",
+            "status": "in_review",
+            "reason": "Begin source quality review.",
+        },
+    )
+    assert in_review.status_code == 200
+    assert in_review.json()["review_status"] == "in_review"
+
+    approved = client.post(
+        f"/api/v1/admin/medical-references/{reference_id}/review",
+        headers=admin_headers,
+        json={
+            "expected_status": "in_review",
+            "status": "approved",
+            "reason": "Source metadata and currency checked.",
+        },
+    )
+    assert approved.status_code == 200
+    assert approved.json()["review_status"] == "approved"
+    assert approved.json()["reviewed_by"]
+    assert approved.json()["reviewed_at"]
+
+    stale = client.post(
+        f"/api/v1/admin/medical-references/{reference_id}/review",
+        headers=admin_headers,
+        json={
+            "expected_status": "in_review",
+            "status": "retired",
+            "reason": "Stale decision should conflict.",
+        },
+    )
+    assert stale.status_code == 409
+
+    history = client.get(
+        f"/api/v1/admin/medical-references/{reference_id}/history",
+        headers=admin_headers,
+    )
+    assert history.status_code == 200
+    assert [event["event_type"] for event in reversed(history.json())] == [
+        "created", "status_changed", "status_changed"
+    ]
+    assert [event["new_status"] for event in reversed(history.json())] == [
+        "draft", "in_review", "approved"
+    ]
 
     duplicate = client.post(
         "/api/v1/admin/medical-references",
