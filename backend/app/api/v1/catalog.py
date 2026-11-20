@@ -535,6 +535,105 @@ def list_catalog_review_queue(
     return queue[offset : offset + limit + 1]
 
 
+@router.get("/review/queue/entry")
+def read_pending_catalog_review_entry(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+    target_type: str = Query(pattern="^(disease|symptom|disease_symptom)$"),
+    target_key: str = Query(min_length=1, max_length=200),
+) -> dict:
+    """Return an authorized pending catalog record for evidence-aware inspection."""
+    if target_type == "disease":
+        item = db.scalar(select(Disease).where(Disease.code == target_key))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        _require_item_scope(reviewer, db, "disease", item.code)
+        if item.review_status not in ("draft", "in_review"):
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        entry = {
+            "target_type": "disease",
+            "target_key": item.code,
+            "name": item.name,
+            "description": item.description,
+            "status": item.review_status,
+            "is_active": item.is_active,
+            "created_at": item.created_at,
+            "reviewed_by": item.reviewed_by,
+            "reviewed_at": item.reviewed_at,
+            "related_entries": [],
+            "relevance_weight": None,
+        }
+    elif target_type == "symptom":
+        item = db.scalar(select(Symptom).where(Symptom.code == target_key))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        _require_item_scope(reviewer, db, "symptom", item.code)
+        if item.review_status not in ("draft", "in_review"):
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        entry = {
+            "target_type": "symptom",
+            "target_key": item.code,
+            "name": item.name,
+            "description": item.description,
+            "status": item.review_status,
+            "is_active": item.is_active,
+            "created_at": item.created_at,
+            "reviewed_by": item.reviewed_by,
+            "reviewed_at": item.reviewed_at,
+            "related_entries": [],
+            "relevance_weight": None,
+        }
+    else:
+        disease_code, separator, symptom_code = target_key.partition(":")
+        if not separator or not disease_code or not symptom_code or ":" in symptom_code:
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        row = db.execute(
+            select(DiseaseSymptom, Disease, Symptom)
+            .join(Disease, Disease.id == DiseaseSymptom.disease_id)
+            .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+            .where(Disease.code == disease_code, Symptom.code == symptom_code)
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        link, disease, symptom = row
+        _require_item_scope(reviewer, db, "disease_symptom", target_key)
+        if link.review_status not in ("draft", "in_review"):
+            raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+        entry = {
+            "target_type": "disease_symptom",
+            "target_key": target_key,
+            "name": f"{disease.name} — {symptom.name}",
+            "description": None,
+            "status": link.review_status,
+            "is_active": disease.is_active and symptom.is_active,
+            "created_at": None,
+            "reviewed_by": link.reviewed_by,
+            "reviewed_at": link.reviewed_at,
+            "related_entries": [
+                {"target_type": "disease", "target_key": disease.code, "name": disease.name,
+                 "status": disease.review_status},
+                {"target_type": "symptom", "target_key": symptom.code, "name": symptom.name,
+                 "status": symptom.review_status},
+            ],
+            "relevance_weight": link.relevance_weight,
+        }
+
+    # The current catalog schema has no source/reference association. Report that
+    # explicitly rather than presenting an empty bibliography as evidence.
+    return {
+        "entry": entry,
+        "evidence": {
+            "references": [],
+            "reference_support": "not_implemented",
+            "message": (
+                "No source-reference records are attached to this catalog schema. "
+                "Reviewers must independently verify appropriate sources; this page "
+                "does not establish clinical validity."
+            ),
+        },
+    }
+
+
 @router.get(
     "/review/history",
     response_model=list[CatalogReviewEventRead],
