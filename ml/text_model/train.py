@@ -168,6 +168,17 @@ def split_dataset(
     return train_frame.copy(), test_frame.copy(), "stratified_row_split_provisional"
 
 
+
+def ensure_artifacts_do_not_exist(output_dir: Path, filenames: list[str]) -> None:
+    """Prevent an experiment from silently replacing previously saved outputs."""
+    existing = [name for name in filenames if (output_dir / name).exists()]
+    if existing:
+        raise FileExistsError(
+            "Refusing to overwrite existing experiment artifact(s): "
+            f"{', '.join(sorted(existing))}. Choose a new output directory or "
+            "move the previous artifacts explicitly."
+        )
+
 def build_pipeline() -> Pipeline:
     """Build a transparent, reproducible TF-IDF + Logistic Regression baseline."""
     features = FeatureUnion(
@@ -243,6 +254,7 @@ def main() -> None:
     if not 0.1 <= args.test_size <= 0.4:
         raise ValueError("--test-size must be between 0.1 and 0.4.")
 
+    ensure_artifacts_do_not_exist(args.output_dir, ["model.joblib", "metrics.json"])
     frame = load_dataset(args.data)
     train_frame, test_frame, split_method = split_dataset(
         frame, args.test_size, args.random_state
