@@ -14,6 +14,121 @@ from PIL import Image
 from ml.skin_image.quality import ImageQualityPolicy, inspect_image_quality
 
 
+
+def validate_skin_checkpoint(
+    checkpoint: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate checkpoint identity and calibration before constructing an inference model."""
+    import hashlib
+    import json
+
+    if not isinstance(checkpoint, dict):
+        raise ValueError("Checkpoint must be a dictionary")
+    required = {
+        "model_state_dict", "class_names", "class_to_index", "architecture",
+        "model_variant", "image_size", "normalization",
+        "calibration_temperature", "abstention_threshold",
+        "threshold_selection_partition", "experiment_config",
+        "experiment_config_sha256",
+    }
+    missing = required - set(checkpoint)
+    if missing:
+        raise ValueError(f"Checkpoint is missing required fields: {sorted(missing)}")
+
+    names = checkpoint["class_names"]
+    if (
+        not isinstance(names, list) or len(names) < 2
+        or any(not isinstance(name, str) or not name.strip() for name in names)
+        or len(set(names)) != len(names)
+    ):
+        raise ValueError("Checkpoint class_names must be unique, non-empty labels")
+    expected_mapping = {name: index for index, name in enumerate(names)}
+    if checkpoint["class_to_index"] != expected_mapping:
+        raise ValueError("Checkpoint class mapping does not match its ordered class names")
+
+    architecture = checkpoint["architecture"]
+    variant = checkpoint["model_variant"]
+    if architecture not in {"mobilenet_v3", "resnet50", "efficientnet_b0"}:
+        raise ValueError("Checkpoint architecture is unsupported")
+    if (architecture == "mobilenet_v3" and variant not in {"large", "small"}) or (
+        architecture != "mobilenet_v3" and variant != "default"
+    ):
+        raise ValueError("Checkpoint architecture and variant are inconsistent")
+    image_size = checkpoint["image_size"]
+    if isinstance(image_size, bool) or not isinstance(image_size, int) or image_size < 32:
+        raise ValueError("Checkpoint image_size must be an integer of at least 32")
+    if checkpoint["normalization"] != "ImageNet mean/std":
+        raise ValueError("Checkpoint normalization is unsupported")
+    temperature = checkpoint["calibration_temperature"]
+    threshold = checkpoint["abstention_threshold"]
+    if (
+        isinstance(temperature, bool)
+        or not isinstance(temperature, (int, float, np.integer, np.floating))
+        or not np.isfinite(temperature) or temperature <= 0
+    ):
+        raise ValueError("Checkpoint calibration temperature must be positive and finite")
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float, np.integer, np.floating))
+        or not np.isfinite(threshold) or not 0 <= threshold <= 1
+    ):
+        raise ValueError("Checkpoint abstention threshold must be finite and between 0 and 1")
+    if checkpoint["threshold_selection_partition"] != "validation_only":
+        raise ValueError("Checkpoint threshold must be selected on validation data only")
+
+    config = checkpoint["experiment_config"]
+    if not isinstance(config, dict):
+        raise ValueError("Checkpoint experiment_config must be an object")
+    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if digest != checkpoint["experiment_config_sha256"]:
+        raise ValueError("Checkpoint experiment configuration digest does not match")
+    if (
+        config.get("architecture") != architecture
+        or config.get("variant") != variant
+        or config.get("image_size") != image_size
+    ):
+        raise ValueError("Checkpoint configuration does not match model metadata")
+
+    if metadata is not None:
+        comparisons = {
+            "architecture": architecture,
+            "variant": variant,
+            "class_names": names,
+            "class_to_index": expected_mapping,
+            "image_size": image_size,
+            "manifest_sha256": checkpoint.get("manifest_sha256"),
+            "experiment_config_sha256": digest,
+            "calibration_temperature": temperature,
+            "abstention_threshold": threshold,
+            "threshold_selection_partition": "validation_only",
+        }
+        for key, expected in comparisons.items():
+            if metadata.get(key) != expected:
+                raise ValueError(f"Checkpoint and model metadata disagree on {key}")
+        normalization = metadata.get("normalization")
+        if not isinstance(normalization, dict) or (
+            normalization.get("name") != "ImageNet"
+            or normalization.get("mean") != [0.485, 0.456, 0.406]
+            or normalization.get("std") != [0.229, 0.224, 0.225]
+        ):
+            raise ValueError("Model metadata normalization is unsupported")
+        if metadata.get("clinical_validation") is not False:
+            raise ValueError("Skin research artifact must not claim clinical validation")
+        if metadata.get("intended_use") != "offline_research_only":
+            raise ValueError("Skin artifact is not marked for offline research only")
+
+    return {
+        "class_names": list(names),
+        "architecture": architecture,
+        "variant": variant,
+        "image_size": image_size,
+        "temperature": float(temperature),
+        "minimum_confidence": float(threshold),
+    }
+
+
 def predict_skin_image(
     model: Any,
     image: Image.Image,
