@@ -10,8 +10,12 @@ from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
-from app.models.knowledge import MedicalReference
-from app.schemas.knowledge import MedicalReferenceCreate, MedicalReferenceRead
+from app.models.knowledge import MedicalReference, MedicalReferenceEvent
+from app.schemas.knowledge import (
+    MedicalReferenceCreate,
+    MedicalReferenceRead,
+    MedicalReferenceReviewRequest,
+)
 from app.schemas.admin import (
     ReviewerScopeCreate,
     ReviewerScopeEventRead,
@@ -359,6 +363,88 @@ def create_medical_reference(
         review_status="draft",
     )
     db.add(source)
+    db.flush()
+    db.add(MedicalReferenceEvent(
+        reference_id=source.id,
+        event_type="created",
+        previous_status=None,
+        new_status="draft",
+        reason=payload.reason,
+        actor_id=administrator.id,
+    ))
     db.commit()
     db.refresh(source)
     return source
+
+
+@router.post(
+    "/medical-references/{reference_id}/review",
+    response_model=MedicalReferenceRead,
+)
+def review_medical_reference(
+    reference_id: UUID,
+    payload: MedicalReferenceReviewRequest,
+    administrator: Administrator,
+    db: DbSession,
+) -> MedicalReference:
+    """Change a source lifecycle state with optimistic locking and immutable audit."""
+    source = db.scalar(
+        select(MedicalReference)
+        .where(MedicalReference.id == reference_id)
+        .with_for_update()
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="Medical reference not found.")
+    if source.review_status != payload.expected_status:
+        raise HTTPException(
+            status_code=409,
+            detail="This source changed after it was opened. Refresh before reviewing again.",
+        )
+    previous_status = source.review_status
+    source.review_status = payload.status
+    if payload.status == "approved":
+        source.reviewed_by = str(administrator.id)
+        source.reviewed_at = datetime.now(timezone.utc)
+    else:
+        source.reviewed_by = None
+        source.reviewed_at = None
+    db.add(MedicalReferenceEvent(
+        reference_id=source.id,
+        event_type="status_changed",
+        previous_status=previous_status,
+        new_status=payload.status,
+        reason=payload.reason,
+        actor_id=administrator.id,
+    ))
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+@router.get("/medical-references/{reference_id}/history")
+def read_medical_reference_history(
+    reference_id: UUID,
+    administrator: Administrator,
+    db: DbSession,
+) -> list[dict]:
+    """Return immutable registration and review events for one source record."""
+    if db.get(MedicalReference, reference_id) is None:
+        raise HTTPException(status_code=404, detail="Medical reference not found.")
+    events = db.scalars(
+        select(MedicalReferenceEvent)
+        .where(MedicalReferenceEvent.reference_id == reference_id)
+        .order_by(MedicalReferenceEvent.created_at.desc(), MedicalReferenceEvent.id.desc())
+    ).all()
+    return [
+        {
+            "id": str(event.id),
+            "reference_id": str(event.reference_id),
+            "event_type": event.event_type,
+            "previous_status": event.previous_status,
+            "new_status": event.new_status,
+            "reason": event.reason,
+            "actor_id": str(event.actor_id),
+            "created_at": event.created_at,
+        }
+        for event in events
+    ]
