@@ -1122,3 +1122,60 @@ def test_review_history_filters_and_entry_detail_are_authorized(
     )
     assert forbidden_detail.status_code == 404
 
+def test_reviewer_queue_search_and_offset_pagination_are_stable(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add_all([
+            Disease(code="DIS_PAGE_A", name="Pagination Alpha"),
+            Disease(code="DIS_PAGE_B", name="Pagination Beta"),
+            Disease(code="DIS_PAGE_C", name="Pagination Gamma"),
+            Disease(code="DIS_PAGE_D", name="Unrelated Condition"),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer")
+    first = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=headers,
+        params={"target_type": "disease", "q": "Pagination", "limit": 2},
+    )
+    assert first.status_code == 200
+    first_items = first.json()
+    assert [item["target_key"] for item in first_items] == [
+        "DIS_PAGE_A", "DIS_PAGE_B", "DIS_PAGE_C"
+    ]
+
+    second = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=headers,
+        params={
+            "target_type": "disease", "q": "Pagination",
+            "limit": 2, "offset": 2,
+        },
+    )
+    assert second.status_code == 200
+    assert [item["target_key"] for item in second.json()] == ["DIS_PAGE_C"]
+
+    empty = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=headers,
+        params={
+            "target_type": "disease", "q": "Pagination",
+            "limit": 2, "offset": 4,
+        },
+    )
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    no_match = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=headers,
+        params={"target_type": "disease", "q": "No such catalog entry"},
+    )
+    assert no_match.status_code == 200
+    assert no_match.json() == []
+
