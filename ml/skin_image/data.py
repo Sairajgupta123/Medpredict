@@ -28,28 +28,35 @@ def resolve_image_path(image_root: Path, relative_path: str) -> Path:
     return candidate
 
 
-def load_rgb_image(path: Path, image_size: int = DEFAULT_IMAGE_SIZE) -> Image.Image:
-    """Decode, apply EXIF orientation, convert to RGB and preserve aspect ratio with padding."""
-    if image_size < 32:
-        raise ValueError("image_size must be at least 32 pixels")
-    if not path.is_file():
-        raise FileNotFoundError("Image file is missing")
-    try:
-        with Image.open(path) as source:
-            image = ImageOps.exif_transpose(source).convert("RGB")
-            image.load()
-    except (OSError, ValueError) as exc:
-        raise ValueError("Image could not be decoded") from exc
-
-    if image.width < 32 or image.height < 32:
+def prepare_rgb_image(image: Image.Image, image_size: int = DEFAULT_IMAGE_SIZE) -> Image.Image:
+    """Apply EXIF orientation, RGB conversion and the shared aspect-preserving canvas."""
+    if isinstance(image_size, bool) or not isinstance(image_size, int) or image_size < 32:
+        raise ValueError("image_size must be an integer of at least 32 pixels")
+    oriented = ImageOps.exif_transpose(image).convert("RGB")
+    if oriented.width < 32 or oriented.height < 32:
         raise ValueError("Image dimensions are too small for analysis")
     return ImageOps.pad(
-        image,
+        oriented,
         (image_size, image_size),
         method=Image.Resampling.BILINEAR,
         color=(128, 128, 128),
         centering=(0.5, 0.5),
     )
+
+
+def load_rgb_image(path: Path, image_size: int = DEFAULT_IMAGE_SIZE) -> Image.Image:
+    """Decode an image and apply the shared RGB preprocessing pipeline."""
+    if isinstance(image_size, bool) or not isinstance(image_size, int) or image_size < 32:
+        raise ValueError("image_size must be an integer of at least 32 pixels")
+    if not path.is_file():
+        raise FileNotFoundError("Image file is missing")
+    try:
+        with Image.open(path) as source:
+            image = source.copy()
+            image.load()
+    except (OSError, ValueError) as exc:
+        raise ValueError("Image could not be decoded") from exc
+    return prepare_rgb_image(image, image_size)
 
 
 def build_image_transform(*, training: bool, image_size: int = DEFAULT_IMAGE_SIZE):
