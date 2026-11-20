@@ -26,8 +26,12 @@ def predict_skin_image(
     quality_policy: ImageQualityPolicy | None = None,
 ) -> dict[str, Any]:
     """Run research inference after image checks; abstain rather than force a class."""
-    if len(class_names) < 2 or len(set(class_names)) != len(class_names):
-        raise ValueError("class_names must contain at least two unique labels")
+    if (
+        len(class_names) < 2
+        or any(not isinstance(name, str) or not name.strip() for name in class_names)
+        or len(set(class_names)) != len(class_names)
+    ):
+        raise ValueError("class_names must contain at least two unique, non-empty labels")
     if not np.isfinite(temperature) or temperature <= 0:
         raise ValueError("temperature must be positive and finite")
     if not 0 <= minimum_confidence <= 1:
