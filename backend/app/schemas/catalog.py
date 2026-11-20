@@ -1,5 +1,6 @@
 """Public read schemas for the curated disease and symptom catalog."""
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,3 +38,17 @@ class CatalogReviewRequest(BaseModel):
     """Reviewer decision for a disease, symptom, or their association."""
 
     status: str = Field(pattern="^(draft|in_review|approved|retired)$")
+    reason: str = Field(min_length=8, max_length=1000)
+
+
+class CatalogReviewEventRead(BaseModel):
+    """Auditable catalog review decision returned to authorized reviewers."""
+
+    id: UUID
+    target_type: str
+    target_key: str
+    previous_status: str
+    new_status: str
+    reason: str
+    reviewer_id: UUID
+    created_at: datetime
