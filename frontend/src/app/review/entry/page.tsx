@@ -171,7 +171,6 @@ export default async function PendingEntryPage({ searchParams }: PendingEntryPag
               ) : (
                 <div className="review-alert" role="status">
                   <strong>No source references are attached yet.</strong>
-                  <p>{data.evidence.message}</p>
                 </div>
               )}
               <p className="review-assignment-empty">{data.evidence.message}</p>
