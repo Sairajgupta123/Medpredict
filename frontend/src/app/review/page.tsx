@@ -30,12 +30,14 @@ async function submitReview(formData: FormData) {
   const targetType = String(formData.get("target_type") ?? "");
   const targetKey = String(formData.get("target_key") ?? "");
   const status = String(formData.get("status") ?? "");
+  const expectedStatus = String(formData.get("expected_status") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
 
   if (
     !["disease", "symptom", "disease_symptom"].includes(targetType) ||
     !targetKey ||
     !allowedStatuses.has(status) ||
+    !allowedStatuses.has(expectedStatus) ||
     reason.length < 8 ||
     reason.length > 1000
   ) {
@@ -60,10 +62,11 @@ async function submitReview(formData: FormData) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({ status, reason }),
+    body: JSON.stringify({ expected_status: expectedStatus, status, reason }),
     cache: "no-store",
   });
 
+  if (response.status === 409) redirect("/review?error=conflict");
   if (!response.ok) redirect("/review?error=save");
   revalidatePath("/review");
   redirect("/review?updated=1");
@@ -106,6 +109,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         {params.updated === "1" && <div className="review-alert review-alert-success" role="status">Your review decision has been saved.</div>}
         {params.error === "invalid" && <div className="review-alert" role="alert">Please check the item, status and reason. Reasons must contain at least 8 characters.</div>}
         {params.error === "save" && <div className="review-alert" role="alert">The review decision could not be saved. Please refresh and try again.</div>}
+        {params.error === "conflict" && <div className="review-alert" role="alert">This entry was changed by another reviewer after you opened it. The queue has been refreshed; please review the latest status before deciding.</div>}
         {error && <div className="review-alert" role="alert">{error}</div>}
 
         <div className="review-section-heading">
@@ -135,6 +139,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
                 <form action={submitReview} className="review-form">
                   <input type="hidden" name="target_type" value={item.target_type} />
                   <input type="hidden" name="target_key" value={item.target_key} />
+                  <input type="hidden" name="expected_status" value={item.status} />
                   <label>
                     Decision
                     <select name="status" defaultValue="in_review" required>
