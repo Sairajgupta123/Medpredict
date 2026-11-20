@@ -31,7 +31,7 @@ def predict_skin_image(
         or any(not isinstance(name, str) or not name.strip() for name in class_names)
         or len(set(class_names)) != len(class_names)
     ):
-        raise ValueError("class_names must contain at least two unique, non-empty labels")
+        raise ValueError("class_names must contain at least two unique labels, all non-empty")
     if not np.isfinite(temperature) or temperature <= 0:
         raise ValueError("temperature must be positive and finite")
     if not 0 <= minimum_confidence <= 1:
