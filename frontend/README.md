@@ -51,3 +51,27 @@ Set NEXT_PUBLIC_API_BASE_URL to the backend API root, for example:
     NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 
 The API helper is a foundation only. Authentication token storage, session refresh, prediction requests and file upload flows are not connected yet. Do not store bearer tokens in localStorage; a secure, reviewed session strategy is required before authentication UI is integrated.
+
+
+## Authentication flow
+
+The frontend includes login and registration pages backed by the API's `/auth/login`,
+`/auth/register`, and `/auth/me` endpoints.
+
+- Browser credentials are posted to same-origin Next.js route handlers.
+- The route handlers call the FastAPI authentication endpoints server-to-server.
+- The returned access token is stored in an HttpOnly, SameSite=Lax cookie; client-side
+  JavaScript cannot read it.
+- The dashboard resolves the signed-in profile server-side.
+- Logout clears the session cookie.
+- Login, registration and logout POST routes validate the request Origin.
+
+For local development, run the FastAPI backend at http://localhost:8000 and the Next.js
+frontend at http://localhost:3000. Configure `NEXT_PUBLIC_API_BASE_URL` in `.env.local`.
+If the frontend and API use separate container networks, set
+`MEDIPREDICT_API_INTERNAL_URL` to the private backend URL for server-side requests.
+
+The current session cookie contains the backend's short-lived bearer access token. A production
+deployment still needs HTTPS, secret rotation, rate limiting and abuse monitoring, email
+verification and account recovery, security review, and a deliberate refresh/revocation strategy.
+Do not treat the current authentication foundation as a completed production identity system.
