@@ -1,0 +1,1 @@
+This route proxies symptom phrase normalization to FastAPI. It validates same-origin requests and input length, does not persist submitted text, and disables fetch caching. The upstream endpoint is a limited phrase recognizer only; it does not predict disease or provide clinical advice.
