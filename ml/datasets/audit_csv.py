@@ -15,8 +15,19 @@ from typing import Any
 import pandas as pd
 
 
-EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
-PHONE_PATTERN = re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)")
+EMAIL_PATTERN = re.compile(r"\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b")
+PHONE_PATTERN = re.compile(r"(?<!\\w)(?:\\+?\\d[\\d .()-]{7,}\\d)(?!\\w)")
+
+
+def _normalized_text(values: pd.Series) -> pd.Series:
+    """Normalize whitespace and case for duplicate analysis only."""
+    return (
+        values.fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(r"\\s+", " ", regex=True)
+    )
 
 
 def audit_dataset(path: Path) -> dict[str, Any]:
@@ -49,12 +60,15 @@ def audit_dataset(path: Path) -> dict[str, Any]:
 
     text_column = "symptom_text"
     label_column = "condition_label"
+    normalized = None
     if text_column in frame.columns:
         text = frame[text_column].fillna("").astype(str).str.strip()
-        normalized = text.str.lower().str.replace(r"\s+", " ", regex=True)
+        normalized = _normalized_text(frame[text_column])
+        nonblank_normalized = normalized[normalized.ne("")]
         report["symptom_text"] = {
             "empty_rows": int(text.eq("").sum()),
-            "normalized_duplicate_rows": int(normalized[normalized.ne("")].duplicated().sum()),
+            "normalized_duplicate_rows": int(nonblank_normalized.duplicated().sum()),
+            "unique_nonempty_descriptions": int(nonblank_normalized.nunique()),
             "length_characters": {
                 "min": int(text.str.len().min()) if total_rows else 0,
                 "median": float(text.str.len().median()) if total_rows else 0.0,
@@ -68,20 +82,42 @@ def audit_dataset(path: Path) -> dict[str, Any]:
     if label_column in frame.columns:
         labels = frame[label_column].fillna("").astype(str).str.strip()
         counts = labels.value_counts(dropna=False)
+        nonblank_counts = labels[labels.ne("")].value_counts()
+        smallest = int(nonblank_counts.min()) if not nonblank_counts.empty else 0
+        largest = int(nonblank_counts.max()) if not nonblank_counts.empty else 0
         report["labels"] = {
             "class_count": int(labels[labels.ne("")].nunique()),
             "blank_label_rows": int(labels.eq("").sum()),
             "class_counts": {str(label): int(count) for label, count in counts.items()},
-            "smallest_class_count": int(counts.min()) if not counts.empty else 0,
-            "largest_class_count": int(counts.max()) if not counts.empty else 0,
+            "smallest_class_count": smallest,
+            "largest_class_count": largest,
+            "largest_to_smallest_class_ratio": (
+                round(largest / smallest, 3) if smallest else None
+            ),
         }
+
+        if normalized is not None:
+            paired = pd.DataFrame(
+                {"normalized_text": normalized, "label": labels}
+            )
+            paired = paired[paired["normalized_text"].ne("")]
+            labels_per_text = paired.groupby("normalized_text")["label"].nunique()
+            conflicting_texts = labels_per_text[labels_per_text > 1]
+            report["label_conflicts"] = {
+                "unique_texts_with_multiple_labels": int(len(conflicting_texts)),
+                "rows_in_conflicting_text_groups": int(
+                    paired["normalized_text"].isin(conflicting_texts.index).sum()
+                ),
+            }
 
     if "group_id" in frame.columns:
         groups = frame["group_id"].fillna("").astype(str).str.strip()
+        nonblank_groups = groups[groups.ne("")]
         report["grouping"] = {
             "blank_group_rows": int(groups.eq("").sum()),
-            "unique_nonblank_groups": int(groups[groups.ne("")].nunique()),
+            "unique_nonblank_groups": int(nonblank_groups.nunique()),
             "groups_per_label": {},
+            "groups_associated_with_multiple_labels": None,
         }
         if label_column in frame.columns:
             safe = pd.DataFrame({"group": groups, "label": frame[label_column]})
@@ -89,6 +125,10 @@ def audit_dataset(path: Path) -> dict[str, Any]:
                 str(label): int(part.loc[part["group"].ne(""), "group"].nunique())
                 for label, part in safe.groupby("label", dropna=False)
             }
+            group_labels = safe[safe["group"].ne("")].groupby("group")["label"].nunique()
+            report["grouping"]["groups_associated_with_multiple_labels"] = int(
+                (group_labels > 1).sum()
+            )
 
     return report
 
@@ -103,7 +143,7 @@ def main() -> None:
     rendered = json.dumps(result, indent=2, ensure_ascii=False)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered + "\n", encoding="utf-8")
+        args.output.write_text(rendered + "\\n", encoding="utf-8")
         print(f"Aggregate audit written to {args.output}")
     else:
         print(rendered)
