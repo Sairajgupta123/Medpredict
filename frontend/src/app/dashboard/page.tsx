@@ -29,6 +29,7 @@ const modules = [
 type SessionUser = {
   display_name?: string | null;
   email?: string;
+  role?: string;
 };
 
 export default async function DashboardPage() {
@@ -46,6 +47,9 @@ export default async function DashboardPage() {
               <div className="account-chip">
                 <span className="account-avatar" aria-hidden="true">{(user.display_name || user.email || "M").charAt(0).toUpperCase()}</span>
                 <span className="account-identity"><strong>{user.display_name || "Your account"}</strong><small>{user.email}</small></span>
+                {user.role === "reviewer" || user.role === "admin" ? (
+                  <Link className="review-access-link" href="/review">Reviewer console ↗</Link>
+                ) : null}
                 <LogoutButton />
               </div>
             ) : (
