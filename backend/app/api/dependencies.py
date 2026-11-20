@@ -53,3 +53,16 @@ def require_catalog_reviewer(user: CurrentUser) -> User:
 
 
 CatalogReviewer = Annotated[User, Depends(require_catalog_reviewer)]
+
+
+def require_admin(user: CurrentUser) -> User:
+    """Restrict operational governance data to administrators only."""
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator permission required.",
+        )
+    return user
+
+
+Administrator = Annotated[User, Depends(require_admin)]
