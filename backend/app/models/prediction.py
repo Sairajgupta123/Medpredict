@@ -1,4 +1,4 @@
-"""Prediction records for text and skin-image workflows."""
+"""Prediction records, privacy consent events, and image-analysis metadata."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,9 +24,9 @@ from app.db.base import Base
 class Prediction(Base):
     """A prediction request and its processing lifecycle.
 
-    Raw symptom text is optional and should only be persisted when the user
-    has explicitly consented to history storage. The service layer must enforce
-    that rule and the configured retention policy.
+    Raw symptom text must remain null unless explicit history-storage consent
+    has been captured. The service layer must additionally verify a matching
+    consent event and enforce retention/deletion policy.
     """
 
     __tablename__ = "predictions"
@@ -38,6 +39,10 @@ class Prediction(Base):
             "status IN ('pending', 'completed', 'failed', 'review_required')",
             name="ck_predictions_status",
         ),
+        CheckConstraint(
+            "input_text IS NULL OR input_storage_consent = true",
+            name="ck_prediction_text_requires_consent",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -47,7 +52,9 @@ class Prediction(Base):
     modality: Mapped[str] = mapped_column(String(20), index=True)
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     input_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_storage_consent: Mapped[bool] = mapped_column(default=False)
+    input_storage_consent: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false"), nullable=False
+    )
     model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     disclaimer_version: Mapped[str | None] = mapped_column(
         String(40), nullable=True
@@ -57,6 +64,35 @@ class Prediction(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class PredictionConsentEvent(Base):
+    """Append-only record of a user's history-storage consent decision."""
+
+    __tablename__ = "prediction_consent_events"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose IN ('prediction_history')",
+            name="ck_prediction_consent_purpose",
+        ),
+        CheckConstraint(
+            "action IN ('granted', 'revoked')",
+            name="ck_prediction_consent_action",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    prediction_id: Mapped[UUID] = mapped_column(
+        ForeignKey("predictions.id", ondelete="CASCADE"), index=True
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(40), default="prediction_history", server_default="prediction_history"
+    )
+    action: Mapped[str] = mapped_column(String(16))
+    policy_version: Mapped[str] = mapped_column(String(40))
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
