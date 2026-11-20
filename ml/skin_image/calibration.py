@@ -86,8 +86,8 @@ def calibration_metrics(
 ) -> dict[str, Any]:
     """Calculate NLL, multiclass Brier score and top-label expected calibration error."""
     scores, labels = _validate_logits_and_targets(logits, targets)
-    if bins < 1:
-        raise ValueError("bins must be at least 1")
+    if isinstance(bins, bool) or not isinstance(bins, (int, np.integer)) or bins < 1:
+        raise ValueError("bins must be a positive integer")
     if not np.isfinite(temperature) or temperature <= 0:
         raise ValueError("temperature must be a positive finite number")
 
