@@ -79,7 +79,7 @@ def audit_skin_manifest(
         if group_column in frame.columns:
             report[group_column] = _safe_group_summary(frame, group_column)
             group_values = frame[group_column].fillna("").astype(str).str.strip()
-            valid = frame[group_values.ne("") & frame["label"].ne()].copy()
+            valid = frame[group_values.ne("") & frame["label"].ne("")].copy()
             valid["_group"] = group_values[group_values.ne("")].values
             labels_per_group = valid.groupby("_group")["label"].nunique()
             report[group_column]["groups_with_multiple_labels"] = int(
