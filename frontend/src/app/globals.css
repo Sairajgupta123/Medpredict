@@ -381,3 +381,19 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .review-access-link { color: #47765a; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .review-access-link:hover { color: #174f40; text-decoration: underline; text-underline-offset: 3px; }
 
+.review-history-section { margin-top: 54px; }
+.review-history-list { display: grid; gap: 10px; }
+.review-history-card { padding: 17px 19px; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.review-history-topline { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.review-history-topline time { color: #87988d; font-size: 9px; }
+.review-history-change { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; }
+.review-history-change strong { color: #29483b; font: 700 13px var(--font-display); }
+.review-history-change > span { padding: 6px 9px; border-radius: 20px; background: #f2f6f1; color: #60796a; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.review-history-card > p { margin: 10px 0 7px; color: #667c6e; font-size: 11px; line-height: 1.65; }
+.review-history-card > small { color: #9aa89f; font-size: 9px; }
+.review-history-empty { padding: 22px; border: 1px dashed #d6e4d8; border-radius: 10px; color: #829287; background: rgba(255,255,255,.55); font-size: 12px; text-align: center; }
+@media (max-width: 600px) {
+  .review-history-card { padding: 15px; }
+  .review-history-topline { align-items: flex-start; flex-direction: column; gap: 6px; }
+}
+
