@@ -86,3 +86,21 @@ image content is present. Its JSON output excludes raw image paths and group ide
 technical audit is not automatic training approval and does not verify source authenticity, license,
 diagnostic labels, skin-tone coverage or clinical suitability. Keep the manifest and all images in approved
 local/private storage; do not commit them to Git.
+
+## Symptom-text intake audit
+
+Run the aggregate-only CSV audit before considering a symptom dataset:
+
+```bash
+python -m ml.datasets.audit_csv --data path/to/reviewed_symptoms.csv --output audit.json
+```
+
+The report never echoes raw symptom text, group identifiers or detected contact values. Its
+`training_readiness` section checks required columns, nonblank values, patient/source grouping,
+minimum distinct groups per class, group-label consistency, conflicting normalized descriptions
+and obvious email/phone patterns. A passing technical check only means the dataset can proceed to
+human review. It does not approve licensing, de-identification, clinical labels or model training.
+
+The email/phone patterns are intentionally simple and can miss identifiers or flag benign text.
+Do not upload or commit identifiable health information. Keep raw and processed datasets in
+approved private storage.
