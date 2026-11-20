@@ -1,11 +1,15 @@
 """Read-only endpoints for curated diseases and symptoms."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.api.dependencies import DbSession
-from app.models.catalog import Disease, Symptom
-from app.schemas.catalog import CatalogItemRead, CatalogListResponse
+from app.models.catalog import Disease, DiseaseSymptom, Symptom
+from app.schemas.catalog import (
+    CatalogItemRead,
+    CatalogListResponse,
+    DiseaseSymptomItemRead,
+)
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
 
@@ -75,3 +79,51 @@ def list_diseases(
 ) -> CatalogListResponse:
     """Browse active, explicitly approved supported conditions only."""
     return _list_catalog_items(db, Disease, q, limit, offset)
+
+@router.get(
+    "/diseases/{disease_code}/symptoms",
+    response_model=list[DiseaseSymptomItemRead],
+)
+def list_approved_disease_symptoms(
+    disease_code: str,
+    db: DbSession,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[DiseaseSymptomItemRead]:
+    """Return only reviewed links between an approved disease and symptoms."""
+    disease = db.scalar(
+        select(Disease).where(
+            Disease.code == disease_code,
+            Disease.is_active.is_(True),
+            Disease.review_status == "approved",
+            Disease.reviewed_by.is_not(None),
+            Disease.reviewed_at.is_not(None),
+        )
+    )
+    if disease is None:
+        raise HTTPException(status_code=404, detail="Supported condition not found.")
+
+    rows = db.execute(
+        select(DiseaseSymptom, Symptom)
+        .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+        .where(
+            DiseaseSymptom.disease_id == disease.id,
+            DiseaseSymptom.review_status == "approved",
+            DiseaseSymptom.reviewed_by.is_not(None),
+            DiseaseSymptom.reviewed_at.is_not(None),
+            Symptom.is_active.is_(True),
+            Symptom.review_status == "approved",
+            Symptom.reviewed_by.is_not(None),
+            Symptom.reviewed_at.is_not(None),
+        )
+        .order_by(Symptom.name.asc())
+        .limit(limit)
+    ).all()
+
+    return [
+        DiseaseSymptomItemRead(
+            symptom=CatalogItemRead.model_validate(symptom),
+            relevance_weight=link.relevance_weight,
+        )
+        for link, symptom in rows
+    ]
+
