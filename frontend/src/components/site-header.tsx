@@ -17,7 +17,8 @@ export function SiteHeader() {
         <nav className="main-nav" aria-label="Main navigation">
           <Link href="/#how-it-works">How it works</Link>
           <Link href="/#our-approach">Our approach</Link>
-          <Link className="nav-cta" href="/dashboard">Explore workspace <span aria-hidden="true">↗</span></Link>
+          <Link href="/login">Sign in</Link>
+          <Link className="nav-cta" href="/register">Create account <span aria-hidden="true">↗</span></Link>
         </nav>
       </div>
     </header>
