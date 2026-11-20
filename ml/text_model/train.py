@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import warnings
 from pathlib import Path
 from typing import Any
@@ -169,6 +170,14 @@ def split_dataset(
 
 
 
+def experiment_config_sha256(config: dict[str, Any]) -> str:
+    """Return a stable digest for a JSON-compatible experiment configuration."""
+    serialized = json.dumps(
+        config, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
 def ensure_artifacts_do_not_exist(output_dir: Path, filenames: list[str]) -> None:
     """Prevent an experiment from silently replacing previously saved outputs."""
     existing = [name for name in filenames if (output_dir / name).exists()]
@@ -270,8 +279,27 @@ def main() -> None:
 
     joblib.dump(model, model_path)
     dataset_hash = hashlib.sha256(args.data.read_bytes()).hexdigest()
+    experiment_config = {
+        "pipeline": "tfidf_word_char_logistic_regression",
+        "word_ngram_range": [1, 2],
+        "character_ngram_range": [3, 5],
+        "max_features_per_vectorizer": 100_000,
+        "classifier": {
+            "name": "LogisticRegression",
+            "max_iter": 2_000,
+            "class_weight": "balanced",
+            "solver": "liblinear",
+            "random_state": 42,
+        },
+        "split_method": split_method,
+        "random_state": args.random_state,
+        "test_size": args.test_size,
+    }
     metrics_payload = {
         "purpose": "research_baseline_not_for_clinical_use",
+        "experiment_config": experiment_config,
+        "experiment_config_sha256": experiment_config_sha256(experiment_config),
+        "python_version": platform.python_version(),
         "dataset_file_name": args.data.name,
         "dataset_sha256": dataset_hash,
         "dataset_rows_after_validation": int(len(frame)),
