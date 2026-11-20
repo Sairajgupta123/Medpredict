@@ -496,7 +496,7 @@ export type CatalogReferenceItem = {
 
 export type ReviewableMedicalReference = Omit<
   CatalogReferenceItem,
-  "id" | "link_reason" | "linked_by" | "linked_at"
+  "id" | "reference_id" | "link_reason" | "linked_by" | "linked_at"
 > & { id: string };
 
 export async function getReviewableMedicalReferences(q = ""): Promise<{
