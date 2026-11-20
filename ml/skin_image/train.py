@@ -70,8 +70,9 @@ def train_skin_model(
     variant: str = "large",
     pretrained: bool = False,
     num_workers: int = 0,
+    architecture: str = "mobilenet_v3",
 ) -> dict[str, Any]:
-    """Train MobileNetV3 using patient-grouped partitions and save aggregate artifacts."""
+    """Train a supported image architecture using identical split and evaluation rules."""
     if epochs < 1 or batch_size < 1 or learning_rate <= 0 or num_workers < 0:
         raise ValueError("epochs, batch_size and learning_rate must be positive")
     if not manifest_path.is_file():
@@ -118,7 +119,7 @@ def train_skin_model(
     from ml.skin_image.class_weights import calculate_class_weights
     from ml.skin_image.data import SkinImageDataset
     from ml.skin_image.metrics import classification_metrics
-    from ml.skin_image.model import build_mobilenet_v3
+    from ml.skin_image.model import build_skin_classifier
 
     _seed_everything(seed)
     train_dataset = SkinImageDataset(
@@ -163,8 +164,9 @@ def train_skin_model(
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_mobilenet_v3(
+    model = build_skin_classifier(
         num_classes=len(class_names),
+        architecture=architecture,
         variant=variant,
         pretrained=pretrained,
     ).to(device)
@@ -188,7 +190,8 @@ def train_skin_model(
     best_macro_f1 = -1.0
     best_epoch = 0
     history: list[dict[str, float]] = []
-    checkpoint_path = output_dir / "skin_mobilenetv3_best.pt"
+    model_slug = architecture if variant == "default" else f"{architecture}_{variant}"
+    checkpoint_path = output_dir / f"skin_{model_slug}_best.pt"
 
     for epoch in range(1, epochs + 1):
         train_loss, _, _ = _run_epoch(
@@ -216,6 +219,7 @@ def train_skin_model(
                     "model_state_dict": model.state_dict(),
                     "class_names": class_names,
                     "class_to_index": class_to_index,
+                    "architecture": architecture,
                     "model_variant": variant,
                     "image_size": 224,
                     "normalization": "ImageNet mean/std",
@@ -237,7 +241,7 @@ def train_skin_model(
 
     report = {
         "status": "research_experiment_only",
-        "model": f"MobileNetV3-{variant}",
+        "model": f"{architecture}-{variant}",
         "device": str(device),
         "seed": seed,
         "epochs_requested": epochs,
@@ -283,7 +287,17 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--variant", choices=("large", "small"), default="large")
+    parser.add_argument(
+        "--architecture",
+        choices=("mobilenet_v3", "resnet50", "efficientnet_b0"),
+        default="mobilenet_v3",
+    )
+    parser.add_argument(
+        "--variant",
+        choices=("large", "small", "default"),
+        default="large",
+        help="MobileNetV3 variant; use 'default' for ResNet50/EfficientNet-B0",
+    )
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--num-workers", type=int, default=0)
     args = parser.parse_args()
@@ -298,6 +312,7 @@ def main() -> None:
         seed=args.seed,
         variant=args.variant,
         pretrained=args.pretrained,
+        architecture=args.architecture,
         num_workers=args.num_workers,
     )
     print(
