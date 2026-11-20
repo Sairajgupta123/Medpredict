@@ -1,7 +1,7 @@
 """Provision or revoke catalog reviewer access through a controlled operator workflow.
 
 Run from backend/ after applying migrations:
-    python scripts/provision_catalog_reviewer.py --email reviewer@example.org \
+    python -m scripts.provision_catalog_reviewer --email reviewer@example.org \
         --role reviewer --reason "Verified reviewer appointment"
 
 The operator identity must come from the trusted deployment shell environment.
