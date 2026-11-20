@@ -63,3 +63,14 @@ class CatalogReviewEventRead(BaseModel):
     reason: str
     reviewer_id: UUID
     created_at: datetime
+
+class CatalogReviewQueueItemRead(BaseModel):
+    """One pending item in the reviewer work queue."""
+
+    target_type: str
+    target_key: str
+    name: str
+    description: str | None
+    status: str
+    created_at: datetime | None
+
