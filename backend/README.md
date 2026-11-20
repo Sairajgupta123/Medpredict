@@ -144,6 +144,20 @@ events. The entry-detail endpoint checks the event owner before returning the cu
 symptom, or relationship record, so a reviewer cannot use another reviewer's event ID to read
 catalog details. Patients cannot access the queue or review history.
 The audit record is operational traceability, not proof of clinical validity or reviewer credentials.
+The pending-entry inspection endpoint is
+`GET /api/v1/catalog/review/queue/entry?target_type=disease&target_key=...`
+(and accepts `symptom` or `disease_symptom` with a composite
+`DISEASE_CODE:SYMPTOM_CODE` key). It returns the current pending record, linked disease
+and symptom metadata for relationship reviews, and its lifecycle metadata. It enforces the
+same active reviewer scope as review decisions and returns only `draft` or `in_review`
+records. A missing, out-of-scope, or no-longer-pending record is not exposed.
+
+The current catalog schema does not yet associate source/reference records with diseases,
+symptoms, or relationships. The inspection response states this explicitly and returns no
+fabricated citations. Reviewers must independently verify appropriate sources; a future
+reference-management feature is needed before source traceability can be represented
+inside the application. This limitation does not establish clinical validity.
+
 
 There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
 access can be provisioned or revoked with the backend operational CLI after applying migrations.
