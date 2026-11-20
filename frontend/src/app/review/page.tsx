@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import {
   API_BASE_URL,
   CatalogReviewQueueItem,
+  getCatalogReviewHistory,
   getCatalogReviewQueue,
   getSessionUser,
   SESSION_COOKIE,
@@ -79,10 +80,12 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
 
-  const [{ items, error }, params] = await Promise.all([
-    getCatalogReviewQueue(),
-    searchParams,
-  ]);
+  const [{ items, error }, { items: history, error: historyError }, params] =
+    await Promise.all([
+      getCatalogReviewQueue(),
+      getCatalogReviewHistory(),
+      searchParams,
+    ]);
 
   return (
     <main id="main-content" className="review-page">
@@ -154,6 +157,43 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
             ))}
           </div>
         )}
+
+        <section className="review-history-section" aria-labelledby="review-history-title">
+          <div className="review-section-heading">
+            <div>
+              <span className="eyebrow">TRACEABILITY</span>
+              <h2 id="review-history-title">Recent review history</h2>
+            </div>
+            <span className="review-count">LATEST 20 DECISIONS</span>
+          </div>
+          {historyError ? (
+            <div className="review-alert" role="alert">{historyError}</div>
+          ) : history.length === 0 ? (
+            <div className="review-history-empty">No review decisions have been recorded yet.</div>
+          ) : (
+            <div className="review-history-list">
+              {history.map((event) => (
+                <article className="review-history-card" key={event.id}>
+                  <div className="review-history-topline">
+                    <span className="review-type">{event.target_type.replaceAll("_", " ")}</span>
+                    <time dateTime={event.created_at}>
+                      {new Intl.DateTimeFormat("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(event.created_at))}
+                    </time>
+                  </div>
+                  <div className="review-history-change">
+                    <strong>{event.target_key}</strong>
+                    <span>{event.previous_status.replaceAll("_", " ")} <span aria-hidden="true">→</span> {event.new_status.replaceAll("_", " ")}</span>
+                  </div>
+                  <p>{event.reason}</p>
+                  <small>Reviewer ID: {event.reviewer_id}</small>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
         <div className="review-safety-note">
           <strong>Review boundary</strong>
