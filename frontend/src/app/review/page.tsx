@@ -303,6 +303,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
                 <div className="review-item-meta">
                   <span>Catalog entry</span>
                   {item.created_at && <span>Added {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(item.created_at))}</span>}
+                  <Link
+                    className="review-page-link"
+                    href={`/review/entry?type=${encodeURIComponent(item.target_type)}&key=${encodeURIComponent(item.target_key)}`}
+                  >Inspect entry and context →</Link>
                 </div>
                 <form action={submitReview} className="review-form">
                   <input type="hidden" name="target_type" value={item.target_type} />
