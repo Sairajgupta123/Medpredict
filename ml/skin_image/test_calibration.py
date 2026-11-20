@@ -48,3 +48,9 @@ def test_calibration_rejects_invalid_inputs() -> None:
         fit_temperature([[1.0, 0.0]], [0.5])
     with pytest.raises(ValueError, match="outside"):
         calibration_metrics([[1.0, 0.0]], [2])
+
+def test_calibration_metrics_reject_non_integer_bin_counts() -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        calibration_metrics([[1.0, 0.0]], [0], bins=1.5)
+    with pytest.raises(ValueError, match="positive integer"):
+        calibration_metrics([[1.0, 0.0]], [0], bins=True)
