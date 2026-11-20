@@ -44,6 +44,16 @@ reported metadata, not verified measurements from our own ingestion.
    Verify the current source license and terms on Kaggle before use. A third-party repository or
    notebook license does not replace the underlying dataset license.
 
+### Additional data-quality warning: 4,920-row structured dataset
+
+The commonly reused 4,920-row, 41-class symptom-indicator dataset needs a duplicate audit before
+any split. A recent independent repository analysis reports that its 4,920 raw rows reduce to
+304 unique records after deduplication (93.8% exact duplicates). This is a secondary analysis,
+not an independently reproduced result in MediPredict, but it is a strong reason to inspect the
+original file and avoid trusting headline accuracy from random row splits.
+
+Reference analysis: https://github.com/byron-ferrer/symptom-disease-comorbidity-mining
+
 ## Recommended staged approach
 
 ### Stage A — small natural-language prototype
