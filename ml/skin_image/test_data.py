@@ -120,3 +120,26 @@ def test_patient_grouped_split_rejects_missing_label_column() -> None:
     frame = pd.DataFrame({"patient_id": ["p1", "p2", "p3"]})
     with pytest.raises(ValueError, match="split columns"):
         patient_grouped_split(frame)
+
+def test_training_and_inference_share_rgb_canvas_preprocessing(tmp_path) -> None:
+    from ml.skin_image.data import prepare_rgb_image
+
+    source = Image.new("RGB", (120, 240), color=(180, 70, 30))
+    image_path = tmp_path / "portrait.png"
+    source.save(image_path)
+
+    training_image = load_rgb_image(image_path, image_size=128)
+    inference_image = prepare_rgb_image(source, image_size=128)
+
+    assert training_image.size == inference_image.size == (128, 128)
+    assert training_image.mode == inference_image.mode == "RGB"
+    assert list(training_image.getdata()) == list(inference_image.getdata())
+
+
+def test_shared_rgb_preprocessing_rejects_invalid_image_size() -> None:
+    from ml.skin_image.data import prepare_rgb_image
+
+    with pytest.raises(ValueError, match="integer"):
+        prepare_rgb_image(Image.new("RGB", (64, 64)), image_size=64.5)
+    with pytest.raises(ValueError, match="integer"):
+        prepare_rgb_image(Image.new("RGB", (64, 64)), image_size=True)
