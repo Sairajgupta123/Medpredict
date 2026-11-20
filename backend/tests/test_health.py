@@ -1,6 +1,7 @@
 """Basic API smoke tests for liveness and database readiness."""
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -64,3 +65,27 @@ def test_openapi_document_is_available_in_development() -> None:
     schema = response.json()
     assert "/api/v1/health" in schema["paths"]
     assert "/api/v1/health/ready" in schema["paths"]
+
+
+
+def test_readiness_endpoint_returns_503_when_database_query_fails() -> None:
+    """Report the service as not ready when PostgreSQL cannot execute a query."""
+    class BrokenSession:
+        def execute(self, statement):
+            raise SQLAlchemyError("simulated database connection failure")
+
+        def close(self) -> None:
+            pass
+
+    def override_get_db():
+        yield BrokenSession()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.get("/api/v1/health/ready")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Database is not ready."}
