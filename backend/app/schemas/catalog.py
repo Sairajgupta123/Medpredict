@@ -53,6 +53,8 @@ class CatalogReviewRequest(BaseModel):
 class CatalogReviewEventRead(BaseModel):
     """Auditable catalog review decision returned to authorized reviewers."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     target_type: str
     target_key: str
