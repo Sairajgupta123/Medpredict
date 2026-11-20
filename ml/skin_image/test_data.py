@@ -78,3 +78,45 @@ def test_resolve_image_path_accepts_relative_path(tmp_path) -> None:
     path = root / "one.png"
     path.touch()
     assert resolve_image_path(root, "one.png") == path.resolve()
+
+
+def test_patient_grouped_split_requires_each_class_in_three_patients() -> None:
+    frame = pd.DataFrame(
+        {
+            "patient_id": ["p1", "p2", "p3", "p4", "p5"],
+            "label": ["common", "common", "common", "rare", "rare"],
+        }
+    )
+    with pytest.raises(ValueError, match="three distinct patients"):
+        patient_grouped_split(frame)
+
+
+def test_patient_grouped_split_preserves_every_class_in_each_partition() -> None:
+    rows = []
+    for index in range(45):
+        rows.append(
+            {
+                "patient_id": f"patient-{index}",
+                "label": "class_a" if index % 3 else "class_b",
+            }
+        )
+    frame = pd.DataFrame(rows, index=[100 + index * 3 for index in range(len(rows))])
+    result = patient_grouped_split(frame, random_state=31, search_attempts=40)
+
+    partitions = [result.train, result.validation, result.test]
+    all_labels = set(frame["label"])
+    all_patient_groups = []
+    for indices in partitions:
+        part = frame.loc[list(indices)]
+        assert set(part["label"]) == all_labels
+        all_patient_groups.append(set(part["patient_id"]))
+
+    assert not (all_patient_groups[0] & all_patient_groups[1])
+    assert not (all_patient_groups[0] & all_patient_groups[2])
+    assert not (all_patient_groups[1] & all_patient_groups[2])
+
+
+def test_patient_grouped_split_rejects_missing_label_column() -> None:
+    frame = pd.DataFrame({"patient_id": ["p1", "p2", "p3"]})
+    with pytest.raises(ValueError, match="split columns"):
+        patient_grouped_split(frame)
