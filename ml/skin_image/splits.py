@@ -95,6 +95,8 @@ def patient_grouped_split(
         raise ValueError("At least three distinct patients are required for three splits")
 
     labels, class_names = pd.factorize(label_series, sort=True)
+    if len(class_names) < 2:
+        raise ValueError("At least two distinct classes are required for a classification split")
     groups = group_series.to_numpy()
     class_group_counts = (
         pd.DataFrame({"label": labels, "group": groups})
