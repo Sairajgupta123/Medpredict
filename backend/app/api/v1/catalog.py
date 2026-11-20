@@ -17,7 +17,7 @@ def _list_catalog_items(
     limit: int,
     offset: int,
 ) -> CatalogListResponse:
-    """Return active entries, requiring explicit approval for symptoms."""
+    """Return active entries only after explicit, audited approval."""
     statement = select(model).where(model.is_active.is_(True))
     count_statement = select(func.count()).select_from(model).where(
         model.is_active.is_(True)
@@ -26,9 +26,9 @@ def _list_catalog_items(
     # The packaged symptom phrase taxonomy is research-only. The database-backed
     # symptom catalogue is a separate publication channel and must never expose
     # drafts, in-review records, or retired entries.
-    if model is Symptom:
-        statement = statement.where(Symptom.review_status == "approved")
-        count_statement = count_statement.where(Symptom.review_status == "approved")
+    if model in (Disease, Symptom):
+        statement = statement.where(model.review_status == "approved")
+        count_statement = count_statement.where(model.review_status == "approved")
 
     cleaned_query = query.strip() if query else ""
     if cleaned_query:
@@ -73,5 +73,5 @@ def list_diseases(
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> CatalogListResponse:
-    """Browse active supported conditions in the curated catalog."""
+    """Browse active, explicitly approved supported conditions only."""
     return _list_catalog_items(db, Disease, q, limit, offset)
