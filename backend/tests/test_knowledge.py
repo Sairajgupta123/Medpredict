@@ -122,6 +122,8 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             content="This must never be public.",
             review_status="approved",
             is_active=False,
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
             references=[RecommendationReference(reference=approved_source)],
         )
         db.add_all([approved_item, unreviewed_item, inactive_item])
