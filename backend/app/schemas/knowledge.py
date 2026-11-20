@@ -111,6 +111,15 @@ class MedicalReferenceCreate(BaseModel):
     license_name: str | None = Field(default=None, max_length=200)
     content_sha256: str | None = Field(default=None, pattern="^[a-fA-F0-9]{64}$")
     next_review_due: date | None = None
+    reason: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_registration_reason(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("reason must contain at least 8 non-whitespace characters")
+        return cleaned
 
     @field_validator("title", "publisher", "evidence_type", "version")
     @classmethod
