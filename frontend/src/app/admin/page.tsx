@@ -101,6 +101,7 @@ async function createMedicalReference(formData: FormData) {
       next_review_due: nextReviewDue || null,
       license_name: licenseName || null,
       content_sha256: contentHash || null,
+      reason: String(formData.get("reason") ?? "").trim(),
     }),
     cache: "no-store",
   });
@@ -110,6 +111,25 @@ async function createMedicalReference(formData: FormData) {
   redirect("/admin?reference_updated=created");
 }
 
+async function reviewMedicalReference(formData: FormData) {
+  "use server";
+  const token = await requireAdminToken();
+  const referenceId = String(formData.get("reference_id") ?? "");
+  const expectedStatus = String(formData.get("expected_status") ?? "");
+  const status = String(formData.get("status") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!referenceId || !["draft", "in_review", "approved", "retired"].includes(expectedStatus) || !["draft", "in_review", "approved", "retired"].includes(status) || reason.length < 8 || reason.length > 1000) redirect("/admin?reference_error=invalid");
+  const response = await fetch(`${API_BASE_URL}/admin/medical-references/${encodeURIComponent(referenceId)}/review`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ expected_status: expectedStatus, status, reason }),
+    cache: "no-store",
+  });
+  if (response.status === 409) redirect("/admin?reference_error=stale");
+  if (!response.ok) redirect("/admin?reference_error=review");
+  revalidatePath("/admin");
+  redirect("/admin?reference_updated=reviewed");
+}
 async function revokeReviewerScope(formData: FormData) {
   "use server";
   const token = await requireAdminToken();
@@ -175,6 +195,8 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
         invalid: "Check the source metadata, URL and optional SHA-256 checksum.",
         duplicate: "A source with this URL and version already exists.",
         create: "The source record could not be created. Check the URL and metadata.",
+        stale: "The source status changed. Refresh the page before reviewing it again.",
+        review: "The source review decision could not be saved.",
       } as Record<string, string>)[params.reference_error] ?? "The source operation could not be completed."
     : null;
 
@@ -380,6 +402,7 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
             <label>Next review due<input name="next_review_due" type="date" /></label>
             <label>License<input name="license_name" maxLength={200} placeholder="Optional license details" /></label>
             <label>Content SHA-256<input name="content_sha256" minLength={64} maxLength={64} pattern="[a-fA-F0-9]{64}" placeholder="Optional 64-character checksum" /></label>
+            <label>Registration reason<textarea name="reason" minLength={8} maxLength={1000} required rows={3} placeholder="Why is this source being registered?" /></label>
             <button type="submit">Register source as draft</button>
             <p className="admin-scope-hint">New source records remain drafts. Registration does not approve the source or establish clinical validity.</p>
           </form>
@@ -396,6 +419,23 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
                 <p>{source.publisher} · {source.evidence_type} · Version {source.version}</p>
                 <a href={source.url} target="_blank" rel="noopener noreferrer">{source.url}</a>
                 {source.next_review_due && <small>Review due: {source.next_review_due}</small>}
+                <form action={reviewMedicalReference} className="admin-revoke-form">
+                  <input type="hidden" name="reference_id" value={source.id} />
+                  <input type="hidden" name="expected_status" value={source.review_status} />
+                  <label>Set source review state
+                    <select name="status" defaultValue={source.review_status}>
+                      <option value="draft">Draft</option>
+                      <option value="in_review">In review</option>
+                      <option value="approved">Approved</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                  </label>
+                  <label>Review reason
+                    <input name="reason" minLength={8} maxLength={1000} required placeholder="Document the source review decision" />
+                  </label>
+                  <button type="submit">Save source review state</button>
+                </form>
+                <Link href={"/admin?reference_history=" + encodeURIComponent(source.id)}>View source audit history</Link>
               </article>
             ))}
           </div>
