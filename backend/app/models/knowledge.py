@@ -21,6 +21,11 @@ class MedicalReference(Base):
             "review_status IN ('draft', 'in_review', 'approved', 'retired')",
             name="ck_medical_references_review_status",
         ),
+        CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_medical_reference_approval_audit",
+        ),
         UniqueConstraint("url", "version", name="uq_medical_reference_url_version"),
     )
 
@@ -57,6 +62,15 @@ class CareRecommendation(Base):
         CheckConstraint(
             "review_status IN ('draft', 'in_review', 'approved', 'retired')",
             name="ck_care_recommendations_review_status",
+        ),
+        CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_care_recommendation_approval_audit",
+        ),
+        CheckConstraint(
+            "valid_from IS NULL OR valid_until IS NULL OR valid_from <= valid_until",
+            name="ck_care_recommendation_validity_window",
         ),
         UniqueConstraint("code", "version", name="uq_care_recommendation_code_version"),
     )
