@@ -17,11 +17,18 @@ def _list_catalog_items(
     limit: int,
     offset: int,
 ) -> CatalogListResponse:
-    """Return active catalog entries with stable pagination."""
+    """Return active entries, requiring explicit approval for symptoms."""
     statement = select(model).where(model.is_active.is_(True))
     count_statement = select(func.count()).select_from(model).where(
         model.is_active.is_(True)
     )
+
+    # The packaged symptom phrase taxonomy is research-only. The database-backed
+    # symptom catalogue is a separate publication channel and must never expose
+    # drafts, in-review records, or retired entries.
+    if model is Symptom:
+        statement = statement.where(Symptom.review_status == "approved")
+        count_statement = count_statement.where(Symptom.review_status == "approved")
 
     cleaned_query = query.strip() if query else ""
     if cleaned_query:
@@ -55,7 +62,7 @@ def list_symptoms(
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> CatalogListResponse:
-    """Search active normalized symptoms; does not infer a diagnosis."""
+    """Search active, explicitly approved symptom terms only."""
     return _list_catalog_items(db, Symptom, q, limit, offset)
 
 
