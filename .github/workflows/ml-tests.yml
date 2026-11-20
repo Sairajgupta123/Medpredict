@@ -34,5 +34,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r ml/requirements.txt
 
-      - name: Run text baseline tests
-        run: pytest ml/text_model/test_train.py -q
+      - name: Run machine learning and dataset audit tests
+        run: pytest ml -q
