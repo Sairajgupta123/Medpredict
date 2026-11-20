@@ -166,7 +166,11 @@ def grant_reviewer_scope(
     db: DbSession,
 ) -> dict:
     """Grant a reviewer an exact catalog item or whole catalog-type scope."""
-    target = db.get(User, payload.reviewer_id)
+    target = db.scalar(
+        select(User)
+        .where(User.id == payload.reviewer_id)
+        .with_for_update()
+    )
     if (
         target is None
         or not target.is_active
