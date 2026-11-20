@@ -115,3 +115,36 @@ class DiseaseSymptom(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+class CatalogReviewEvent(Base):
+    """Append-only record of each reviewer decision on a catalog item."""
+
+    __tablename__ = "catalog_review_events"
+    __table_args__ = (
+        CheckConstraint(
+            "target_type IN ('disease', 'symptom', 'disease_symptom')",
+            name="ck_catalog_review_events_target_type",
+        ),
+        CheckConstraint(
+            "new_status IN ('draft', 'in_review', 'approved', 'retired')",
+            name="ck_catalog_review_events_new_status",
+        ),
+        CheckConstraint(
+            "length(trim(reason)) >= 8",
+            name="ck_catalog_review_events_reason",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    target_type: Mapped[str] = mapped_column(String(32), index=True)
+    target_key: Mapped[str] = mapped_column(String(200), index=True)
+    previous_status: Mapped[str] = mapped_column(String(20))
+    new_status: Mapped[str] = mapped_column(String(20), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    reviewer_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
