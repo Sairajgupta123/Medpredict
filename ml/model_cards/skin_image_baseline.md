@@ -28,7 +28,11 @@ has been selected as best and no performance metrics are available.
 
 ## Evaluation requirements
 
-- Patient-level split; keep all images and lesions belonging to a patient in one partition.
+- Class-aware patient-level split; keep all images and lesions belonging to a patient in one partition.
+- Require at least three distinct patients per class and every class in all three partitions; inspect
+  class support because this minimum does not establish statistically adequate evaluation.
+- Fit temperature and select the abstention cutoff on validation data only; report calibration and
+  selective coverage on the untouched test partition.
 - If patient identifiers are unavailable, document that limitation and do not claim patient-level
   independence. Lesion-level grouping alone is not an adequate substitute for patient-level split.
 - Deduplicate exact image content and inspect conflicting labels.
@@ -52,7 +56,7 @@ has been selected as best and no performance metrics are available.
 - Approved source, license and privacy review
 - Clinician-reviewed label taxonomy and image inclusion policy
 - Patient-level leakage-resistant evaluation
-- Calibrated uncertainty and abstention thresholds
+- Independently reviewed calibrated uncertainty and abstention thresholds
 - Image-quality and unsupported-input rejection
 - External validation and subgroup error analysis
 - Versioned preprocessing, weights, model card and rollback plan
