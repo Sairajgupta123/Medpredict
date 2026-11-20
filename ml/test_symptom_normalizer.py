@@ -77,6 +77,18 @@ def test_uncertain_mention_is_flagged_for_review() -> None:
     assert result["contextual_mentions"][0]["context_flag"] == "uncertain_context"
 
 
+def test_negation_with_article_is_flagged() -> None:
+    result = normalize_symptoms("I don't have a fever.")
+    assert result["matched_symptoms"] == []
+    assert result["contextual_mentions"][0]["context_flag"] == "negated_or_denied_context"
+
+
+def test_historical_mention_with_article_is_flagged() -> None:
+    result = normalize_symptoms("I had a fever.")
+    assert result["matched_symptoms"] == []
+    assert result["contextual_mentions"][0]["context_flag"] == "possibly_historical_context"
+
+
 def test_taxonomy_rejects_alias_collision(tmp_path) -> None:
     path = tmp_path / "bad_taxonomy.json"
     path.write_text(
