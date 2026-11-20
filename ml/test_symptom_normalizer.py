@@ -104,3 +104,20 @@ def test_taxonomy_rejects_alias_collision(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match="Alias collision"):
         load_taxonomy(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_flag"),
+    [
+        ("I don't have any fever", "negated_or_denied_context"),
+        ("I do not have any cough", "negated_or_denied_context"),
+        ("I am not sure if I have a headache", "uncertain_context"),
+        ("I had an itchy rash", "possibly_historical_context"),
+        ("I had a fever last week", "possibly_historical_context"),
+    ],
+)
+def test_scope_cues_cover_common_variations(text, expected_flag) -> None:
+    result = normalize_symptoms(text)
+    assert result["matched_symptoms"] == []
+    assert result["contextual_mentions"]
+    assert result["contextual_mentions"][0]["context_flag"] == expected_flag
