@@ -1,0 +1,41 @@
+{
+  "registry_version": 1,
+  "datasets": [
+    {
+      "dataset_id": "pad-ufes-20",
+      "name": "PAD-UFES-20",
+      "source_url": "https://doi.org/10.1016/j.dib.2020.106221",
+      "version": "paper-described release; exact source package not yet verified",
+      "retrieved_on": "not_downloaded",
+      "modality": "image",
+      "image_domain": "clinical_phone_photo",
+      "license": "exact image-dataset license not yet verified",
+      "license_review": "not_reviewed",
+      "permitted_use_review": "not_reviewed",
+      "privacy_review": "not_reviewed",
+      "label_review": "not_reviewed",
+      "patient_grouping": "paper describes patient and lesion identifiers; source files not inspected",
+      "clinical_reviewer_signoff": "not_reviewed",
+      "approval_status": "not_approved",
+      "notes": "Candidate only. Do not infer rights from the paper license."
+    },
+    {
+      "dataset_id": "ham10000",
+      "name": "HAM10000",
+      "source_url": "https://doi.org/10.1038/sdata.2018.161",
+      "version": "original data descriptor; exact archive package not yet verified",
+      "retrieved_on": "not_downloaded",
+      "modality": "image",
+      "image_domain": "dermoscopy",
+      "license": "paper reports CC BY-NC 4.0; verify exact data files and source terms",
+      "license_review": "not_reviewed",
+      "permitted_use_review": "not_reviewed",
+      "privacy_review": "not_reviewed",
+      "label_review": "not_reviewed",
+      "patient_grouping": "must verify in the exact downloaded metadata; archive summary alone is insufficient",
+      "clinical_reviewer_signoff": "not_reviewed",
+      "approval_status": "not_approved",
+      "notes": "Dermoscopy benchmark only; not a general smartphone skin-photo dataset."
+    }
+  ]
+}
