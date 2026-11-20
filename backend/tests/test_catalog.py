@@ -47,6 +47,18 @@ def client():
     Base.metadata.drop_all(bind=test_engine)
 
 
+def _approved_disease(code: str, name: str) -> Disease:
+    """Build a disease fixture with required reviewer audit metadata."""
+    return Disease(
+        code=code,
+        name=name,
+        is_active=True,
+        review_status="approved",
+        reviewed_by="reviewer-test",
+        reviewed_at=datetime.now(timezone.utc),
+    )
+
+
 def _approved_symptom(code: str, name: str) -> Symptom:
     """Build a symptom fixture with the required approval audit metadata."""
     return Symptom(
@@ -148,9 +160,9 @@ def test_disease_catalog_paginates(client: TestClient) -> None:
     try:
         db.add_all(
             [
-                Disease(code="DIS_B", name="Beta Condition", is_active=True),
-                Disease(code="DIS_A", name="Alpha Condition", is_active=True),
-                Disease(code="DIS_C", name="Gamma Condition", is_active=True),
+                _approved_disease("DIS_B", "Beta Condition"),
+                _approved_disease("DIS_A", "Alpha Condition"),
+                _approved_disease("DIS_C", "Gamma Condition"),
             ]
         )
         db.commit()
@@ -180,3 +192,66 @@ def test_catalog_validates_pagination(client: TestClient) -> None:
         "/api/v1/catalog/diseases",
         params={"limit": 101},
     ).status_code == 422
+
+def test_disease_catalog_returns_only_active_approved_items(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add_all(
+            [
+                _approved_disease("DIS_APPROVED", "Approved Condition"),
+                Disease(
+                    code="DIS_DRAFT",
+                    name="Draft Condition",
+                    is_active=True,
+                    review_status="draft",
+                ),
+                Disease(
+                    code="DIS_RETIRED",
+                    name="Retired Condition",
+                    is_active=True,
+                    review_status="retired",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=datetime.now(timezone.utc),
+                ),
+                Disease(
+                    code="DIS_INACTIVE",
+                    name="Inactive Approved Condition",
+                    is_active=False,
+                    review_status="approved",
+                    reviewed_by="reviewer-test",
+                    reviewed_at=datetime.now(timezone.utc),
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/catalog/diseases")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [item["name"] for item in body["items"]] == ["Approved Condition"]
+
+
+def test_disease_cannot_be_approved_without_reviewer_audit(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            Disease(
+                code="DIS_UNREVIEWED",
+                name="Unreviewed Condition",
+                is_active=True,
+                review_status="approved",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
+    finally:
+        db.rollback()
+        db.close()
+
