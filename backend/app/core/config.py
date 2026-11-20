@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     app_secret_key: str = "development-only-change-this-secret"
     cors_origins: str = "http://localhost:3000"
+    database_url: str = (
+        "postgresql+psycopg://medipredict:change-me@localhost:5432/medipredict"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
