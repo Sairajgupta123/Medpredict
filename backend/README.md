@@ -72,6 +72,16 @@ Email verification, password reset, refresh tokens, token revocation, account de
 and multi-factor authentication are not implemented yet. Logout on a stateless access token is not
 represented as a fake server-side action; revocation/refresh-token design is a separate security step.
 
+## Medical catalog API
+
+The read-only catalog endpoints expose only active, curated records:
+- `GET /api/v1/catalog/symptoms?q=fever&limit=25&offset=0`
+- `GET /api/v1/catalog/diseases?q=condition&limit=25&offset=0`
+
+Both endpoints support case-insensitive name/code search and bounded pagination (1–100 records).
+They return an empty list until reviewed catalog entries have been loaded. These endpoints do not
+perform symptom interpretation or return disease predictions.
+
 ## Database foundation
 
 - SQLAlchemy 2.x declarative base: `app.db.base.Base`
