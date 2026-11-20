@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "notice": "Template only. Do not publish this example content.",
+  "recommendation": {
+    "code": "CARE_EXAMPLE_001",
+    "version": "1",
+    "locale": "en",
+    "disease_code": "DIS_EXAMPLE",
+    "category": "general_care",
+    "urgency": "routine",
+    "title": "Example title",
+    "content": "Replace only with concise, source-backed, clinically reviewed general education text.",
+    "intended_audience": "Adults; specify exclusions and limitations",
+    "scope_and_exclusions": "State what this content does not cover.",
+    "source_ids": [
+      "SRC_EXAMPLE_001"
+    ],
+    "review_status": "draft",
+    "is_active": false,
+    "reviewer_id": null,
+    "reviewed_at": null,
+    "valid_from": null,
+    "valid_until": null,
+    "next_review_due": null
+  }
+}
