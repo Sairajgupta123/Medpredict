@@ -8,7 +8,7 @@ Create Date: 2026-11-20
 from typing import Sequence, Union
 
 
-revision: str = "0015_merge_reference_and_reset_heads"
+revision: str = "0015_merge_ref_reset_heads"
 down_revision: Union[str, None] = (
     "0014_medical_reference_audit",
     "0014_password_reset_tokens",
