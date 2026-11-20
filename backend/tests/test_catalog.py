@@ -978,27 +978,23 @@ def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
 
     initial = client.get("/api/v1/catalog/review/workload", headers=headers)
     assert initial.status_code == 200
-    assert initial.json() == {
-        "pending_total": 1,
-        "pending_by_type": {
-            "disease": 1,
-            "symptom": 0,
-            "disease_symptom": 0,
-        },
-        "is_unrestricted": False,
-        "assignments": [
-            {
-                "scope_type": "disease",
-                "scope_key": "DIS_WORKLOAD_ASSIGNED",
-                "granted_at": initial.json()["assignments"][0]["granted_at"],
-            }
-        ],
-        "activity": {
-            "total_decisions": 0,
-            "approved_decisions": 0,
-            "retired_decisions": 0,
-            "decisions_last_7_days": 0,
-        },
+    initial_body = initial.json()
+    assert initial_body["pending_total"] == 1
+    assert initial_body["pending_by_type"] == {
+        "disease": 1,
+        "symptom": 0,
+        "disease_symptom": 0,
+    }
+    assert initial_body["is_unrestricted"] is False
+    assert len(initial_body["assignments"]) == 1
+    assert initial_body["assignments"][0]["scope_type"] == "disease"
+    assert initial_body["assignments"][0]["scope_key"] == "DIS_WORKLOAD_ASSIGNED"
+    assert initial_body["assignments"][0]["granted_at"]
+    assert initial_body["activity"] == {
+        "total_decisions": 0,
+        "approved_decisions": 0,
+        "retired_decisions": 0,
+        "decisions_last_7_days": 0,
     }
 
     decision = client.patch(
