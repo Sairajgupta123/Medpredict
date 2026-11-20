@@ -143,3 +143,38 @@ def test_three_way_split_reports_each_actual_split_method() -> None:
         "train_validation": "group_shuffle_split",
         "test": "group_shuffle_split",
     }
+
+def test_dataset_rejects_normalized_symptom_text_with_conflicting_labels(tmp_path) -> None:
+    path = tmp_path / "conflicting-labels.csv"
+    pd.DataFrame(
+        {
+            "symptom_text": [
+                "Fever and cough",
+                " fever   AND cough ",
+                "itchy rash",
+                "persistent headache",
+            ],
+            "condition_label": ["A", "B", "A", "B"],
+        }
+    ).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="multiple condition labels"):
+        load_dataset(path)
+
+
+def test_dataset_allows_duplicate_normalized_text_with_same_label(tmp_path) -> None:
+    path = tmp_path / "consistent-duplicates.csv"
+    pd.DataFrame(
+        {
+            "symptom_text": [
+                "Fever and cough",
+                " fever   AND cough ",
+                "itchy rash",
+                "persistent headache",
+            ],
+            "condition_label": ["A", "A", "A", "B"],
+        }
+    ).to_csv(path, index=False)
+
+    frame = load_dataset(path)
+    assert len(frame) == 4
