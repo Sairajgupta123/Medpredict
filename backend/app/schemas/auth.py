@@ -67,6 +67,7 @@ class UserRead(BaseModel):
 
     id: UUID
     email: EmailStr
+    role: str
     display_name: str | None
     is_active: bool
     email_verified: bool
