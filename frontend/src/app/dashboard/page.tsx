@@ -66,6 +66,7 @@ export default async function DashboardPage() {
               <h3>{item.title}</h3>
               <p>{item.description}</p>
               <div className="dashboard-card-status"><span />{item.status}</div>
+              {item.number === "01" && <Link className="module-action" href="/symptom-checker">Open prototype <span aria-hidden="true">→</span></Link>}
             </article>
           ))}
         </div>
