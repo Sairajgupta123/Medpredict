@@ -384,7 +384,7 @@ def test_patient_cannot_review_catalog_items(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/catalog/review/diseases/DIS_REVIEW_DENIED",
         headers=headers,
-        json={"status": "approved"},
+        json={"status": "approved", "reason": "Reviewed against approved source."},
     )
     assert response.status_code == 403
 
@@ -474,4 +474,63 @@ def test_admin_can_review_disease_symptom_link(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["review_status"] == "approved"
     assert response.json()["reviewed_by"]
+
+def test_review_decision_is_written_to_audit_history(client: TestClient) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_AUDIT_HISTORY", name="Audit History Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer")
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_AUDIT_HISTORY",
+        headers=headers,
+        json={
+            "status": "approved",
+            "reason": "Evidence and scope reviewed by assigned reviewer.",
+        },
+    )
+    assert response.status_code == 200
+
+    history = client.get(
+        "/api/v1/catalog/review/history",
+        headers=headers,
+        params={"target_type": "disease", "target_key": "DIS_AUDIT_HISTORY"},
+    )
+    assert history.status_code == 200
+    events = history.json()
+    assert len(events) == 1
+    assert events[0]["target_type"] == "disease"
+    assert events[0]["target_key"] == "DIS_AUDIT_HISTORY"
+    assert events[0]["previous_status"] == "draft"
+    assert events[0]["new_status"] == "approved"
+    assert events[0]["reason"] == "Evidence and scope reviewed by assigned reviewer."
+    assert events[0]["reviewer_id"] == response.json()["reviewed_by"]
+    assert events[0]["created_at"]
+
+
+def test_patient_cannot_read_catalog_review_history(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/catalog/review/history",
+        headers=_user_headers("patient"),
+    )
+    assert response.status_code == 403
+
+
+def test_review_requires_a_reason(client: TestClient) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_NO_REASON", name="No Reason Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_NO_REASON",
+        headers=_user_headers("reviewer"),
+        json={"status": "approved"},
+    )
+    assert response.status_code == 422
 
