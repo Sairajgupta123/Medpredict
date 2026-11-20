@@ -28,6 +28,9 @@ def test_normalize_recognizes_supported_phrases_without_diagnosis() -> None:
         "SYM_FEVER",
     }
     assert body["clinical_interpretation_performed"] is False
+    assert body["model_inference_performed"] is False
+    assert body["disease_prediction_performed"] is False
+    assert body["research_only"] is True
     assert body["review_required"] is True
     assert "does not diagnose" in body["disclaimer"]
     assert body["reported_context"] == DEFAULT_CONTEXT
