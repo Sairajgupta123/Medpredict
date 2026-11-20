@@ -342,6 +342,18 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .review-count { color: #81958a; font-size: 9px; font-weight: 700; letter-spacing: 1.3px; }
 .review-alert { margin-bottom: 18px; padding: 13px 16px; border: 1px solid #ead6c8; border-radius: 8px; background: #fff8f2; color: #8a6047; font-size: 12px; }
 .review-alert-success { border-color: #d5e7d8; background: #f3faf4; color: #4f795a; }
+
+.review-filters { display: grid; grid-template-columns: minmax(220px, 1.5fr) minmax(150px, .8fr) minmax(150px, .8fr) auto; align-items: end; gap: 12px; margin: 0 0 20px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.72); }
+.review-filters label { display: grid; gap: 7px; color: #5d7466; font-size: 10px; font-weight: 700; }
+.review-filters input, .review-filters select { width: 100%; min-width: 0; min-height: 40px; border: 1px solid #dce7dd; border-radius: 7px; background: #fcfdfb; color: var(--ink); padding: 9px 10px; outline: none; font: 12px var(--font-body); }
+.review-filters input:focus, .review-filters select:focus { border-color: #82a98c; box-shadow: 0 0 0 3px rgba(130,169,140,.13); }
+.review-filter-actions { display: flex; align-items: center; gap: 12px; }
+.review-filter-actions .button { min-height: 40px; padding: 0 14px; border: 0; cursor: pointer; font-size: 10px; white-space: nowrap; }
+.review-clear-filters { color: #718579; font-size: 10px; font-weight: 700; }
+.review-clear-filters:hover { color: #174f40; text-decoration: underline; text-underline-offset: 3px; }
+.review-item-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; color: #91a096; font-size: 9px; }
+.review-item-meta span + span { padding-left: 12px; border-left: 1px solid #e5ece6; }
+
 .review-list { display: grid; gap: 15px; }
 .review-card { padding: 23px 24px; border: 1px solid var(--line); border-radius: 12px; background: white; }
 .review-card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
@@ -374,6 +386,8 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .review-content { padding-top: 35px; }
   .review-card { padding: 18px; }
   .review-form { grid-template-columns: 1fr; }
+  .review-filters { grid-template-columns: 1fr; }
+  .review-filter-actions { justify-content: space-between; }
   .review-form-footer { align-items: flex-start; flex-direction: column; }
   .review-form-footer .button { width: 100%; }
 }
