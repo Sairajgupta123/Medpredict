@@ -30,6 +30,7 @@ from ml.text_model.calibration import (
     select_threshold_for_coverage,
 )
 from ml.text_model.metrics import evaluate_predictions
+from ml.text_model.inference import validate_text_model_bundle
 from ml.text_model.train import (
     ensure_artifacts_do_not_exist,
     experiment_config_sha256,
@@ -261,6 +262,7 @@ def compare_text_models(
         "class_labels": class_labels,
         "purpose": "research_only_not_for_clinical_use",
     }
+    validate_text_model_bundle(bundle)
     artifact_path = output_dir / f"{winner_name}_selected.joblib"
     joblib.dump(bundle, artifact_path)
 
