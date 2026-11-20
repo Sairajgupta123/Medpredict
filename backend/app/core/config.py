@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     app_secret_key: str = "development-only-change-this-secret"
     access_token_expire_minutes: int = 30
     cors_origins: str = "http://localhost:3000"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_sender_email: str | None = None
+    smtp_use_tls: bool = True
+    frontend_base_url: str = "http://localhost:3000"
     database_url: str = (
         "postgresql+psycopg://medipredict:change-me@localhost:5432/medipredict"
     )
