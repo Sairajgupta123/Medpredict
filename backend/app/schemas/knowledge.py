@@ -119,3 +119,19 @@ class MedicalReferenceCreate(BaseModel):
         if not cleaned:
             raise ValueError("value must not be blank")
         return cleaned
+
+
+class MedicalReferenceReviewRequest(BaseModel):
+    """Administrator decision on a medical source lifecycle state."""
+
+    expected_status: str = Field(pattern="^(draft|in_review|approved|retired)$")
+    status: str = Field(pattern="^(draft|in_review|approved|retired)$")
+    reason: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_review_reason(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("reason must contain at least 8 non-whitespace characters")
+        return cleaned
