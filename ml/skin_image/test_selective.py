@@ -60,3 +60,22 @@ def test_selective_metrics_reject_noninteger_and_out_of_range_targets() -> None:
         selective_classification_metrics(
             [2], [[0.8, 0.2]], minimum_confidence=0.5
         )
+
+
+def test_validation_coverage_threshold_selects_from_validation_scores() -> None:
+    from ml.skin_image.selective import select_threshold_for_coverage
+
+    result = select_threshold_for_coverage(
+        [[0.95, 0.05], [0.85, 0.15], [0.65, 0.35], [0.52, 0.48]],
+        minimum_coverage=0.5,
+    )
+    assert result["threshold"] == pytest.approx(0.85)
+    assert result["achieved_validation_coverage"] >= 0.5
+    assert result["validation_sample_count"] == 4
+
+
+def test_validation_coverage_threshold_rejects_invalid_target() -> None:
+    from ml.skin_image.selective import select_threshold_for_coverage
+
+    with pytest.raises(ValueError, match="minimum_coverage"):
+        select_threshold_for_coverage([[0.8, 0.2]], minimum_coverage=0)
