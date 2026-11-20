@@ -97,6 +97,30 @@ disease and symptom are active, approved, and have reviewer audit metadata. Exis
 migrated as drafts. A relationship row alone never makes a symptom eligible for a disease.
 This endpoint is catalog metadata only; it does not calculate disease likelihood or make a diagnosis.
 
+### Catalog review authorization
+
+Catalog review writes are restricted to accounts whose server-side `users.role` is
+`reviewer` or `admin`. Public registration does not accept a role field; every new and
+existing account defaults to `patient`. The role constraint permits only `patient`,
+`reviewer`, and `admin`.
+
+Authorized review actions:
+
+- `PATCH /api/v1/catalog/review/diseases/{disease_code}`
+- `PATCH /api/v1/catalog/review/symptoms/{symptom_code}`
+- `PATCH /api/v1/catalog/review/diseases/{disease_code}/symptoms/{symptom_code}`
+
+The request body contains one `status`: `draft`, `in_review`, `approved`, or
+`retired`. The API derives `reviewed_by` from the authenticated reviewer identity and
+sets `reviewed_at` on approval; clients cannot supply or impersonate these audit fields.
+Moving an item out of approved state clears its current approval metadata.
+
+There is intentionally no public endpoint to grant reviewer/admin roles. Role provisioning
+must be performed through a controlled, authenticated operational process by an authorized
+database administrator, with identity verification and an audit trail. Do not promote accounts
+through ad-hoc SQL in a production database. Reviewer role assignment alone does not establish
+clinical qualification; the organization must verify credentials and scope before granting it.
+
 ## Database foundation
 
 - SQLAlchemy 2.x declarative base: `app.db.base.Base`
