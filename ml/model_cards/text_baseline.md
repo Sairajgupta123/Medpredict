@@ -20,6 +20,7 @@ It is not a diagnostic device, triage tool, or substitute for a clinician.
 - Source/license: **Not reviewed**
 - Retrieval date: **Not applicable**
 - Patient/source grouping: **Not established**
+- Duplicate normalized descriptions are grouped into one partition when no source group is supplied; this does not replace patient/source grouping.
 - Label review: **Pending**
 
 Training must not begin on real health data until the dataset intake checklist is completed.
