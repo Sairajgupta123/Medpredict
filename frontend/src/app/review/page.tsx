@@ -80,6 +80,10 @@ type ReviewPageProps = {
     q?: string;
     type?: string;
     status?: string;
+    history_q?: string;
+    history_type?: string;
+    history_from?: string;
+    history_to?: string;
   }>;
 };
 
@@ -90,16 +94,31 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
 
+  const params = await searchParams;
+  const historyQuery = (params.history_q ?? "").trim().slice(0, 120);
+  const historyType = ["disease", "symptom", "disease_symptom"].includes(params.history_type ?? "")
+    ? params.history_type
+    : "all";
+  const historyFrom = /^\\d{4}-\\d{2}-\\d{2}$/.test(params.history_from ?? "")
+    ? params.history_from
+    : "";
+  const historyTo = /^\\d{4}-\\d{2}-\\d{2}$/.test(params.history_to ?? "")
+    ? params.history_to
+    : "";
+
   const [
     { items: queueItems, error },
     { items: history, error: historyError },
     { data: workload, error: workloadError },
-    params,
   ] = await Promise.all([
     getCatalogReviewQueue(),
-    getCatalogReviewHistory(),
+    getCatalogReviewHistory({
+      q: historyQuery,
+      target_type: historyType,
+      date_from: historyFrom,
+      date_to: historyTo,
+    }),
     getReviewerWorkload(),
-    searchParams,
   ]);
 
   const query = (params.q ?? "").trim().slice(0, 120);
@@ -293,14 +312,44 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
           <div className="review-section-heading">
             <div>
               <span className="eyebrow">TRACEABILITY</span>
-              <h2 id="review-history-title">Recent review history</h2>
+              <h2 id="review-history-title">Review decision history</h2>
             </div>
-            <span className="review-count">LATEST 20 DECISIONS</span>
+            <span className="review-count">{history.length} MATCHING DECISIONS</span>
           </div>
+          <form method="get" className="review-history-filters" role="search" aria-label="Filter review decision history">
+            <input type="hidden" name="q" value={query} />
+            <input type="hidden" name="type" value={selectedType} />
+            <input type="hidden" name="status" value={selectedStatus} />
+            <label>
+              Search code or reason
+              <input type="search" name="history_q" maxLength={120} defaultValue={historyQuery} placeholder="Search reviewed code or decision reason" />
+            </label>
+            <label>
+              Category
+              <select name="history_type" defaultValue={historyType}>
+                <option value="all">All categories</option>
+                <option value="disease">Diseases</option>
+                <option value="symptom">Symptoms</option>
+                <option value="disease_symptom">Disease–symptom links</option>
+              </select>
+            </label>
+            <label>
+              From date
+              <input type="date" name="history_from" defaultValue={historyFrom} />
+            </label>
+            <label>
+              To date
+              <input type="date" name="history_to" defaultValue={historyTo} />
+            </label>
+            <div className="review-filter-actions">
+              <button className="button button-primary" type="submit">Filter history</button>
+              <Link href="/review#review-history-title" className="review-clear-filters">Clear</Link>
+            </div>
+          </form>
           {historyError ? (
             <div className="review-alert" role="alert">{historyError}</div>
           ) : history.length === 0 ? (
-            <div className="review-history-empty">No review decisions have been recorded yet.</div>
+            <div className="review-history-empty">No decisions match these filters. Try a wider date range or a different search.</div>
           ) : (
             <div className="review-history-list">
               {history.map((event) => (
@@ -319,7 +368,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
                     <span>{event.previous_status.replaceAll("_", " ")} <span aria-hidden="true">→</span> {event.new_status.replaceAll("_", " ")}</span>
                   </div>
                   <p>{event.reason}</p>
-                  <small>Reviewer ID: {event.reviewer_id}</small>
+                  <div className="review-history-footer">
+                    <small>Reviewer ID: {event.reviewer_id}</small>
+                    <Link href={`/review/history/${event.id}`}>Open catalog entry <span aria-hidden="true">→</span></Link>
+                  </div>
                 </article>
               ))}
             </div>
