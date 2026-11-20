@@ -14,6 +14,8 @@ Use `ml.skin_image.metrics.classification_metrics` to calculate macro-F1, balanc
 confusion matrix and per-class precision/recall/F1. The caller must supply the exact class-name
 order used by the saved label mapping.
 
-These helpers are research scaffolding. They do not implement calibrated confidence, abstention,
-out-of-distribution detection, external validation or clinical safety review. Do not expose model
-outputs to users until those requirements are implemented and independently evaluated.
+The offline trainer uses patient-grouped class-aware partitions, fits temperature and selects an
+abstention threshold using validation data only, then reports discrimination, calibration and
+selective metrics on the untouched test partition. These helpers remain research scaffolding:
+out-of-distribution detection, external validation, subgroup analysis and clinical safety review
+are still required. Do not expose model outputs to users.
