@@ -10,6 +10,7 @@ project foundation, not a production security certification.
 | POST | `/api/v1/auth/register` | Public | Create an account and issue an access token |
 | POST | `/api/v1/auth/login` | Public | Verify credentials and issue an access token |
 | GET | `/api/v1/auth/me` | Bearer token | Return the authenticated account profile |
+| PATCH | `/api/v1/auth/me` | Bearer token | Update or clear the account display name |
 
 Registration and login accept JSON bodies. Login does not use OAuth form fields.
 
@@ -51,6 +52,13 @@ timing differences between known and unknown accounts. This is not a substitute 
 Production configuration rejects the built-in development secret and requires at least 32
 characters. Use a cryptographically random secret from a secret manager or deployment environment.
 Never commit real credentials.
+
+## Profile update
+
+The authenticated account may update its own `display_name` using `PATCH /api/v1/auth/me`.
+The request accepts a trimmed non-empty display name, or explicit `null` to clear it. Empty
+payloads and whitespace-only names are rejected. Email, account status, verification state, and
+password hash are not writable through this endpoint.
 
 ## Current account states
 
