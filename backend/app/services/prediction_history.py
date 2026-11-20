@@ -60,6 +60,24 @@ def revoke_text_history_consent(
             ),
         )
 
+    latest_consent = db.scalar(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "prediction_history",
+        )
+        .order_by(
+            PredictionConsentEvent.captured_at.desc(),
+            PredictionConsentEvent.id.desc(),
+        )
+        .limit(1)
+    )
+    if latest_consent is None or latest_consent.action != "granted":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active history-storage consent exists for this item.",
+        )
+
     prediction.input_text = None
     prediction.input_storage_consent = False
     db.query(PredictionResult).filter(
