@@ -40,12 +40,16 @@ def _published_recommendation_filter(today: date):
         .where(
             RecommendationReference.recommendation_id == CareRecommendation.id,
             MedicalReference.review_status == "approved",
+            MedicalReference.reviewed_by.is_not(None),
+            MedicalReference.reviewed_at.is_not(None),
         )
         .exists()
     )
     return (
         CareRecommendation.is_active.is_(True),
         CareRecommendation.review_status == "approved",
+        CareRecommendation.reviewed_by.is_not(None),
+        CareRecommendation.reviewed_at.is_not(None),
         (CareRecommendation.valid_from.is_(None))
         | (CareRecommendation.valid_from <= today),
         (CareRecommendation.valid_until.is_(None))
@@ -101,7 +105,11 @@ def list_disease_recommendations(
     for item in rows:
         approved_sources = [
             link.reference for link in item.references
-            if link.reference.review_status == "approved"
+            if (
+                link.reference.review_status == "approved"
+                and link.reference.reviewed_by is not None
+                and link.reference.reviewed_at is not None
+            )
         ]
         if not approved_sources:
             continue
