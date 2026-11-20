@@ -105,8 +105,10 @@ and supplies them to the cross-entropy loss. The experiment report records train
 and the resulting weights. Validation and test labels are never used to calculate these weights.
 
 Evaluation reports one-vs-rest sensitivity (recall) and specificity for each class, alongside
-macro-F1, balanced accuracy and the confusion matrix. Interpret every rate with its support count;
-a missing class in an evaluation partition is not evidence of perfect performance. Weighting is an
+macro-F1, balanced accuracy and the confusion matrix. Balanced accuracy averages sensitivity over
+the full configured class list, so a class with no true samples contributes zero rather than being
+silently omitted. Interpret every rate with its support count; a missing class in an evaluation
+partition is not evidence of perfect performance. Weighting is an
 experiment setting, not a guarantee of improved minority-class or clinical performance.
 
 ## Reproducible experiments and architecture comparison
