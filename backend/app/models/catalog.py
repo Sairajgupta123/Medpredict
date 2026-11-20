@@ -85,11 +85,20 @@ class Symptom(Base):
 
 
 class DiseaseSymptom(Base):
-    """Many-to-many catalog link between diseases and symptoms."""
+    """Clinically reviewed link between a disease and a symptom."""
 
     __tablename__ = "disease_symptoms"
     __table_args__ = (
         UniqueConstraint("disease_id", "symptom_id", name="uq_disease_symptom"),
+        CheckConstraint(
+            "review_status IN ('draft', 'in_review', 'approved', 'retired')",
+            name="ck_disease_symptoms_review_status",
+        ),
+        CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_disease_symptoms_approval_audit",
+        ),
     )
 
     disease_id: Mapped[UUID] = mapped_column(
@@ -99,3 +108,10 @@ class DiseaseSymptom(Base):
         ForeignKey("symptoms.id", ondelete="CASCADE"), primary_key=True
     )
     relevance_weight: Mapped[float] = mapped_column(default=1.0)
+    review_status: Mapped[str] = mapped_column(
+        String(20), default="draft", server_default="draft", index=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
