@@ -120,11 +120,15 @@ audit event are committed in the same database transaction. Each event records t
 target key, previous status, new status, reason, authenticated reviewer ID, and server timestamp.
 The history is append-only through the API; there are no update or delete endpoints.
 
-Authorized reviewers can inspect the latest history:
+Authorized reviewers can inspect pending work and the latest history:
 
+- `GET /api/v1/catalog/review/queue?status=draft&status=in_review&limit=50`
 - `GET /api/v1/catalog/review/history?target_type=disease&target_key=DIS_CODE&limit=50`
 
-Filters are optional; `limit` is bounded to 1–100. Patients cannot access the review history.
+The queue is restricted to reviewers/admins and includes draft and in-review entries by default.
+Use the optional `target_type` filter (`disease`, `symptom`, or `disease_symptom`) and repeat
+the `status` query parameter to select one or more valid lifecycle states. The total `limit`
+is bounded to 1–100. Patients cannot access the queue or review history.
 The audit record is operational traceability, not proof of clinical validity or reviewer credentials.
 
 There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
