@@ -75,3 +75,41 @@ def test_training_blocks_dataset_with_missing_image_files(tmp_path) -> None:
             image_root,
             tmp_path / "output",
         )
+
+
+
+def test_training_cli_forwards_validation_coverage(monkeypatch, tmp_path) -> None:
+    import sys
+
+    import ml.skin_image.train as train_module
+
+    captured = {}
+
+    def fake_train_skin_model(manifest, image_root, output_dir, **kwargs):
+        captured.update(kwargs)
+        return {
+            "status": "research_experiment_only",
+            "best_epoch": 1,
+            "test_metrics": {"macro_f1": 0.5},
+        }
+
+    monkeypatch.setattr(train_module, "train_skin_model", fake_train_skin_model)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "skin-train",
+            "--manifest",
+            str(tmp_path / "manifest.csv"),
+            "--image-root",
+            str(tmp_path / "images"),
+            "--output-dir",
+            str(tmp_path / "output"),
+            "--target-validation-coverage",
+            "0.82",
+        ],
+    )
+
+    train_module.main()
+
+    assert captured["target_validation_coverage"] == pytest.approx(0.82)
