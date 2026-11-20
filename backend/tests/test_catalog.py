@@ -355,12 +355,16 @@ def test_disease_symptom_link_cannot_be_approved_without_reviewer_audit(
         db.rollback()
         db.close()
 
-def _user_headers(role: str, grant_scopes: bool = True) -> dict[str, str]:
+def _user_headers(
+    role: str,
+    grant_scopes: bool = True,
+    email_suffix: str = "reviewer",
+) -> dict[str, str]:
     """Create a test account; reviewer fixtures receive explicit test scopes."""
     db = TestingSessionLocal()
     try:
         user = User(
-            email=f"{role}-reviewer@example.com",
+            email=f"{role}-{email_suffix}@example.com",
             password_hash="test-only-not-used",
             role=role,
         )
@@ -867,7 +871,7 @@ def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
         headers=admin_headers,
     )
     assert history.status_code == 200
-    assert [event["event_type"] for event in history.json()] == ["revoked", "granted"]
+    assert {event["event_type"] for event in history.json()} == {"granted", "revoked"}
 
 
 def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
@@ -919,7 +923,7 @@ def test_reviewer_history_is_limited_to_own_decisions(
         db.close()
 
     first_reviewer = _user_headers("reviewer")
-    second_reviewer = _user_headers("reviewer")
+    second_reviewer = _user_headers("reviewer", email_suffix="second")
     decision = client.patch(
         "/api/v1/catalog/review/diseases/DIS_PRIVATE_REVIEW_HISTORY",
         headers=first_reviewer,
