@@ -143,3 +143,43 @@ export async function getCatalogReviewQueue(): Promise<{
   }
 }
 
+export type CatalogReviewEvent = {
+  id: string;
+  target_type: "disease" | "symptom" | "disease_symptom";
+  target_key: string;
+  previous_status: string;
+  new_status: string;
+  reason: string;
+  reviewer_id: string;
+  created_at: string;
+};
+
+export async function getCatalogReviewHistory(): Promise<{
+  items: CatalogReviewEvent[];
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) return { items: [], error: "Your session has expired. Please sign in again." };
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/history?limit=20`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      return {
+        items: [],
+        error: response.status === 403
+          ? "Your account does not have permission to view review history."
+          : "Review history could not be loaded. Please try again.",
+      };
+    }
+    return { items: await response.json() as CatalogReviewEvent[], error: null };
+  } catch {
+    return { items: [], error: "The MediPredict server is unavailable." };
+  }
+}
+
