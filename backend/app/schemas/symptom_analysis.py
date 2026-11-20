@@ -19,6 +19,8 @@ OnsetValue = Literal["sudden", "gradual", "comes_and_goes", "not_sure"]
 class ReportedSymptomContext(BaseModel):
     """Self-reported context; values are not clinically interpreted."""
 
+    model_config = ConfigDict(extra="forbid")
+
     duration: DurationValue
     severity: SeverityValue
     onset: OnsetValue
