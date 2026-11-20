@@ -150,6 +150,27 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
             <div className="review-alert" role="alert">{workloadError}</div>
           ) : workload ? (
             <>
+              <div className="review-assignment-panel">
+                <div className="review-assignment-heading">
+                  <strong>Active assignments</strong>
+                  <span>{workload.is_unrestricted ? "Administrator access" : `${workload.assignments.length} assigned scope${workload.assignments.length === 1 ? "" : "s"}`}</span>
+                </div>
+                {workload.is_unrestricted ? (
+                  <p className="review-assignment-empty">Administrators have unrestricted catalog review access.</p>
+                ) : workload.assignments.length === 0 ? (
+                  <p className="review-assignment-empty">No active review scopes are assigned to your account. Contact an administrator if you need a responsibility assigned.</p>
+                ) : (
+                  <ul className="review-assignment-list">
+                    {workload.assignments.map((assignment) => (
+                      <li key={`${assignment.scope_type}:${assignment.scope_key ?? "all"}`}>
+                        <span className="review-assignment-type">{assignment.scope_type.replaceAll("_", " ")}</span>
+                        <strong>{assignment.scope_key ?? `All ${assignment.scope_type === "disease_symptom" ? "disease–symptom relationships" : `${assignment.scope_type}s`}`}</strong>
+                        <small>Assigned {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(assignment.granted_at))}</small>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <div className="review-workload-grid">
                 <article className="review-workload-card review-workload-primary">
                   <span>Pending items</span>
