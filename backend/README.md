@@ -168,16 +168,24 @@ Reference registry endpoints:
 - `POST /api/v1/catalog/review/queue/entry/references/{link_id}/remove` — remove an active
   link with a reason.
 - `POST /api/v1/admin/medical-references` — administrator-only source registration.
-  New source records always start as `draft`.
+  New source records always start as `draft` and require a registration reason.
 - `GET /api/v1/admin/medical-references` — administrator source registry search/filter.
+- `POST /api/v1/admin/medical-references/{reference_id}/review` — administrator source
+  lifecycle decision with expected-status conflict protection and a required reason.
+- `GET /api/v1/admin/medical-references/{reference_id}/history` — immutable source
+  registration and review-state history.
 
 Link operations enforce the same active catalog reviewer scope as review decisions. The
 inspection response shows source publisher, URL, evidence type, version, publication/access
 dates, review state, reviewer metadata, due date, and the reason the source was linked.
 Source registration and attachment do not approve a source or prove clinical validity.
 The existing knowledge publication gate remains separate and continues to require approved,
-current source records. Migration `0013_catalog_references` creates the association and
-audit tables.
+current source records. Source review decisions set reviewer metadata only when the source is
+approved; moving it back to draft/in-review/retired clears approval metadata. Every source
+registration and status transition appends a `medical_reference_events` record in the same
+transaction. Source metadata is versioned by URL/version; create a new version rather than
+silently editing the provenance of an existing record. Migrations `0013_catalog_references`
+and `0014_medical_reference_audit` create the association and source lifecycle audit tables.
 
 
 There is intentionally no public endpoint to grant reviewer/admin roles. Reviewer
