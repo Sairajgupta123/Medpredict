@@ -10,7 +10,7 @@ def test_comparison_rejects_invalid_test_fraction(tmp_path) -> None:
         compare_text_models(
             tmp_path / "missing.csv",
             tmp_path / "out",
-            test_size=0.05,
+            test_size=0.01,
         )
 
 
