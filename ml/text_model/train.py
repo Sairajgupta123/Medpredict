@@ -264,3 +264,67 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def split_dataset_three_way(
+    frame: pd.DataFrame,
+    *,
+    test_size: float = 0.2,
+    validation_size: float = 0.2,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, str]]:
+    """Create disjoint train/validation/test partitions with group-aware splitting.
+
+    validation_size and test_size are fractions of the complete dataset.
+    """
+    if not 0.05 <= test_size <= 0.4:
+        raise ValueError("test_size must be between 0.05 and 0.4")
+    if not 0.05 <= validation_size <= 0.4:
+        raise ValueError("validation_size must be between 0.05 and 0.4")
+    if test_size + validation_size >= 0.8:
+        raise ValueError("test_size + validation_size must be below 0.8")
+
+    remaining, test_frame, test_method = split_dataset(
+        frame, test_size, random_state
+    )
+    relative_validation_size = validation_size / (1.0 - test_size)
+    train_frame, validation_frame, validation_method = split_dataset(
+        remaining,
+        relative_validation_size,
+        random_state + 1,
+    )
+    expected = set(frame["condition_label"])
+    for name, partition in (
+        ("training", train_frame),
+        ("validation", validation_frame),
+        ("test", test_frame),
+    ):
+        missing = expected - set(partition["condition_label"])
+        if missing:
+            raise ValueError(
+                f"{name} partition is missing classes: {sorted(missing)}. "
+                "Collect more independent groups per class or revise the split."
+            )
+
+    group_column = "group_id" if "group_id" in frame.columns else None
+    if group_column:
+        groups = [
+            set(partition[group_column].astype(str))
+            for partition in (train_frame, validation_frame, test_frame)
+        ]
+        if (
+            groups[0] & groups[1]
+            or groups[0] & groups[2]
+            or groups[1] & groups[2]
+        ):
+            raise RuntimeError("A source group crossed partition boundaries")
+    return (
+        train_frame,
+        validation_frame,
+        test_frame,
+        {
+            "train": validation_method,
+            "validation": validation_method,
+            "test": test_method,
+        },
+    )
