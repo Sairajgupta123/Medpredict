@@ -36,6 +36,8 @@ def audit_dataset(path: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Dataset file does not exist: {path}")
 
     frame = pd.read_csv(path)
+    if frame.empty:
+        raise ValueError("Dataset CSV contains no data rows.")
     total_rows = len(frame)
     total_columns = len(frame.columns)
 
