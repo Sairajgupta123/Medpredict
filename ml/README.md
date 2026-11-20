@@ -105,9 +105,22 @@ substitute for formal de-identification and privacy review.
 
 ## Text probability calibration and abstention
 
-Validation-only helpers are available in `ml/text_model/calibration.py` for temperature scaling,
-NLL, multiclass Brier score, top-label ECE and confidence-based abstention. See
-`ml/text_model/CALIBRATION.md` for the required protocol. The current comparison runner does not
-yet create a dedicated validation partition or integrate these helpers; do not fit them on the
-comparison test set. The score is not a disease probability, and these research utilities are not
-connected to the application API.
+The three-way comparison runner uses a group-aware train/validation/test split. It selects the
+candidate by validation macro-F1, fits temperature and selects a technical coverage threshold on
+validation data only, then evaluates the frozen candidate on the untouched test partition. The
+report includes raw and calibrated discrimination metrics, NLL, Brier score, ECE, test coverage
+and accepted-subset metrics. The selected artifact stores the vectorizer, estimator, label encoder,
+temperature and threshold together. A score is not a disease probability and this workflow is
+research-only.
+
+Before any real symptom dataset is used, run the privacy-conscious audit:
+
+```bash
+python -m ml.datasets.audit_csv --data ml/datasets/curated/text_symptoms.csv --output ml/artifacts/text_dataset_audit.json
+```
+
+The audit's `training_readiness` section is a technical intake gate only. It requires patient/source
+group IDs, at least three distinct groups per class, non-conflicting grouping and labels, and no
+obvious email/phone patterns. It cannot approve a dataset or prove de-identification, licensing,
+clinical validity or representativeness. The example file must remain synthetic; real health data
+must not be committed to Git.
