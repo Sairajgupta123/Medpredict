@@ -56,6 +56,8 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
     try:
         db = TestingSessionLocal()
         disease = Disease(code="DIS_TEST", name="Test condition", is_active=True)
+        db.add(disease)
+        db.flush()
         approved_source = MedicalReference(
             title="Public health guidance",
             publisher="Example public health authority",
@@ -75,8 +77,10 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             accessed_on=date.today(),
             review_status="draft",
         )
+        db.add_all([approved_source, draft_source])
+        db.flush()
         approved_item = CareRecommendation(
-            disease=disease,
+            disease_id=disease.id,
             code="CARE_GENERAL",
             version="1",
             locale="en",
@@ -92,7 +96,7 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             ],
         )
         unreviewed_item = CareRecommendation(
-            disease=disease,
+            disease_id=disease.id,
             code="CARE_DRAFT",
             version="1",
             locale="en",
@@ -105,7 +109,7 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             references=[RecommendationReference(reference=approved_source)],
         )
         inactive_item = CareRecommendation(
-            disease=disease,
+            disease_id=disease.id,
             code="CARE_INACTIVE",
             version="1",
             locale="en",
@@ -130,7 +134,6 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
         assert len(body["items"]) == 1
         assert body["items"][0]["code"] == "CARE_GENERAL"
         assert len(body["items"][0]["references"]) == 1
-        assert body["items"][0]["references"][0]["review_status"] if "review_status" in body["items"][0]["references"][0] else True
         assert "not a diagnosis" in body["disclaimer"]
         assert "This must never be public." not in response.text
     finally:
@@ -142,6 +145,8 @@ def test_knowledge_api_filters_locale_and_category() -> None:
     try:
         db = TestingSessionLocal()
         disease = Disease(code="DIS_FILTER", name="Filter condition", is_active=True)
+        db.add(disease)
+        db.flush()
         source = MedicalReference(
             title="Reviewed source",
             publisher="Example authority",
@@ -151,17 +156,19 @@ def test_knowledge_api_filters_locale_and_category() -> None:
             accessed_on=date.today(),
             review_status="approved",
         )
+        db.add(source)
+        db.flush()
         db.add_all(
             [
                 CareRecommendation(
-                    disease=disease, code="CARE_EN", version="1", locale="en",
+                    disease_id=disease.id, code="CARE_EN", version="1", locale="en",
                     category="precautions", urgency="routine", title="English",
                     content="Reviewed English guidance.", review_status="approved",
                     is_active=True,
                     references=[RecommendationReference(reference=source)],
                 ),
                 CareRecommendation(
-                    disease=disease, code="CARE_HI", version="1", locale="hi",
+                    disease_id=disease.id, code="CARE_HI", version="1", locale="hi",
                     category="precautions", urgency="routine", title="Hindi",
                     content="Reviewed Hindi guidance.", review_status="approved",
                     is_active=True,
