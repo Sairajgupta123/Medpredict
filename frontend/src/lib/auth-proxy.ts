@@ -313,6 +313,12 @@ export async function getReviewerScopeGovernance(): Promise<{
 
 export type ReviewerWorkload = {
   pending_total: number;
+  is_unrestricted: boolean;
+  assignments: Array<{
+    scope_type: "disease" | "symptom" | "disease_symptom";
+    scope_key: string | null;
+    granted_at: string;
+  }>;
   pending_by_type: {
     disease: number;
     symptom: number;
