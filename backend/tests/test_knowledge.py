@@ -1,6 +1,6 @@
 """Tests for the reviewed, source-backed medical knowledge API."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -228,3 +228,84 @@ def test_knowledge_api_does_not_expose_unknown_or_inactive_disease() -> None:
         assert response.status_code == 404
     finally:
         close_client(client)
+
+def test_knowledge_api_excludes_overdue_source_and_recommendation_reviews() -> None:
+    client = make_client()
+    try:
+        db = TestingSessionLocal()
+        disease = Disease(code="DIS_OVERDUE", name="Review condition", is_active=True)
+        db.add(disease)
+        db.flush()
+        overdue_source = MedicalReference(
+            title="Overdue source",
+            publisher="Example authority",
+            url="https://example.org/overdue-source",
+            evidence_type="guideline",
+            version="1",
+            accessed_on=date.today(),
+            review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+            next_review_due=date.today() - timedelta(days=1),
+        )
+        current_source = MedicalReference(
+            title="Current source",
+            publisher="Example authority",
+            url="https://example.org/current-source",
+            evidence_type="guideline",
+            version="1",
+            accessed_on=date.today(),
+            review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+            next_review_due=date.today() + timedelta(days=30),
+        )
+        db.add_all([overdue_source, current_source])
+        db.flush()
+        db.add_all(
+            [
+                CareRecommendation(
+                    disease_id=disease.id,
+                    code="CARE_OVERDUE_SOURCE",
+                    version="1",
+                    locale="en",
+                    category="general_care",
+                    urgency="routine",
+                    title="Overdue source guidance",
+                    content="Must not be published.",
+                    review_status="approved",
+                    is_active=True,
+                    reviewed_by="clinical-reviewer",
+                    reviewed_at=datetime.now(timezone.utc),
+                    references=[RecommendationReference(reference=overdue_source)],
+                ),
+                CareRecommendation(
+                    disease_id=disease.id,
+                    code="CARE_OVERDUE_REVIEW",
+                    version="1",
+                    locale="en",
+                    category="general_care",
+                    urgency="routine",
+                    title="Overdue recommendation",
+                    content="Must not be published either.",
+                    review_status="approved",
+                    is_active=True,
+                    reviewed_by="clinical-reviewer",
+                    reviewed_at=datetime.now(timezone.utc),
+                    next_review_due=date.today() - timedelta(days=1),
+                    references=[RecommendationReference(reference=current_source)],
+                ),
+            ]
+        )
+        db.commit()
+        db.close()
+
+        response = client.get(
+            "/api/v1/knowledge/diseases/DIS_OVERDUE/recommendations"
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 0
+        assert "Must not be published" not in response.text
+    finally:
+        close_client(client)
+
