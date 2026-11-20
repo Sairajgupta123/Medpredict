@@ -46,11 +46,11 @@ The dashboard intentionally describes symptom analysis, skin image analysis and 
 
 ## Symptom phrase review prototype
 
-Open `/symptom-checker` from the workspace dashboard. This milestone provides a short-lived text input form and displays only recognized vocabulary phrases plus contextual mentions flagged for review.
+Open `/symptom-checker` from the workspace dashboard. The page collects a short symptom description and three self-reported context fields: duration, perceived severity and onset. “Not sure” is available for every field.
 
-The browser sends text to the same-origin Next.js route `/api/symptoms/normalize`, which forwards it to FastAPI `POST /api/v1/symptoms/normalize`. The route does not store submitted text and disables upstream fetch caching. Keep request-body logging disabled in any reverse proxy, hosting platform or observability layer used for this application.
+The browser sends the text and context to the same-origin Next.js route `/api/symptoms/normalize`, which validates the fields and forwards them to FastAPI `POST /api/v1/symptoms/normalize`. The route does not store submitted text and disables upstream fetch caching. Keep request-body logging disabled in any reverse proxy, hosting platform or observability layer used for this application.
 
-This is phrase recognition only: no disease prediction, diagnosis, severity assessment, triage or treatment recommendation is performed. A missing phrase match does not mean the person has no symptoms. The vocabulary and contextual cue rules are not clinically validated.
+The context values are user descriptions only; they are not measurements, clinical severity scores or triage signals. The response displays them back without clinical interpretation. This is phrase recognition only: no disease prediction, diagnosis, severity assessment, triage or treatment recommendation is performed. A missing phrase match does not mean the person has no symptoms. The vocabulary and contextual cue rules are not clinically validated.
 
 
 ## API configuration
