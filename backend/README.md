@@ -74,13 +74,18 @@ represented as a fake server-side action; revocation/refresh-token design is a s
 
 ## Medical catalog API
 
-The read-only catalog endpoints expose only active, curated records:
+Read-only endpoints:
 - `GET /api/v1/catalog/symptoms?q=fever&limit=25&offset=0`
 - `GET /api/v1/catalog/diseases?q=condition&limit=25&offset=0`
 
+The database-backed symptom endpoint exposes only active records with
+`review_status=approved` and complete reviewer audit metadata. Draft, in-review, retired and
+inactive terms are excluded. The disease catalog currently filters active records; disease-specific
+clinical review governance is a separate pending milestone.
+
 Both endpoints support case-insensitive name/code search and bounded pagination (1–100 records).
-They return an empty list until reviewed catalog entries have been loaded. These endpoints do not
-perform symptom interpretation or return disease predictions.
+They return an empty list until eligible database catalog entries have been added. These endpoints
+do not perform symptom interpretation or return disease predictions.
 
 ## Database foundation
 
@@ -89,13 +94,13 @@ perform symptom interpretation or return disease predictions.
 - Request-scoped session dependency: `app.db.session.get_db`
 - Database URL is loaded from the `DATABASE_URL` environment variable.
 - Initial ORM models are registered in `app.models` for users, diseases, symptoms, predictions, skin-image metadata, ranked results, and feedback.
-- The schema overview and privacy/safety decisions are documented in `../docs/architecture/database-schema.md`.
-- Alembic is configured in `alembic.ini` and `alembic/env.py`; the checked-in baseline is `alembic/versions/0001_initial_schema.py`.
+- The schema overview and privacy/safety decisions are documented in [`../docs/architecture/database-schema.md`](../docs/architecture/database-schema.md).
+- Alembic is configured in `alembic.ini` and `alembic/env.py`.
 
 The engine uses `pool_pre_ping` and does not establish a network connection merely by being imported.
 Each API request that uses `get_db` receives its own session, which is closed after the request.
 
-### Apply the initial migration
+### Apply database migrations
 
 After PostgreSQL is installed, the database and credentials in `.env` are configured, and you have
 confirmed that the target database is the intended development database, run from `backend/`:
@@ -122,10 +127,11 @@ Only the signed-in user's display name is currently editable. Email changes, pas
 
 ## Current scope and safety
 
-The initial migration file is committed but has not been applied to a live PostgreSQL database in this workspace. No patient data is being stored, and email verification, password reset, refresh-token rotation, token revocation, and disease prediction are not implemented.
+The migrations are committed but have not been applied to a live PostgreSQL database in this workspace.
+No patient data is being stored, and email verification, password reset, refresh-token rotation,
+token revocation, and disease prediction are not implemented.
 Do not place real patient data in development or test databases. Production secrets and database
 credentials must be stored in the deployment environment, never committed to Git.
-
 
 ## Symptom phrase normalization API
 
@@ -134,7 +140,7 @@ The symptom-input milestone is deliberately non-diagnostic:
 - `GET /api/v1/symptoms/catalog` returns the versioned research vocabulary's stable IDs, labels and categories. Phrase aliases are intentionally not exposed.
 - `POST /api/v1/symptoms/normalize` accepts a text description up to 4,000 characters and a required self-reported context object.
 - Context values are constrained to duration (`less_than_24_hours`, `one_to_three_days`, `four_to_seven_days`, `more_than_one_week`, `not_sure`), severity (`mild`, `moderate`, `severe`, `not_sure`) and onset (`sudden`, `gradual`, `comes_and_goes`, `not_sure`).
-- A versioned, curated vocabulary maps explicit phrases to canonical symptom identifiers.
+- A versioned research vocabulary maps explicit phrases to canonical symptom identifiers.
 - Negated, historical and uncertain mentions are returned separately for manual review.
 - Unrecognized wording is not echoed in the response.
 - The request is processed in memory by this endpoint and is not written to prediction history.
@@ -143,7 +149,6 @@ The symptom-input milestone is deliberately non-diagnostic:
 The context fields are user descriptions only. They are not verified measurements, clinical severity scores or triage signals. The normalizer is a conservative phrase matcher, not a clinically validated NLP model. It does not reliably resolve all negation, timeline, severity, uncertainty or conversational context. Do not use it to infer diseases, rank conditions, triage patients or recommend treatment. The vocabulary is research scaffolding and needs clinical review before broader use.
 
 The taxonomy is packaged at `app/data/symptom_taxonomy.json` and included in built distributions through setuptools package data. The original research vocabulary and tests remain in the repository-level `ml/` directory.
-
 
 ## Reviewed medical knowledge API
 
