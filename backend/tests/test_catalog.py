@@ -15,6 +15,8 @@ from app.db.session import get_db
 from app.main import app
 from app.core.security import create_access_token
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
+from app.models.catalog_reference import CatalogReferenceEvent
+from app.models.knowledge import MedicalReference
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
@@ -1333,3 +1335,177 @@ def test_pending_entry_inspection_enforces_role_scope_and_pending_state(
         params={"target_type": "disease", "target_key": "DOES_NOT_EXIST"},
     )
     assert missing.status_code == 404
+
+
+def test_catalog_source_reference_linking_inspection_and_removal_audit(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = Disease(
+            code="DIS_SOURCE_LINK",
+            name="Source Link Condition",
+            review_status="in_review",
+        )
+        source = MedicalReference(
+            title="Official Clinical Guidance",
+            publisher="Public Health Authority",
+            url="https://example.org/clinical-guidance",
+            evidence_type="guideline",
+            version="2026",
+            review_status="draft",
+        )
+        db.add_all([disease, source])
+        db.commit()
+        reference_id = str(source.id)
+    finally:
+        db.close()
+
+    reviewer_headers = _user_headers("reviewer")
+    available = client.get(
+        "/api/v1/catalog/review/references",
+        headers=reviewer_headers,
+        params={"q": "Clinical Guidance"},
+    )
+    assert available.status_code == 200
+    assert len(available.json()) == 1
+    assert available.json()[0]["review_status"] == "draft"
+
+    linked = client.post(
+        "/api/v1/catalog/review/queue/entry/references",
+        headers=reviewer_headers,
+        json={
+            "target_type": "disease",
+            "target_key": "DIS_SOURCE_LINK",
+            "reference_id": reference_id,
+            "reason": "Potentially relevant source for review.",
+        },
+    )
+    assert linked.status_code == 201
+    link_id = linked.json()["id"]
+
+    inspected = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=reviewer_headers,
+        params={"target_type": "disease", "target_key": "DIS_SOURCE_LINK"},
+    )
+    assert inspected.status_code == 200
+    evidence = inspected.json()["evidence"]
+    assert evidence["reference_support"] == "available"
+    assert len(evidence["references"]) == 1
+    assert evidence["references"][0]["title"] == "Official Clinical Guidance"
+    assert evidence["references"][0]["review_status"] == "draft"
+    assert "not clinical validation" in evidence["message"]
+
+    duplicate = client.post(
+        "/api/v1/catalog/review/queue/entry/references",
+        headers=reviewer_headers,
+        json={
+            "target_type": "disease",
+            "target_key": "DIS_SOURCE_LINK",
+            "reference_id": reference_id,
+            "reason": "Duplicate source link attempt.",
+        },
+    )
+    assert duplicate.status_code == 409
+
+    removed = client.post(
+        f"/api/v1/catalog/review/queue/entry/references/{link_id}/remove",
+        headers=reviewer_headers,
+        json={"reason": "Source is not sufficiently relevant."},
+    )
+    assert removed.status_code == 200
+    assert removed.json()["status"] == "removed"
+
+    after_removal = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=reviewer_headers,
+        params={"target_type": "disease", "target_key": "DIS_SOURCE_LINK"},
+    )
+    assert after_removal.status_code == 200
+    assert after_removal.json()["evidence"]["references"] == []
+
+    db = TestingSessionLocal()
+    try:
+        events = db.query(CatalogReferenceEvent).all()
+        assert {event.event_type for event in events} == {"linked", "removed"}
+    finally:
+        db.close()
+
+
+def test_catalog_source_reference_linking_requires_assigned_scope(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = Disease(code="DIS_SOURCE_SCOPE", name="Scoped Source Condition")
+        source = MedicalReference(
+            title="Source For Scope",
+            publisher="Publisher",
+            url="https://example.org/source-scope",
+            evidence_type="review",
+            version="1",
+        )
+        db.add_all([disease, source])
+        db.commit()
+        reference_id = str(source.id)
+    finally:
+        db.close()
+
+    reviewer_headers = _user_headers(
+        "reviewer", grant_scopes=False, email_suffix="source-unassigned"
+    )
+    response = client.post(
+        "/api/v1/catalog/review/queue/entry/references",
+        headers=reviewer_headers,
+        json={
+            "target_type": "disease",
+            "target_key": "DIS_SOURCE_SCOPE",
+            "reference_id": reference_id,
+            "reason": "Attempt without a matching grant.",
+        },
+    )
+    assert response.status_code == 403
+
+    patient_response = client.get(
+        "/api/v1/catalog/review/references",
+        headers=_user_headers("patient"),
+    )
+    assert patient_response.status_code == 403
+
+
+def test_admin_can_create_medical_reference_as_unapproved_draft(
+    client: TestClient,
+) -> None:
+    payload = {
+        "title": "New Medical Source",
+        "publisher": "National Public Health Body",
+        "url": "https://example.org/new-medical-source",
+        "evidence_type": "guideline",
+        "version": "2026.1",
+        "published_on": "2026-01-15",
+        "accessed_on": "2026-11-20",
+        "content_sha256": "a" * 64,
+    }
+    denied = client.post(
+        "/api/v1/admin/medical-references",
+        headers=_user_headers("reviewer"),
+        json=payload,
+    )
+    assert denied.status_code == 403
+
+    created = client.post(
+        "/api/v1/admin/medical-references",
+        headers=_user_headers("admin"),
+        json=payload,
+    )
+    assert created.status_code == 201
+    assert created.json()["review_status"] == "draft"
+    assert created.json()["reviewed_at"] is None
+
+    duplicate = client.post(
+        "/api/v1/admin/medical-references",
+        headers=_user_headers("admin"),
+        json=payload,
+    )
+    assert duplicate.status_code == 409
