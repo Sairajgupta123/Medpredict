@@ -60,7 +60,7 @@ pytest
 - Database URL is loaded from the `DATABASE_URL` environment variable.
 - Initial ORM models are registered in `app.models` for users, diseases, symptoms, predictions, skin-image metadata, ranked results, and feedback.
 - The schema overview and privacy/safety decisions are documented in `../docs/architecture/database-schema.md`.
-- Alembic is included as a dependency; migration configuration and the first migration are the next database step.
+- Alembic is configured in `alembic.ini` and `alembic/env.py`; the first reviewed migration still needs to be generated and applied against a configured PostgreSQL database.
 
 The engine uses `pool_pre_ping` and does not establish a network connection merely by being imported.
 Each API request that uses `get_db` receives its own session, which is closed after the request.
