@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 from sklearn.metrics import (
-    balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     f1_score,
@@ -26,8 +25,14 @@ def evaluate_predictions(
         raise ValueError("Evaluation labels must be non-empty 1D arrays")
     if len(actual) != len(predicted):
         raise ValueError("y_true and y_pred must have equal lengths")
-    if len(class_labels) < 2 or len(set(class_labels)) != len(class_labels):
-        raise ValueError("class_labels must contain at least two unique labels")
+    if (
+        len(class_labels) < 2
+        or any(not isinstance(label, str) or not label.strip() for label in class_labels)
+        or len(set(class_labels)) != len(class_labels)
+    ):
+        raise ValueError(
+            "class_labels must contain at least two unique, non-empty string labels"
+        )
     expected = set(range(len(class_labels)))
     if not np.issubdtype(actual.dtype, np.integer) or not np.issubdtype(
         predicted.dtype, np.integer
@@ -70,7 +75,9 @@ def evaluate_predictions(
                 zero_division=0,
             )
         ),
-        "balanced_accuracy": float(balanced_accuracy_score(actual, predicted)),
+        "balanced_accuracy": float(
+            np.mean([item["sensitivity"] for item in per_class.values()])
+        ),
         "confusion_matrix": matrix.tolist(),
         "classification_report": report,
         "per_class_sensitivity_specificity": per_class,
