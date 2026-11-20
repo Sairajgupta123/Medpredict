@@ -38,9 +38,12 @@ Before constructing a model for inference, call
 loaded checkpoint dictionary and the parsed `model_metadata.json`. The validator checks
 the ordered class list and exact index mapping, supported architecture/variant, image size,
 normalization policy, experiment-configuration SHA-256 digest, calibration values, and the
-validation-only threshold-selection marker. It also rejects metadata that claims clinical
-validation or a non-research intended use. Use the returned settings rather than separately
-retyping class names, image size, temperature, or confidence threshold.
+validation-only threshold-selection marker. It also verifies non-empty numeric weight tensors and
+rejects empty, non-numeric, or non-finite tensor values. Metadata claiming clinical validation or
+a non-research intended use is rejected. Use the returned settings rather than separately retyping
+class names, image size, temperature, or confidence threshold. This is structural validation; it
+does not prove that tensor keys and shapes match a particular architecture. The model's
+`load_state_dict` remains responsible for architecture-specific key and shape compatibility.
 
 This is an integrity and consistency check, not a signature or proof that an artifact is
 trustworthy. Only load checkpoint files from controlled, trusted storage; do not load
