@@ -59,15 +59,16 @@ def selective_classification_metrics(
     minimum_confidence: float,
 ) -> dict[str, Any]:
     """Summarize coverage and performance on accepted examples only."""
-    targets = np.asarray(y_true, dtype=np.int64)
+    raw_targets = np.asarray(y_true)
+    if not np.issubdtype(raw_targets.dtype, np.integer):
+        raise ValueError("y_true values must be integer class indices")
+    targets = raw_targets.astype(np.int64, copy=False)
     result = apply_abstention(
         probabilities,
         minimum_confidence=minimum_confidence,
     )
     if targets.ndim != 1 or len(targets) != len(result["predictions"]):
         raise ValueError("y_true must be a 1D array matching the probability rows")
-    if not np.issubdtype(targets.dtype, np.integer):
-        raise ValueError("y_true values must be integer class indices")
     class_count = np.asarray(probabilities).shape[1]
     if (targets < 0).any() or (targets >= class_count).any():
         raise ValueError("y_true contains a class index outside the probability columns")
