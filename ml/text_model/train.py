@@ -63,7 +63,7 @@ def load_dataset(path: Path) -> pd.DataFrame:
     normalized_text = (
         frame["symptom_text"]
         .str.lower()
-        .str.replace(r"\\s+", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
     )
     label_counts_per_description = (
         pd.DataFrame(
