@@ -45,3 +45,11 @@ retyping class names, image size, temperature, or confidence threshold.
 This is an integrity and consistency check, not a signature or proof that an artifact is
 trustworthy. Only load checkpoint files from controlled, trusted storage; do not load
 user-uploaded model files.
+
+## Experiment output safety
+
+The skin-image trainer refuses to start when any expected output from the selected architecture
+already exists in the output directory: the experiment configuration, best checkpoint, model
+metadata, or experiment report. Use a fresh output directory for each run and explicitly archive
+older experiment evidence before reusing a location. The trainer does not silently replace prior
+checkpoints or reports.
