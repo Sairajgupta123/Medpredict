@@ -74,18 +74,21 @@ created with a cryptographically random value, only a SHA-256 digest is stored, 
 tokens are invalidated when a replacement is issued, and consumption is guarded by a conditional
 database update so a token can succeed only once. Tokens expire after 30 minutes by default.
 
-This is the persistence/service foundation only: public request/confirm endpoints and email
-delivery are not wired yet. Do not expose the raw token in API responses or logs. The future
-request endpoint must return the same generic response for known and unknown email addresses.
-The future confirmation endpoint must validate the token, update the password hash, and consume
-the token in one database transaction.
+The public endpoints are `POST /api/v1/auth/password-reset/request` and
+`POST /api/v1/auth/password-reset/confirm`. The request endpoint returns the same HTTP 202
+message for known, unknown, and inactive accounts. It never returns the raw token. The
+confirmation endpoint updates the Argon2 password hash and consumes the token in the same
+database transaction. SMTP delivery is configured through `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SENDER_EMAIL`, and `SMTP_USE_TLS`; the frontend reset
+URL is built from `FRONTEND_BASE_URL`. If SMTP is not configured or delivery fails, the API
+still returns the generic response and does not log the token or recipient.
 
 ## Security boundaries and deferred work
 
 The current implementation does not yet include:
 
 - Email verification or verified-email enforcement
-- Public password reset request/confirmation endpoints and email delivery
+- Email verification or verified-email enforcement
 - Refresh tokens, rotation, or token revocation
 - Server-side logout/session invalidation
 - Login/registration rate limiting and abuse detection
