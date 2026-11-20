@@ -21,12 +21,7 @@ import pandas as pd
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    balanced_accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
-)
+from ml.text_model.metrics import evaluate_predictions
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from sklearn.pipeline import FeatureUnion, Pipeline
 
@@ -189,26 +184,21 @@ def build_pipeline() -> Pipeline:
 def evaluate(
     model: Pipeline, x_test: pd.Series, y_test: pd.Series
 ) -> dict[str, Any]:
-    """Compute imbalance-aware held-out metrics."""
+    """Compute class-aware held-out metrics using the complete model class order."""
     predictions = model.predict(x_test)
-    labels = sorted(y_test.unique().tolist())
-    report = classification_report(
-        y_test,
-        predictions,
-        labels=labels,
-        output_dict=True,
-        zero_division=0,
+    classifier = model.named_steps["classifier"]
+    class_labels = [str(label) for label in classifier.classes_]
+    label_to_index = {label: index for index, label in enumerate(class_labels)}
+    try:
+        actual_indices = [label_to_index[str(label)] for label in y_test.tolist()]
+        predicted_indices = [label_to_index[str(label)] for label in predictions.tolist()]
+    except KeyError as exc:
+        raise ValueError("Evaluation label is absent from the fitted model classes") from exc
+    return evaluate_predictions(
+        actual_indices,
+        predicted_indices,
+        class_labels=class_labels,
     )
-    return {
-        "sample_count": int(len(y_test)),
-        "class_labels": labels,
-        "macro_f1": float(f1_score(y_test, predictions, average="macro")),
-        "balanced_accuracy": float(balanced_accuracy_score(y_test, predictions)),
-        "classification_report": report,
-        "confusion_matrix": confusion_matrix(
-            y_test, predictions, labels=labels
-        ).tolist(),
-    }
 
 
 def parse_args() -> argparse.Namespace:
