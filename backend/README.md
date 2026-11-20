@@ -131,6 +131,7 @@ credentials must be stored in the deployment environment, never committed to Git
 
 The symptom-input milestone is deliberately non-diagnostic:
 
+- `GET /api/v1/symptoms/catalog` returns the versioned research vocabulary's stable IDs, labels and categories. Phrase aliases are intentionally not exposed.
 - `POST /api/v1/symptoms/normalize` accepts a text description up to 4,000 characters and a required self-reported context object.
 - Context values are constrained to duration (`less_than_24_hours`, `one_to_three_days`, `four_to_seven_days`, `more_than_one_week`, `not_sure`), severity (`mild`, `moderate`, `severe`, `not_sure`) and onset (`sudden`, `gradual`, `comes_and_goes`, `not_sure`).
 - A versioned, curated vocabulary maps explicit phrases to canonical symptom identifiers.
