@@ -96,15 +96,30 @@ def compare_text_models(
     target_validation_coverage: float = 0.9,
 ) -> dict[str, Any]:
     """Select on validation macro-F1, calibrate on validation, test winner once."""
-    if not 0.05 <= test_size <= 0.4:
-        raise ValueError("test_size must be between 0.05 and 0.4")
-    if not 0.05 <= validation_size <= 0.4:
-        raise ValueError("validation_size must be between 0.05 and 0.4")
+    def validate_fraction(value: Any, name: str, lower: float, upper: float) -> float:
+        if (
+            isinstance(value, (bool, np.bool_))
+            or not isinstance(value, (int, float, np.integer, np.floating))
+            or not np.isfinite(value)
+            or not lower <= value <= upper
+        ):
+            raise ValueError(f"{name} must be a finite number between {lower} and {upper}")
+        return float(value)
+
+    test_size = validate_fraction(test_size, "test_size", 0.05, 0.4)
+    validation_size = validate_fraction(
+        validation_size, "validation_size", 0.05, 0.4
+    )
     if test_size + validation_size >= 0.8:
         raise ValueError("test_size + validation_size must be below 0.8")
-    if minimum_confidence is not None and not 0 <= minimum_confidence <= 1:
-        raise ValueError("minimum_confidence must be between 0 and 1")
-    if not 0 < target_validation_coverage <= 1:
+    if minimum_confidence is not None:
+        minimum_confidence = validate_fraction(
+            minimum_confidence, "minimum_confidence", 0.0, 1.0
+        )
+    target_validation_coverage = validate_fraction(
+        target_validation_coverage, "target_validation_coverage", 0.0, 1.0
+    )
+    if target_validation_coverage == 0:
         raise ValueError("target_validation_coverage must be in (0, 1]")
 
     frame = load_dataset(data_path)
