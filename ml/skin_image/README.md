@@ -57,3 +57,17 @@ abstention, out-of-distribution detection, external validation or subgroup fairn
 
 All settings are research starting points, not clinically validated preprocessing. The model factory,
 trainer and metrics are not approved for patient-facing use.
+
+## Image quality and prediction abstention
+
+`ml.skin_image.quality.inspect_image_quality` provides configurable heuristic flags for low
+resolution, extreme brightness/darkness, clipped pixels and possible blur. These thresholds are
+not clinically validated and do not identify supported image modalities.
+
+`ml.skin_image.selective.apply_abstention` returns no class (`None`) when the maximum model score
+is below a supplied threshold. `selective_classification_metrics` reports coverage and accepted-set
+performance. The maximum softmax score is not automatically calibrated and is not medical certainty.
+
+See `QUALITY_AND_ABSTENTION.md`. Thresholds must be selected using validation data and evaluated
+on an untouched test set. Calibration, validated out-of-distribution detection and modality checks
+remain future work.
