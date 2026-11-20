@@ -31,11 +31,12 @@ logs. Keep the manifest and images in approved private storage.
 python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10
 ```
 
-The trainer creates patient-grouped 70/15/15 approximate partitions, trains MobileNetV3, selects
-the checkpoint using validation macro-F1, and evaluates the held-out test partition once at the end.
-The test partition must not be used for model selection. The output directory contains a checkpoint
-and aggregate experiment report; keep both outside Git because model artifacts may be large and
-subject to dataset license restrictions.
+The trainer creates patient-grouped 70/15/15 approximate partitions, supports MobileNetV3, ResNet50
+and EfficientNet-B0, selects the checkpoint using validation macro-F1, and evaluates the held-out
+test partition at the end. The test partition must not be used for model selection. The output
+directory contains a checkpoint, experiment configuration, model metadata and aggregate report;
+keep all artifacts outside Git because they may be large and subject to dataset license restrictions.
+See EXPERIMENTS.md for the controlled architecture comparison runner.
 
 ## Important evaluation limitations
 
@@ -99,3 +100,11 @@ Evaluation reports one-vs-rest sensitivity (recall) and specificity for each cla
 macro-F1, balanced accuracy and the confusion matrix. Interpret every rate with its support count;
 a missing class in an evaluation partition is not evidence of perfect performance. Weighting is an
 experiment setting, not a guarantee of improved minority-class or clinical performance.
+
+## Reproducible experiments and architecture comparison
+
+The model factory supports MobileNetV3-Large, MobileNetV3-Small, ResNet50 and EfficientNet-B0.
+The trainer records a configuration JSON, its SHA-256 digest, model metadata and the dataset-manifest
+digest. Use `python -m ml.skin_image.compare_models` to run candidates with a shared split seed and
+rank them by validation macro-F1 only. Test metrics are report-only and must never determine the
+winner. See `EXPERIMENTS.md` for the evaluation protocol and artifact handling rules.
