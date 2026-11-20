@@ -148,6 +148,41 @@ def test_inactive_account_cannot_log_in(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_existing_access_token_is_rejected_after_account_deactivation(
+    client: TestClient,
+) -> None:
+    """A previously issued token must stop working once its account is disabled."""
+    from app.models.user import User
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "deactivated-token@example.com",
+            "password": "StrongPass123!",
+        },
+    )
+    assert registration.status_code == 201
+    token = registration.json()["access_token"]
+    authorization = {"Authorization": f"Bearer {token}"}
+
+    before_deactivation = client.get("/api/v1/auth/me", headers=authorization)
+    assert before_deactivation.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(
+            email="deactivated-token@example.com"
+        ).one()
+        user.is_active = False
+        db.commit()
+    finally:
+        db.close()
+
+    after_deactivation = client.get("/api/v1/auth/me", headers=authorization)
+    assert after_deactivation.status_code == 401
+    assert after_deactivation.headers["www-authenticate"] == "Bearer"
+
+
 def test_user_can_update_own_display_name(client: TestClient) -> None:
     registration = client.post(
         "/api/v1/auth/register",
