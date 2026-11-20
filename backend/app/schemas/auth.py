@@ -43,6 +43,24 @@ class LoginRequest(BaseModel):
         return value.strip().lower()
 
 
+class PasswordResetRequest(BaseModel):
+    """Request a password recovery email."""
+
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    """Confirm a password reset using the emailed one-time token."""
+
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class ProfileUpdateRequest(BaseModel):
     """Fields that a signed-in user may update on their own profile."""
 
