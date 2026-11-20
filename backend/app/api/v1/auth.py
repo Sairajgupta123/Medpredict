@@ -1,6 +1,7 @@
 """Registration, login, and current-user endpoints."""
 
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
@@ -8,6 +9,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.config import get_settings
+from app.core.email import send_password_reset_email
+from app.core.password_reset import (
+    consume_password_reset_token,
+    issue_password_reset_token,
+)
 from app.core.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
@@ -17,6 +23,8 @@ from app.core.security import (
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
     ProfileUpdateRequest,
     RegisterRequest,
     TokenResponse,
@@ -24,6 +32,7 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+logger = logging.getLogger(__name__)
 
 
 def _token_response(user: User) -> TokenResponse:
@@ -91,6 +100,62 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     db.commit()
     db.refresh(user)
     return _token_response(user)
+
+
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request a password reset email",
+)
+def request_password_reset(
+    payload: PasswordResetRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    """Return a generic response to prevent account/email enumeration."""
+    generic_response = {
+        "message": "If an account exists for this email, password reset instructions will be sent."
+    }
+    user = db.scalar(select(User).where(User.email == payload.email))
+    if user is None or not user.is_active:
+        return generic_response
+
+    try:
+        raw_token = issue_password_reset_token(db, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Password reset token creation failed.")
+        return generic_response
+
+    try:
+        send_password_reset_email(user.email, raw_token)
+    except Exception:
+        # Do not log the recipient, reset URL, or raw token.
+        logger.warning("Password reset email delivery failed.")
+    return generic_response
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_200_OK,
+    summary="Set a new password using a reset token",
+)
+def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    """Consume a one-time token and update the password in one transaction."""
+    user = consume_password_reset_token(db, payload.token)
+    if user is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The password reset link is invalid or has expired.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Your password has been reset successfully."}
 
 
 @router.get(
