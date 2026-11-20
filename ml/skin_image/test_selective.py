@@ -49,3 +49,14 @@ def test_selective_metrics_handle_zero_coverage() -> None:
     )
     assert result["coverage"] == 0.0
     assert result["accepted_accuracy"] is None
+
+
+def test_selective_metrics_reject_noninteger_and_out_of_range_targets() -> None:
+    with pytest.raises(ValueError, match="integer class indices"):
+        selective_classification_metrics(
+            [0.5], [[0.8, 0.2]], minimum_confidence=0.5
+        )
+    with pytest.raises(ValueError, match="outside"):
+        selective_classification_metrics(
+            [2], [[0.8, 0.2]], minimum_confidence=0.5
+        )
