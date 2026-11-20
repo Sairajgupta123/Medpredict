@@ -117,18 +117,43 @@ export type CatalogReviewQueueItem = {
   created_at: string | null;
 };
 
-export async function getCatalogReviewQueue(): Promise<{
+export type ReviewQueueFilters = {
+  q?: string;
+  target_type?: string;
+  status?: string;
+  offset?: number;
+  limit?: number;
+};
+
+export async function getCatalogReviewQueue(
+  filters: ReviewQueueFilters = {},
+): Promise<{
   items: CatalogReviewQueueItem[];
   error: string | null;
 }> {
   const token = await getSessionToken();
   if (!token) return { items: [], error: "Your session has expired. Please sign in again." };
 
+  const params = new URLSearchParams({
+    limit: String(filters.limit ?? 20),
+    offset: String(filters.offset ?? 0),
+  });
+  if (filters.q) params.set("q", filters.q);
+  if (filters.target_type && filters.target_type !== "all") {
+    params.set("target_type", filters.target_type);
+  }
+  if (filters.status && filters.status !== "all") {
+    params.append("status", filters.status);
+  }
+
   try {
-    const response = await fetch(`${API_BASE_URL}/catalog/review/queue`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/catalog/review/queue?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
     if (!response.ok) {
       return {
         items: [],
