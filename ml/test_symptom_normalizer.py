@@ -58,6 +58,25 @@ def test_oversized_input_is_rejected() -> None:
         normalize_symptoms("a" * 4001)
 
 
+def test_obvious_negation_is_flagged_not_counted_as_positive() -> None:
+    result = normalize_symptoms("I have no fever but I have a cough.")
+    assert {item["id"] for item in result["matched_symptoms"]} == {"SYM_COUGH"}
+    assert result["contextual_mentions"][0]["id"] == "SYM_FEVER"
+    assert result["contextual_mentions"][0]["context_flag"] == "negated_or_denied_context"
+
+
+def test_obvious_historical_mention_is_flagged_for_review() -> None:
+    result = normalize_symptoms("I had fever last week.")
+    assert result["matched_symptoms"] == []
+    assert result["contextual_mentions"][0]["context_flag"] == "possibly_historical_context"
+
+
+def test_uncertain_mention_is_flagged_for_review() -> None:
+    result = normalize_symptoms("Maybe I have a headache.")
+    assert result["matched_symptoms"] == []
+    assert result["contextual_mentions"][0]["context_flag"] == "uncertain_context"
+
+
 def test_taxonomy_rejects_alias_collision(tmp_path) -> None:
     path = tmp_path / "bad_taxonomy.json"
     path.write_text(
