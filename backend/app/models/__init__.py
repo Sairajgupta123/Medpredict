@@ -10,6 +10,7 @@ from app.models.knowledge import (
     MedicalReference,
     RecommendationReference,
 )
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 from app.models.prediction import (
     Prediction,
     PredictionConsentEvent,
@@ -21,6 +22,8 @@ from app.models.user import RoleProvisioningEvent, User
 __all__ = [
     "CareRecommendation",
     "CatalogReviewEvent",
+    "CatalogReviewerScope",
+    "CatalogReviewerScopeEvent",
     "Disease",
     "DiseaseSymptom",
     "MedicalReference",
