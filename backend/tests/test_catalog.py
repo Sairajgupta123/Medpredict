@@ -1179,3 +1179,117 @@ def test_reviewer_queue_search_and_offset_pagination_are_stable(
     assert no_match.status_code == 200
     assert no_match.json() == []
 
+
+
+def test_pending_entry_inspection_returns_relationship_context_and_no_fake_evidence(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = Disease(code="DIS_INSPECT", name="Inspection Condition",
+                          description="Condition description.", review_status="in_review")
+        symptom = Symptom(code="SYM_INSPECT", name="Inspection Symptom",
+                          description="Symptom description.", review_status="draft")
+        db.add_all([disease, symptom])
+        db.flush()
+        db.add(DiseaseSymptom(
+            disease_id=disease.id,
+            symptom_id=symptom.id,
+            relevance_weight=0.75,
+            review_status="in_review",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer")
+    disease_detail = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=headers,
+        params={"target_type": "disease", "target_key": "DIS_INSPECT"},
+    )
+    assert disease_detail.status_code == 200
+    body = disease_detail.json()
+    assert body["entry"]["name"] == "Inspection Condition"
+    assert body["entry"]["status"] == "in_review"
+    assert body["entry"]["description"] == "Condition description."
+    assert body["evidence"]["references"] == []
+    assert body["evidence"]["reference_support"] == "not_implemented"
+    assert "No source-reference records" in body["evidence"]["message"]
+
+    link_detail = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=headers,
+        params={"target_type": "disease_symptom", "target_key": "DIS_INSPECT:SYM_INSPECT"},
+    )
+    assert link_detail.status_code == 200
+    link = link_detail.json()["entry"]
+    assert link["relevance_weight"] == 0.75
+    assert {item["target_type"] for item in link["related_entries"]} == {
+        "disease", "symptom"
+    }
+
+
+def test_pending_entry_inspection_enforces_role_scope_and_pending_state(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add_all([
+            Disease(code="DIS_INSPECT_ALLOWED", name="Allowed Inspection"),
+            Disease(code="DIS_INSPECT_DENIED", name="Denied Inspection"),
+            _approved_disease("DIS_INSPECT_APPROVED", "Already Approved"),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    patient = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=_user_headers("patient"),
+        params={"target_type": "disease", "target_key": "DIS_INSPECT_ALLOWED"},
+    )
+    assert patient.status_code == 403
+
+    unassigned_headers = _user_headers(
+        "reviewer", grant_scopes=False, email_suffix="inspect-unassigned"
+    )
+    # The fixture's reviewer identity is shared by role; remove its grants by
+    # using a distinct reviewer identity with no active scope.
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(
+            email="reviewer-inspect-unassigned@example.com"
+        ).one()
+        db.query(CatalogReviewerScope).filter_by(reviewer_id=reviewer.id).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    denied = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=unassigned_headers,
+        params={"target_type": "disease", "target_key": "DIS_INSPECT_ALLOWED"},
+    )
+    assert denied.status_code == 403
+
+    assigned = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=_user_headers("reviewer"),
+        params={"target_type": "disease", "target_key": "DIS_INSPECT_ALLOWED"},
+    )
+    assert assigned.status_code == 200
+
+    approved = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=_user_headers("reviewer"),
+        params={"target_type": "disease", "target_key": "DIS_INSPECT_APPROVED"},
+    )
+    assert approved.status_code == 404
+
+    missing = client.get(
+        "/api/v1/catalog/review/queue/entry",
+        headers=_user_headers("admin"),
+        params={"target_type": "disease", "target_key": "DOES_NOT_EXIST"},
+    )
+    assert missing.status_code == 404
