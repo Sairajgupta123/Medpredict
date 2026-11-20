@@ -77,6 +77,9 @@ def list_disease_recommendations(
         select(Disease).where(
             Disease.code == disease_code,
             Disease.is_active.is_(True),
+            Disease.review_status == "approved",
+            Disease.reviewed_by.is_not(None),
+            Disease.reviewed_at.is_not(None),
         )
     )
     if disease is None:
@@ -131,6 +134,7 @@ def list_disease_recommendations(
                 urgency=item.urgency,
                 title=item.title,
                 content=item.content,
+                next_review_due=item.next_review_due,
                 references=[
                     MedicalReferenceRead.model_validate(source)
                     for source in approved_sources
