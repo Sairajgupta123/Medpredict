@@ -1,4 +1,4 @@
-"""Authentication API request and response schemas."""
+"""Authentication and account profile API schemas."""
 
 from datetime import datetime
 from uuid import UUID
@@ -41,6 +41,23 @@ class LoginRequest(BaseModel):
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Fields that a signed-in user may update on their own profile."""
+
+    display_name: str | None = Field(default=None, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str | None) -> str | None:
+        """Allow null to clear the name, but reject whitespace-only strings."""
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Display name cannot be blank.")
+        return cleaned
 
 
 class UserRead(BaseModel):
