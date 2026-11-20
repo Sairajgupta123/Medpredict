@@ -268,10 +268,6 @@ def train_skin_model(
                     "manifest_sha256": manifest_digest,
                     "experiment_config_sha256": config_digest,
                     "experiment_config": experiment_config,
-                    "calibration_temperature": calibration_temperature
-                    if "calibration_temperature" in locals() else None,
-                    "abstention_threshold": abstention_threshold
-                    if "abstention_threshold" in locals() else None,
                 },
                 checkpoint_path,
             )
@@ -312,6 +308,10 @@ def train_skin_model(
         y_true, test_probabilities,
         minimum_confidence=abstention_threshold,
     )
+    checkpoint["calibration_temperature"] = calibration_temperature
+    checkpoint["abstention_threshold"] = abstention_threshold
+    checkpoint["threshold_selection_partition"] = "validation_only"
+    torch.save(checkpoint, checkpoint_path)
 
     def class_support(frame: pd.DataFrame) -> dict[str, dict[str, int]]:
         grouped = frame.groupby("label", sort=True)
