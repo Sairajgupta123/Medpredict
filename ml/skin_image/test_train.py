@@ -113,3 +113,51 @@ def test_training_cli_forwards_validation_coverage(monkeypatch, tmp_path) -> Non
     train_module.main()
 
     assert captured["target_validation_coverage"] == pytest.approx(0.82)
+
+def test_skin_artifact_guard_rejects_existing_checkpoint(tmp_path) -> None:
+    from ml.skin_image.train import ensure_skin_artifacts_do_not_exist
+
+    (tmp_path / "skin_mobilenet_v3_large_best.pt").write_bytes(b"prior checkpoint")
+    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
+        ensure_skin_artifacts_do_not_exist(
+            tmp_path,
+            [
+                "experiment_config.json",
+                "skin_mobilenet_v3_large_best.pt",
+                "model_metadata.json",
+                "experiment_report.json",
+            ],
+        )
+
+
+def test_skin_artifact_guard_allows_new_output_directory(tmp_path) -> None:
+    from ml.skin_image.train import ensure_skin_artifacts_do_not_exist
+
+    ensure_skin_artifacts_do_not_exist(
+        tmp_path / "new-run",
+        ["experiment_config.json", "model_metadata.json"],
+    )
+
+
+def test_training_refuses_existing_output_before_reading_manifest(tmp_path) -> None:
+    from ml.skin_image.train import train_skin_model
+
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_path": ["one.jpg"],
+            "label": ["class_a"],
+            "patient_id": ["patient-1"],
+        }
+    ).to_csv(manifest, index=False)
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    output = tmp_path / "output"
+    output.mkdir()
+    report = output / "experiment_report.json"
+    report.write_text('{"keep": true}', encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="experiment_report.json"):
+        train_skin_model(manifest, image_root, output)
+
+    assert report.read_text(encoding="utf-8") == '{"keep": true}'
