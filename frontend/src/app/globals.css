@@ -516,3 +516,25 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .review-assignment-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
 
+/* Searchable reviewer decision history and linked entry detail */
+.review-history-filters { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 10px; margin: 15px 0 16px; padding: 15px; border: 1px solid #e6ece6; border-radius: 10px; background: #fbfcfa; }
+.review-history-filters label { display: grid; gap: 6px; color: #6f8174; font-size: 10px; font-weight: 650; }
+.review-history-filters input, .review-history-filters select { width: 100%; min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid #dfe8df; border-radius: 6px; background: #fff; color: #3e5144; font: inherit; font-size: 11px; }
+.review-history-filters .review-filter-actions { display: flex; align-items: center; gap: 10px; }
+.review-history-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #edf1ed; }
+.review-history-footer a { color: #426c50; font-size: 10px; font-weight: 700; text-decoration: none; }
+.review-history-footer a:hover { text-decoration: underline; }
+.review-entry-hero { padding-bottom: 36px; }
+.review-entry-card { margin-bottom: 24px; }
+.review-entry-card .review-card-heading h2 { margin: 8px 0 4px; color: #354b3c; font: 600 23px/1.25 var(--font-display); }
+.review-entry-audit { margin: 26px 0; }
+@media (max-width: 980px) {
+  .review-history-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-history-filters .review-filter-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .review-history-filters { grid-template-columns: 1fr; padding: 12px; }
+  .review-history-filters .review-filter-actions { grid-column: auto; }
+  .review-history-footer { align-items: flex-start; flex-direction: column; }
+}
+
