@@ -549,3 +549,64 @@ def test_review_rejects_whitespace_only_reason(client: TestClient) -> None:
     )
     assert response.status_code == 422
 
+def test_reviewer_queue_lists_draft_catalog_items_and_relationships(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = Disease(code="DIS_QUEUE", name="Queue Condition")
+        symptom = Symptom(code="SYM_QUEUE", name="Queue Symptom")
+        db.add_all([disease, symptom])
+        db.flush()
+        db.add(
+            DiseaseSymptom(
+                disease_id=disease.id,
+                symptom_id=symptom.id,
+                relevance_weight=1.0,
+                review_status="draft",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=_user_headers("reviewer"),
+    )
+    assert response.status_code == 200
+    items = response.json()
+    assert {
+        (item["target_type"], item["target_key"], item["status"])
+        for item in items
+    } >= {
+        ("disease", "DIS_QUEUE", "draft"),
+        ("symptom", "SYM_QUEUE", "draft"),
+        ("disease_symptom", "DIS_QUEUE:SYM_QUEUE", "draft"),
+    }
+
+
+def test_reviewer_queue_filters_status_and_rejects_patient(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_QUEUE_FILTER", name="Filtered Queue Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    patient = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=_user_headers("patient"),
+    )
+    assert patient.status_code == 403
+
+    filtered = client.get(
+        "/api/v1/catalog/review/queue",
+        headers=_user_headers("reviewer"),
+        params={"status": "retired", "target_type": "disease"},
+    )
+    assert filtered.status_code == 200
+    assert filtered.json() == []
+
