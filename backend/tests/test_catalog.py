@@ -950,3 +950,79 @@ def test_reviewer_history_is_limited_to_own_decisions(
     assert other_history.status_code == 200
     assert other_history.json() == []
 
+def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
+    client: TestClient,
+) -> None:
+    headers = _user_headers("reviewer", grant_scopes=False)
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(email="reviewer-reviewer@example.com").one()
+        db.add_all([
+            Disease(code="DIS_WORKLOAD_ASSIGNED", name="Assigned Workload Condition"),
+            Disease(code="DIS_WORKLOAD_OTHER", name="Other Workload Condition"),
+            Symptom(code="SYM_WORKLOAD_OTHER", name="Other Workload Symptom"),
+        ])
+        db.flush()
+        db.add(
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="disease",
+                scope_key="DIS_WORKLOAD_ASSIGNED",
+                granted_by=reviewer.id,
+                grant_reason="Test exact workload assignment.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    initial = client.get("/api/v1/catalog/review/workload", headers=headers)
+    assert initial.status_code == 200
+    assert initial.json() == {
+        "pending_total": 1,
+        "pending_by_type": {
+            "disease": 1,
+            "symptom": 0,
+            "disease_symptom": 0,
+        },
+        "activity": {
+            "total_decisions": 0,
+            "approved_decisions": 0,
+            "retired_decisions": 0,
+            "decisions_last_7_days": 0,
+        },
+    }
+
+    decision = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_WORKLOAD_ASSIGNED",
+        headers=headers,
+        json={
+            "expected_status": "draft",
+            "status": "approved",
+            "reason": "Reviewed source evidence and catalog scope.",
+        },
+    )
+    assert decision.status_code == 200
+
+    updated = client.get("/api/v1/catalog/review/workload", headers=headers)
+    assert updated.status_code == 200
+    assert updated.json()["pending_total"] == 0
+    assert updated.json()["activity"]["total_decisions"] == 1
+    assert updated.json()["activity"]["approved_decisions"] == 1
+
+    other_reviewer = _user_headers("reviewer", email_suffix="workload-other")
+    isolated = client.get(
+        "/api/v1/catalog/review/workload",
+        headers=other_reviewer,
+    )
+    assert isolated.status_code == 200
+    assert isolated.json()["activity"]["total_decisions"] == 0
+
+
+def test_reviewer_workload_requires_catalog_reviewer_role(
+    client: TestClient,
+) -> None:
+    patient_headers = _user_headers("patient")
+    response = client.get("/api/v1/catalog/review/workload", headers=patient_headers)
+    assert response.status_code == 403
+
