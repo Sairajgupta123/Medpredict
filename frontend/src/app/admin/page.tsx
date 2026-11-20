@@ -173,6 +173,7 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "admin") redirect("/dashboard");
 
+  const params = await searchParams;
   const token = await requireAdminToken();
   const referencesResponse = await fetch(`${API_BASE_URL}/admin/medical-references?limit=50`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
@@ -198,10 +199,9 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
       }>
     : [];
 
-  const [{ data, error }, scopeData, params] = await Promise.all([
+  const [{ data, error }, scopeData] = await Promise.all([
     getGovernanceOverview(),
     getReviewerScopeGovernance(),
-    searchParams,
   ]);
 
   const referenceError = params.reference_error
