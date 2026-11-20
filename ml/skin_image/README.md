@@ -35,19 +35,21 @@ The trainer creates deterministic, class-aware patient-grouped 70/15/15 approxim
 It requires every class to occur in at least three distinct patients and in every partition, then
 searches candidate group splits to reduce row/patient proportion and class-distribution imbalance.
 It supports MobileNetV3, ResNet50 and EfficientNet-B0, selects the checkpoint using validation
-macro-F1, fits temperature and selects a 90% technical coverage threshold on validation only, and
-evaluates the held-out test partition at the end. The test partition must not be used for model selection. The output
+macro-F1, fits temperature and selects a configurable technical coverage threshold (default 90%)
+on validation only, and evaluates the held-out test partition at the end. The target can be changed
+with `--target-validation-coverage`. The test partition must not be used for model selection. The output
 directory contains a checkpoint, experiment configuration, model metadata and aggregate report;
 keep all artifacts outside Git because they may be large and subject to dataset license restrictions.
 See EXPERIMENTS.md for the controlled architecture comparison runner.
 
 ## Important evaluation limitations
 
-GroupShuffleSplit proportions are approximate because patients are the splitting unit. The
-training script fails if validation or test contains labels not present in training, but it does not
-guarantee every class is represented in every partition. Inspect per-class and per-group counts
-before interpreting results. The script does not yet implement class-weighting, calibration,
-abstention, out-of-distribution detection, external validation or subgroup fairness analysis.
+Patient-grouped proportions are approximate because patients are indivisible. The splitter requires
+at least three distinct patients per class and guarantees every class appears in train, validation
+and test; it searches candidate partitions to reduce distribution imbalance. Review image and
+patient support counts before interpreting results. Class weighting, validation-only calibration
+and validation-selected abstention are integrated. Validated out-of-distribution detection,
+external validation and subgroup fairness analysis remain outstanding.
 
 ## Preprocessing
 
