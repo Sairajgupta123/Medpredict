@@ -67,7 +67,7 @@ def test_duplicate_normalized_text_never_crosses_partitions() -> None:
 
     assert method == "normalized_text_group_split_provisional"
     normalize = lambda values: values.str.strip().str.lower().str.replace(
-        r"\\s+", " ", regex=True
+        r"\s+", " ", regex=True
     )
     assert set(normalize(train["symptom_text"])).isdisjoint(
         set(normalize(test["symptom_text"]))
