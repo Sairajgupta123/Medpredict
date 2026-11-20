@@ -78,10 +78,11 @@ Read-only endpoints:
 - `GET /api/v1/catalog/symptoms?q=fever&limit=25&offset=0`
 - `GET /api/v1/catalog/diseases?q=condition&limit=25&offset=0`
 
-The database-backed symptom endpoint exposes only active records with
+Both database-backed catalog endpoints expose only active records with
 `review_status=approved` and complete reviewer audit metadata. Draft, in-review, retired and
-inactive terms are excluded. The disease catalog currently filters active records; disease-specific
-clinical review governance is a separate pending milestone.
+inactive diseases and symptoms are excluded. Existing disease rows are migrated as drafts and
+must be explicitly reviewed before publication. Database constraints reject approved disease
+records without both a reviewer identifier and review timestamp.
 
 Both endpoints support case-insensitive name/code search and bounded pagination (1–100 records).
 They return an empty list until eligible database catalog entries have been added. These endpoints
