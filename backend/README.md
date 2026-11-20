@@ -58,14 +58,16 @@ pytest
 - PostgreSQL engine: `app.db.session.engine`
 - Request-scoped session dependency: `app.db.session.get_db`
 - Database URL is loaded from the `DATABASE_URL` environment variable.
-- Alembic is included as a dependency; migration configuration and initial schema are a later milestone.
+- Initial ORM models are registered in `app.models` for users, diseases, symptoms, predictions, skin-image metadata, ranked results, and feedback.
+- The schema overview and privacy/safety decisions are documented in `../docs/architecture/database-schema.md`.
+- Alembic is included as a dependency; migration configuration and the first migration are the next database step.
 
 The engine uses `pool_pre_ping` and does not establish a network connection merely by being imported.
 Each API request that uses `get_db` receives its own session, which is closed after the request.
 
 ## Current scope and safety
 
-This milestone establishes database connectivity infrastructure only. It does not yet create
-application tables, store patient information, authenticate users, or perform disease prediction.
+This milestone adds an initial ORM schema draft only. No migration has been applied, no patient data
+is being stored, and authentication or disease prediction is not implemented.
 Do not place real patient data in development or test databases. Production secrets and database
 credentials must be stored in the deployment environment, never committed to Git.
