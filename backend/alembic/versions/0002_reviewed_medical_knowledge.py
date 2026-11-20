@@ -41,6 +41,11 @@ def upgrade() -> None:
             "review_status IN ('draft', 'in_review', 'approved', 'retired')",
             name="ck_medical_references_review_status",
         ),
+        sa.CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_medical_reference_approval_audit",
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("url", "version", name="uq_medical_reference_url_version"),
     )
@@ -82,6 +87,15 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "review_status IN ('draft', 'in_review', 'approved', 'retired')",
             name="ck_care_recommendations_review_status",
+        ),
+        sa.CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_care_recommendation_approval_audit",
+        ),
+        sa.CheckConstraint(
+            "valid_from IS NULL OR valid_until IS NULL OR valid_from <= valid_until",
+            name="ck_care_recommendation_validity_window",
         ),
         sa.ForeignKeyConstraint(
             ["disease_id"], ["diseases.id"], ondelete="RESTRICT"
