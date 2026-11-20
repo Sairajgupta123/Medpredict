@@ -408,6 +408,8 @@ def list_catalog_review_history(
 ) -> list[CatalogReviewEventRead]:
     """Return append-only review history to authorized catalog reviewers."""
     statement = select(CatalogReviewEvent)
+    if reviewer.role != "admin":
+        statement = statement.where(CatalogReviewEvent.reviewer_id == reviewer.id)
     if target_type:
         statement = statement.where(CatalogReviewEvent.target_type == target_type)
     if target_key:
