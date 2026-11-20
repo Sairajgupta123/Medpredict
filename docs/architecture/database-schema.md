@@ -49,6 +49,8 @@ erDiagram
 | `medical_references` | Versioned source provenance | publisher, URL, evidence type, version, review status, reviewer |
 | `care_recommendations` | General-care information | disease, locale, category, urgency, version, approval and validity |
 | `recommendation_references` | Recommendation-to-source links | recommendation ID, reference ID, reviewer note |
+| `catalog_reviewer_scopes` | Current reviewer access grants | reviewer, catalog type/key, grant and revocation metadata |
+| `catalog_reviewer_scope_events` | Immutable reviewer-scope audit | grant/revoke event, reviewer, operator, scope, reason, timestamp |
 
 ## Prediction history API
 
@@ -95,6 +97,17 @@ capture a grant event before persisting health text.
 - No research taxonomy entries are automatically copied into the reviewed database catalog.
 - A qualified reviewer must independently verify terminology, definition, scope and suitability before approving a record. No reviewer UI or clinical approval is claimed.
 
+### Reviewer scope governance
+
+- Reviewer role provisioning does not automatically grant catalog access.
+- Each reviewer must receive an explicit scope for diseases, symptoms, or disease-symptom relationships.
+- A null scope key grants the full selected category; a non-null key grants one exact catalog code or `DISEASE_CODE:SYMPTOM_CODE` relationship.
+- The API checks active assignments for both queue visibility and each review decision. Revoked grants no longer authorize access.
+- Only administrators can grant or revoke scopes. The target must be an active, email-verified reviewer account.
+- Every grant and revocation requires a reason and creates an immutable event in the same transaction as the current assignment change.
+- Reviewers can inspect only their own catalog decision history; administrators can inspect the full history and scope audit.
+- This is operational access control, not evidence that a reviewer is clinically qualified. Qualification and scope must be verified outside the application.
+
 ### Skin-image privacy and quality
 
 - Image bytes must be stored in private object storage, never in a database binary column.
@@ -121,8 +134,8 @@ capture a grant event before persisting health text.
 ## Deliberately deferred
 
 Automatic retention jobs, image-object deletion adapter, user export, full account deletion, chat sessions/messages,
-model registry/evaluation runs, admin roles and reviewer workflows remain deferred. They need their own
-access-control, provenance, threat-model and operational decisions before use.
+and model registry/evaluation runs remain deferred. They need their own access-control, provenance,
+threat-model and operational decisions before use.
 
 ## ORM source
 
@@ -131,9 +144,10 @@ access-control, provenance, threat-model and operational decisions before use.
 - `backend/app/models/prediction.py`
 - `backend/app/models/feedback.py`
 - `backend/app/models/knowledge.py`
+- `backend/app/models/reviewer_scope.py`
 - `backend/app/models/__init__.py`
 
-Alembic migrations `0002_reviewed_medical_knowledge.py`,
-`0003_reviewed_symptom_catalog.py`, and `0004_prediction_history_consent.py`
-extend the initial schema. They are committed to the development branch and have only been
-validated through the automated PostgreSQL test workflow, not applied to a production database.
+Alembic migrations through `0012_reviewer_scopes.py` extend the initial schema, including
+catalog approval governance, reviewer roles, audit history, and scoped reviewer access. They are
+committed to the development branch and validated through the automated PostgreSQL test workflow;
+they have not been applied to a production database.
