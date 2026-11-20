@@ -294,3 +294,20 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .context-item { align-items: flex-start; flex-direction: column; gap: 5px; }
   .context-item span { text-align: left; }
 }
+
+
+/* Structured self-reported symptom context */
+.symptom-context-fields { min-width: 0; margin: 25px 0 0; padding: 20px 0 0; border: 0; border-top: 1px solid #edf1ed; }
+.symptom-context-fields legend { padding: 0; color: #355b45; font: 700 15px var(--font-display); letter-spacing: -.2px; }
+.context-helper { margin: 7px 0 17px; color: #8b9a90; font-size: 10px; line-height: 1.65; }
+.context-fields-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.field-label select { width: 100%; min-height: 44px; padding: 0 10px; border: 1px solid #dfe9e1; border-radius: 7px; outline: none; color: #526b5b; background: #fcfdfb; font: 500 11px var(--font-body); }
+.field-label select:focus { border-color: #78a889; box-shadow: 0 0 0 3px rgba(120,168,137,.14); }
+.reported-context-summary { margin-top: 23px; padding: 16px; border: 1px solid #e6eee7; border-radius: 9px; background: #fbfdfb; }
+.reported-context-summary h3 { margin: 0 0 11px; color: #526d5c; font: 700 12px var(--font-display); }
+.reported-context-summary p { display: inline-block; margin: 0 17px 8px 0; color: #7d8e83; font-size: 10px; text-transform: capitalize; }
+.reported-context-summary p strong { color: #45664f; }
+.reported-context-summary small { display: block; color: #9aa89e; font-size: 9px; line-height: 1.6; }
+@media (max-width: 700px) {
+  .context-fields-grid { grid-template-columns: 1fr; }
+}
