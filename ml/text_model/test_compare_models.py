@@ -55,3 +55,17 @@ def test_comparison_rejects_invalid_explicit_confidence_types(tmp_path, value) -
             tmp_path / "out",
             minimum_confidence=value,
         )
+
+def test_comparison_refuses_to_overwrite_existing_report_before_loading_data(tmp_path) -> None:
+    output = tmp_path / "out"
+    output.mkdir()
+    report = output / "comparison_report.json"
+    report.write_text('{"preserve": true}', encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="comparison_report.json"):
+        compare_text_models(
+            tmp_path / "missing.csv",
+            output,
+        )
+
+    assert report.read_text(encoding="utf-8") == '{"preserve": true}'
