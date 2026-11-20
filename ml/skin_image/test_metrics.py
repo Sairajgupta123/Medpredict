@@ -1,5 +1,6 @@
 """Tests for the skin model factory and classification metrics."""
 
+import numpy as np
 import pytest
 
 from ml.skin_image.metrics import classification_metrics
@@ -26,16 +27,35 @@ def test_metrics_reject_empty_or_mismatched_inputs() -> None:
         classification_metrics([0, 1], [0], class_names=["a", "b"])
 
 
+def test_metrics_reject_non_one_dimensional_inputs() -> None:
+    with pytest.raises(ValueError, match="one-dimensional"):
+        classification_metrics([[0], [1]], [[0], [1]], class_names=["a", "b"])
+    with pytest.raises(ValueError, match="one-dimensional"):
+        classification_metrics(0, [0], class_names=["a", "b"])
+
+
 def test_metrics_reject_unknown_class_index() -> None:
     with pytest.raises(ValueError, match="outside"):
         classification_metrics([0, 2], [0, 1], class_names=["a", "b"])
 
 
-def test_metrics_reject_duplicate_class_names() -> None:
+def test_metrics_reject_duplicate_or_blank_class_names() -> None:
     with pytest.raises(ValueError, match="unique"):
         classification_metrics([0, 1], [0, 1], class_names=["same", "same"])
+    with pytest.raises(ValueError, match="non-empty"):
+        classification_metrics([0, 1], [0, 1], class_names=["a", " "])
 
 
 def test_metrics_reject_noninteger_class_indices() -> None:
     with pytest.raises(ValueError, match="integers"):
         classification_metrics([0.5, 1.0], [0, 1], class_names=["a", "b"])
+
+
+def test_balanced_accuracy_penalizes_configured_class_with_no_true_support() -> None:
+    result = classification_metrics(
+        [0, 0, 1, 1],
+        [0, 0, 1, 1],
+        class_names=["a", "b", "c"],
+    )
+    assert result["per_class_sensitivity_specificity"]["c"]["support"] == 0
+    assert result["balanced_accuracy"] == pytest.approx(2 / 3)
