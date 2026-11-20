@@ -56,6 +56,18 @@ def test_knowledge_content_defaults_to_unpublished() -> None:
     assert MedicalReference.review_status.default.arg == "draft"
 
 
+def test_approved_knowledge_requires_auditable_review_metadata() -> None:
+    medical_constraints = {
+        constraint.name for constraint in MedicalReference.__table__.constraints
+    }
+    recommendation_constraints = {
+        constraint.name for constraint in CareRecommendation.__table__.constraints
+    }
+    assert "ck_medical_reference_approval_audit" in medical_constraints
+    assert "ck_care_recommendation_approval_audit" in recommendation_constraints
+    assert "ck_care_recommendation_validity_window" in recommendation_constraints
+
+
 def test_recommendation_reference_has_composite_identity() -> None:
     primary_key_columns = set(
         RecommendationReference.__table__.primary_key.columns.keys()
