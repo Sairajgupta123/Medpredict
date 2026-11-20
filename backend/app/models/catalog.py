@@ -126,8 +126,16 @@ class CatalogReviewEvent(Base):
             name="ck_catalog_review_events_target_type",
         ),
         CheckConstraint(
+            "previous_status IN ('draft', 'in_review', 'approved', 'retired')",
+            name="ck_catalog_review_events_previous_status",
+        ),
+        CheckConstraint(
             "new_status IN ('draft', 'in_review', 'approved', 'retired')",
             name="ck_catalog_review_events_new_status",
+        ),
+        CheckConstraint(
+            "length(trim(target_key)) >= 1",
+            name="ck_catalog_review_events_target_key",
         ),
         CheckConstraint(
             "length(trim(reason)) >= 8",
