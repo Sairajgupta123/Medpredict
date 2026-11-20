@@ -1031,3 +1031,94 @@ def test_reviewer_workload_requires_catalog_reviewer_role(
     response = client.get("/api/v1/catalog/review/workload", headers=patient_headers)
     assert response.status_code == 403
 
+def test_review_history_filters_and_entry_detail_are_authorized(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add_all([
+            Disease(
+                code="DIS_HISTORY_DETAIL",
+                name="History Detail Condition",
+                description="A test catalog description.",
+            ),
+            Symptom(
+                code="SYM_HISTORY_DETAIL",
+                name="History Detail Symptom",
+                description="A test symptom description.",
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    reviewer_headers = _user_headers("reviewer")
+    disease_decision = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_HISTORY_DETAIL",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "draft",
+            "status": "approved",
+            "reason": "Evidence checked for condition approval.",
+        },
+    )
+    symptom_decision = client.patch(
+        "/api/v1/catalog/review/symptoms/SYM_HISTORY_DETAIL",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "draft",
+            "status": "in_review",
+            "reason": "Need another source before approval.",
+        },
+    )
+    assert disease_decision.status_code == 200
+    assert symptom_decision.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        disease_event = db.query(CatalogReviewEvent).filter_by(
+            target_key="DIS_HISTORY_DETAIL"
+        ).one()
+        disease_event_id = str(disease_event.id)
+    finally:
+        db.close()
+
+    filtered = client.get(
+        "/api/v1/catalog/review/history",
+        headers=reviewer_headers,
+        params={
+            "target_type": "disease",
+            "q": "condition approval",
+            "date_from": "2020-01-01",
+            "date_to": "2099-12-31",
+        },
+    )
+    assert filtered.status_code == 200
+    assert len(filtered.json()) == 1
+    assert filtered.json()[0]["target_key"] == "DIS_HISTORY_DETAIL"
+
+    invalid_dates = client.get(
+        "/api/v1/catalog/review/history",
+        headers=reviewer_headers,
+        params={"date_from": "2099-01-01", "date_to": "2020-01-01"},
+    )
+    assert invalid_dates.status_code == 422
+
+    detail = client.get(
+        f"/api/v1/catalog/review/history/{disease_event_id}/entry",
+        headers=reviewer_headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["entry"]["name"] == "History Detail Condition"
+    assert detail.json()["entry"]["status"] == "approved"
+    assert detail.json()["event"]["target_key"] == "DIS_HISTORY_DETAIL"
+
+    other_reviewer = _user_headers(
+        "reviewer", email_suffix="history-entry-other"
+    )
+    forbidden_detail = client.get(
+        f"/api/v1/catalog/review/history/{disease_event_id}/entry",
+        headers=other_reviewer,
+    )
+    assert forbidden_detail.status_code == 404
+
