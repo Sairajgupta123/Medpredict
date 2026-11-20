@@ -72,15 +72,6 @@ def train_skin_model(
     num_workers: int = 0,
 ) -> dict[str, Any]:
     """Train MobileNetV3 using patient-grouped partitions and save aggregate artifacts."""
-    import torch
-    from torch import nn
-    from torch.utils.data import DataLoader
-
-    from ml.skin_image.data import SkinImageDataset
-    from ml.skin_image.metrics import classification_metrics
-    from ml.skin_image.model import build_mobilenet_v3
-    from ml.skin_image.splits import patient_grouped_split
-
     if epochs < 1 or batch_size < 1 or learning_rate <= 0 or num_workers < 0:
         raise ValueError("epochs, batch_size and learning_rate must be positive")
     if not manifest_path.is_file():
@@ -88,7 +79,6 @@ def train_skin_model(
     if not image_root.is_dir():
         raise NotADirectoryError("Image root directory does not exist")
 
-    _seed_everything(seed)
     manifest = pd.read_csv(manifest_path)
     required = {"image_path", "label", "patient_id"}
     missing = required - set(manifest.columns)
@@ -98,6 +88,8 @@ def train_skin_model(
     manifest["label"] = manifest["label"].fillna("").astype(str).str.strip()
     if manifest["label"].eq("").any():
         raise ValueError("Training manifest contains blank labels")
+
+    from ml.skin_image.splits import patient_grouped_split
 
     splits = patient_grouped_split(manifest, random_state=seed)
     train_frame = manifest.loc[list(splits.train)].copy()
@@ -118,6 +110,16 @@ def train_skin_model(
                 f"{name} partition contains labels absent from training partition"
             )
 
+    # Load the optional deep-learning stack only after inexpensive manifest preflight checks.
+    import torch
+    from torch import nn
+    from torch.utils.data import DataLoader
+
+    from ml.skin_image.data import SkinImageDataset
+    from ml.skin_image.metrics import classification_metrics
+    from ml.skin_image.model import build_mobilenet_v3
+
+    _seed_everything(seed)
     train_dataset = SkinImageDataset(
         train_frame,
         image_root,
