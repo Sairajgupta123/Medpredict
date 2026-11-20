@@ -155,8 +155,9 @@ The taxonomy is packaged at `app/data/symptom_taxonomy.json` and included in bui
 
 The public knowledge endpoint returns general-care information only when all publication gates pass:
 - The recommendation is marked active and approved, with a non-empty reviewer ID and review timestamp.
-- Its validity window includes the current date.
-- At least one linked medical reference is approved and has its own reviewer ID and review timestamp.
+- Its validity window includes the current date and its `next_review_due` date is not overdue (a null due date means no scheduled date has been recorded).
+- At least one linked medical reference is approved, has its own reviewer ID and review timestamp, and is not past its `next_review_due` date.
+- The response includes the scheduled review due dates alongside source provenance; overdue sources and recommendations are withheld automatically until reviewed again.
 - The requested locale matches the recommendation locale.
 - Database check constraints prevent approved records without review audit metadata and invalid validity windows.
 
