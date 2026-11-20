@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/logout-button";
+import { getSessionUser } from "@/lib/auth-proxy";
 
 const modules = [
   {
@@ -24,16 +26,35 @@ const modules = [
   },
 ];
 
-export default function DashboardPage() {
+type SessionUser = {
+  display_name?: string | null;
+  email?: string;
+};
+
+export default async function DashboardPage() {
+  const session = await getSessionUser();
+  const user = session.user as SessionUser | null;
+
   return (
     <main id="main-content" className="dashboard-page">
       <section className="dashboard-hero">
         <div className="container">
           <Link className="back-link" href="/">← Back to home</Link>
-          <div className="eyebrow"><span className="eyebrow-dot" /> MEDIPREDICT WORKSPACE</div>
-          <h1>Your health information,<br /><em>organized with care.</em></h1>
+          <div className="dashboard-account-row">
+            <div className="eyebrow"><span className="eyebrow-dot" /> MEDIPREDICT WORKSPACE</div>
+            {user ? (
+              <div className="account-chip">
+                <span className="account-avatar" aria-hidden="true">{(user.display_name || user.email || "M").charAt(0).toUpperCase()}</span>
+                <span className="account-identity"><strong>{user.display_name || "Your account"}</strong><small>{user.email}</small></span>
+                <LogoutButton />
+              </div>
+            ) : (
+              <Link className="dashboard-signin" href="/login">Sign in to your account ↗</Link>
+            )}
+          </div>
+          <h1>{user ? `Welcome, ${user.display_name || "back"}.` : "Your health information,"}<br /><em>organized with care.</em></h1>
           <p>This workspace is under active development. The cards below show the planned modules and their current implementation stage.</p>
-          <div className="workspace-notice"><span aria-hidden="true">i</span><div><strong>Preview environment</strong><small>Prediction, image upload and personalized medical guidance are not available in this frontend milestone.</small></div></div>
+          <div className="workspace-notice"><span aria-hidden="true">i</span><div><strong>{user ? "Signed-in workspace" : "Preview environment"}</strong><small>Prediction, image upload and personalized medical guidance are not available in this frontend milestone.</small></div></div>
         </div>
       </section>
       <section className="container dashboard-modules">
