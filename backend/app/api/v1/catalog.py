@@ -8,7 +8,9 @@ from sqlalchemy import func, literal, or_, select
 
 from app.api.dependencies import CatalogReviewer, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
+from app.models.catalog_reference import CatalogReference, CatalogReferenceEvent
 from app.models.reviewer_scope import CatalogReviewerScope
+from app.models.knowledge import MedicalReference
 from app.schemas.catalog import (
     CatalogItemRead,
     CatalogListResponse,
@@ -16,6 +18,11 @@ from app.schemas.catalog import (
     CatalogReviewRequest,
     CatalogReviewEventRead,
     CatalogReviewQueueItemRead,
+)
+from app.schemas.knowledge import (
+    CatalogReferenceLinkRequest,
+    CatalogReferenceRead,
+    CatalogReferenceRemovalRequest,
 )
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
@@ -618,20 +625,201 @@ def read_pending_catalog_review_entry(
             "relevance_weight": link.relevance_weight,
         }
 
-    # The current catalog schema has no source/reference association. Report that
-    # explicitly rather than presenting an empty bibliography as evidence.
+    reference_rows = db.execute(
+        select(CatalogReference, MedicalReference)
+        .join(MedicalReference, MedicalReference.id == CatalogReference.reference_id)
+        .where(
+            CatalogReference.target_type == target_type,
+            CatalogReference.target_key == target_key,
+            CatalogReference.removed_at.is_(None),
+        )
+        .order_by(CatalogReference.created_at.desc(), CatalogReference.id.desc())
+    ).all()
+    references = [
+        CatalogReferenceRead(
+            id=link.id,
+            reference_id=source.id,
+            title=source.title,
+            publisher=source.publisher,
+            url=source.url,
+            evidence_type=source.evidence_type,
+            version=source.version,
+            published_on=source.published_on,
+            accessed_on=source.accessed_on,
+            review_status=source.review_status,
+            reviewed_by=source.reviewed_by,
+            reviewed_at=source.reviewed_at,
+            next_review_due=source.next_review_due,
+            link_reason=link.link_reason,
+            linked_by=link.linked_by,
+            linked_at=link.created_at,
+        )
+        for link, source in reference_rows
+    ]
     return {
         "entry": entry,
         "evidence": {
-            "references": [],
-            "reference_support": "not_implemented",
+            "references": [item.model_dump(mode="json") for item in references],
+            "reference_support": "available",
             "message": (
-                "No source-reference records are attached to this catalog schema. "
-                "Reviewers must independently verify appropriate sources; this page "
-                "does not establish clinical validity."
+                "Attached source records are provenance metadata only. Check each "
+                "source's review status and currency; an attachment is not clinical validation."
+            ) if references else (
+                "No source references are attached to this entry yet. Reviewers should "
+                "seek appropriate authoritative sources before making a decision."
             ),
         },
     }
+
+
+def _pending_target_for_reference(db, target_type: str, target_key: str):
+    """Resolve a pending catalog target; never create links to unknown or finalized rows."""
+    if target_type == "disease":
+        item = db.scalar(select(Disease).where(Disease.code == target_key))
+        if item is not None and item.review_status in ("draft", "in_review"):
+            return item
+    elif target_type == "symptom":
+        item = db.scalar(select(Symptom).where(Symptom.code == target_key))
+        if item is not None and item.review_status in ("draft", "in_review"):
+            return item
+    elif target_type == "disease_symptom":
+        disease_code, separator, symptom_code = target_key.partition(":")
+        if separator and disease_code and symptom_code and ":" not in symptom_code:
+            row = db.execute(
+                select(DiseaseSymptom, Disease, Symptom)
+                .join(Disease, Disease.id == DiseaseSymptom.disease_id)
+                .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+                .where(Disease.code == disease_code, Symptom.code == symptom_code)
+            ).first()
+            if row is not None and row[0].review_status in ("draft", "in_review"):
+                return row[0]
+    raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
+
+
+@router.get("/review/queue/entry/references")
+def list_pending_catalog_references(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+    target_type: str = Query(pattern="^(disease|symptom|disease_symptom)$"),
+    target_key: str = Query(min_length=1, max_length=200),
+) -> list[dict]:
+    """List attached references only within the caller's active review scope."""
+    _pending_target_for_reference(db, target_type, target_key)
+    _require_item_scope(reviewer, db, target_type, target_key)
+    rows = db.execute(
+        select(CatalogReference, MedicalReference)
+        .join(MedicalReference, MedicalReference.id == CatalogReference.reference_id)
+        .where(
+            CatalogReference.target_type == target_type,
+            CatalogReference.target_key == target_key,
+            CatalogReference.removed_at.is_(None),
+        )
+        .order_by(CatalogReference.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": str(link.id),
+            "reference_id": str(source.id),
+            "title": source.title,
+            "publisher": source.publisher,
+            "url": source.url,
+            "evidence_type": source.evidence_type,
+            "version": source.version,
+            "published_on": source.published_on,
+            "accessed_on": source.accessed_on,
+            "review_status": source.review_status,
+            "reviewed_by": source.reviewed_by,
+            "reviewed_at": source.reviewed_at,
+            "next_review_due": source.next_review_due,
+            "link_reason": link.link_reason,
+            "linked_by": str(link.linked_by),
+            "linked_at": link.created_at,
+        }
+        for link, source in rows
+    ]
+
+
+@router.post("/review/queue/entry/references", status_code=201)
+def attach_pending_catalog_reference(
+    payload: CatalogReferenceLinkRequest,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Attach an existing source to an assigned pending entry with an audit event."""
+    _pending_target_for_reference(db, payload.target_type, payload.target_key)
+    _require_item_scope(reviewer, db, payload.target_type, payload.target_key)
+    source = db.get(MedicalReference, payload.reference_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Medical reference not found.")
+
+    link = db.scalar(
+        select(CatalogReference).where(
+            CatalogReference.target_type == payload.target_type,
+            CatalogReference.target_key == payload.target_key,
+            CatalogReference.reference_id == payload.reference_id,
+        ).with_for_update()
+    )
+    if link is not None and link.removed_at is None:
+        raise HTTPException(status_code=409, detail="This source is already attached.")
+    if link is None:
+        link = CatalogReference(
+            target_type=payload.target_type,
+            target_key=payload.target_key,
+            reference_id=payload.reference_id,
+            linked_by=reviewer.id,
+            link_reason=payload.reason,
+        )
+        db.add(link)
+        db.flush()
+    else:
+        link.linked_by = reviewer.id
+        link.link_reason = payload.reason
+        link.created_at = datetime.now(timezone.utc)
+        link.removed_by = None
+        link.removed_at = None
+        link.removal_reason = None
+    db.add(CatalogReferenceEvent(
+        catalog_reference_id=link.id,
+        reference_id=source.id,
+        target_type=payload.target_type,
+        target_key=payload.target_key,
+        event_type="linked",
+        reason=payload.reason,
+        actor_id=reviewer.id,
+    ))
+    db.commit()
+    return {"id": str(link.id), "reference_id": str(source.id), "status": "linked"}
+
+
+@router.post("/review/queue/entry/references/{link_id}/remove")
+def remove_pending_catalog_reference(
+    link_id: UUID,
+    payload: CatalogReferenceRemovalRequest,
+    reviewer: CatalogReviewer,
+    db: DbSession,
+) -> dict:
+    """Soft-remove a source link and append a non-destructive audit event."""
+    link = db.scalar(
+        select(CatalogReference).where(CatalogReference.id == link_id).with_for_update()
+    )
+    if link is None or link.removed_at is not None:
+        raise HTTPException(status_code=404, detail="Active catalog source link not found.")
+    _pending_target_for_reference(db, link.target_type, link.target_key)
+    _require_item_scope(reviewer, db, link.target_type, link.target_key)
+    link.removed_by = reviewer.id
+    link.removed_at = datetime.now(timezone.utc)
+    link.removal_reason = payload.reason
+    db.add(CatalogReferenceEvent(
+        catalog_reference_id=link.id,
+        reference_id=link.reference_id,
+        target_type=link.target_type,
+        target_key=link.target_key,
+        event_type="removed",
+        reason=payload.reason,
+        actor_id=reviewer.id,
+    ))
+    db.commit()
+    return {"id": str(link.id), "status": "removed"}
 
 
 @router.get(
