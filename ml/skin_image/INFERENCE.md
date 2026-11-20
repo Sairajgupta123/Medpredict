@@ -30,3 +30,18 @@ and confidence thresholds must be validated on representative data before any us
 
 The returned score is not a disease probability or medical certainty. All results are research-only
 and must not replace a clinician's assessment. This helper is not wired into the FastAPI application.
+
+## Checkpoint integrity
+
+Before constructing a model for inference, call
+`ml.skin_image.inference.validate_skin_checkpoint(checkpoint, metadata)` with the
+loaded checkpoint dictionary and the parsed `model_metadata.json`. The validator checks
+the ordered class list and exact index mapping, supported architecture/variant, image size,
+normalization policy, experiment-configuration SHA-256 digest, calibration values, and the
+validation-only threshold-selection marker. It also rejects metadata that claims clinical
+validation or a non-research intended use. Use the returned settings rather than separately
+retyping class names, image size, temperature, or confidence threshold.
+
+This is an integrity and consistency check, not a signature or proof that an artifact is
+trustworthy. Only load checkpoint files from controlled, trusted storage; do not load
+user-uploaded model files.
