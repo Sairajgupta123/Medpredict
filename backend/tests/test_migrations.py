@@ -29,6 +29,7 @@ def test_migration_files_exist() -> None:
         "0011_catalog_audit_constraints.py",
         "0012_reviewer_scopes.py",
         "0013_catalog_references.py",
+        "0014_medical_reference_audit.py",
     ):
         assert (versions / name).is_file()
 
@@ -40,8 +41,8 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0013_catalog_references"
-    assert heads[0].down_revision == "0012_reviewer_scopes"
+    assert heads[0].revision == "0014_medical_reference_audit"
+    assert heads[0].down_revision == "0013_catalog_references"
 
     merge = script.get_revision("0005_merge_knowledge_consent")
     assert merge is not None
@@ -85,6 +86,7 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0011_catalog_audit_constraints",
         "0012_reviewer_scopes",
         "0013_catalog_references",
+        "0014_medical_reference_audit",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
