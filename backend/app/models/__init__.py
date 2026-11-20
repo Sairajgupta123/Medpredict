@@ -9,6 +9,7 @@ from app.models.feedback import PredictionFeedback
 from app.models.knowledge import (
     CareRecommendation,
     MedicalReference,
+    MedicalReferenceEvent,
     RecommendationReference,
 )
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
@@ -31,6 +32,7 @@ __all__ = [
     "Disease",
     "DiseaseSymptom",
     "MedicalReference",
+    "MedicalReferenceEvent",
     "PasswordResetToken",
     "Prediction",
     "PredictionConsentEvent",
