@@ -36,12 +36,13 @@ uvicorn app.main:app --reload
 
 Before using database-backed endpoints, create a PostgreSQL database and user matching
 the `DATABASE_URL` in `.env`, or update that URL to match your local PostgreSQL setup.
-The current health endpoint does not require a live database connection.
+The liveness endpoint does not require a live database connection. The readiness endpoint checks PostgreSQL connectivity.
 
 The API is available at:
 
 - API root: http://127.0.0.1:8000/
-- Health check: http://127.0.0.1:8000/api/v1/health
+- Liveness check: http://127.0.0.1:8000/api/v1/health
+- Database readiness: http://127.0.0.1:8000/api/v1/health/ready
 - Interactive Swagger documentation: http://127.0.0.1:8000/docs
 
 ## Run tests
@@ -78,14 +79,34 @@ represented as a fake server-side action; revocation/refresh-token design is a s
 - Database URL is loaded from the `DATABASE_URL` environment variable.
 - Initial ORM models are registered in `app.models` for users, diseases, symptoms, predictions, skin-image metadata, ranked results, and feedback.
 - The schema overview and privacy/safety decisions are documented in `../docs/architecture/database-schema.md`.
-- Alembic is configured in `alembic.ini` and `alembic/env.py`; the first reviewed migration still needs to be generated and applied against a configured PostgreSQL database.
+- Alembic is configured in `alembic.ini` and `alembic/env.py`; the checked-in baseline is `alembic/versions/0001_initial_schema.py`.
 
 The engine uses `pool_pre_ping` and does not establish a network connection merely by being imported.
 Each API request that uses `get_db` receives its own session, which is closed after the request.
 
+### Apply the initial migration
+
+After PostgreSQL is installed, the database and credentials in `.env` are configured, and you have
+confirmed that the target database is the intended development database, run from `backend/`:
+
+```bash
+alembic upgrade head
+```
+
+To inspect the current migration revision:
+
+```bash
+alembic current
+```
+
+Do not run migrations against a production database from a development workstation. Review every
+future migration before applying it, and take backups before production schema changes.
+
+The liveness endpoint `/api/v1/health` only reports that the API process responds. The readiness
+endpoint `/api/v1/health/ready` executes `SELECT 1` and returns HTTP 503 if the database is unavailable.
+
 ## Current scope and safety
 
-This milestone adds an initial ORM schema draft only. No migration has been applied, no patient data
-is being stored, and email verification, password reset, refresh-token rotation, token revocation, and disease prediction are not implemented.
+The initial migration file is committed but has not been applied to a live PostgreSQL database in this workspace. No patient data is being stored, and email verification, password reset, refresh-token rotation, token revocation, and disease prediction are not implemented.
 Do not place real patient data in development or test databases. Production secrets and database
 credentials must be stored in the deployment environment, never committed to Git.
