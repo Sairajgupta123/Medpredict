@@ -20,10 +20,12 @@ NEGATION_CUES = {
     "no", "not", "without", "denies", "denied", "deny",
     "do not have", "does not have", "did not have", "don't have",
     "doesn't have", "didn't have", "dont have", "doesnt have",
+    "do not have a", "does not have a", "did not have a",
+    "dont have a", "doesnt have a", "didnt have a",
 }
 HISTORICAL_CUES = {
     "previously", "earlier", "last week", "last month", "yesterday",
-    "used to have", "had",
+    "used to have", "had", "had a",
 }
 UNCERTAINTY_CUES = {
     "maybe", "might have", "may have", "possibly", "perhaps",
