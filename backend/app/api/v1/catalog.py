@@ -696,6 +696,51 @@ def _pending_target_for_reference(db, target_type: str, target_key: str):
     raise HTTPException(status_code=404, detail="Pending catalog entry not found.")
 
 
+@router.get("/review/references")
+def list_reviewable_medical_references(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+    q: str | None = Query(default=None, min_length=1, max_length=120),
+    review_status: str | None = Query(
+        default=None, pattern="^(draft|in_review|approved|retired)$"
+    ),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[dict]:
+    """Search source metadata available to authorized catalog reviewers."""
+    statement = select(MedicalReference)
+    if q:
+        pattern = f"%{q.strip()}%"
+        statement = statement.where(
+            or_(
+                MedicalReference.title.ilike(pattern),
+                MedicalReference.publisher.ilike(pattern),
+                MedicalReference.evidence_type.ilike(pattern),
+            )
+        )
+    if review_status:
+        statement = statement.where(MedicalReference.review_status == review_status)
+    rows = db.scalars(
+        statement.order_by(MedicalReference.title.asc()).limit(limit)
+    ).all()
+    return [
+        {
+            "id": str(source.id),
+            "title": source.title,
+            "publisher": source.publisher,
+            "url": source.url,
+            "evidence_type": source.evidence_type,
+            "version": source.version,
+            "published_on": source.published_on,
+            "accessed_on": source.accessed_on,
+            "review_status": source.review_status,
+            "reviewed_by": source.reviewed_by,
+            "reviewed_at": source.reviewed_at,
+            "next_review_due": source.next_review_due,
+        }
+        for source in rows
+    ]
+
+
 @router.get("/review/queue/entry/references")
 def list_pending_catalog_references(
     reviewer: CatalogReviewer,
