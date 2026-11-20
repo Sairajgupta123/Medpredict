@@ -1,9 +1,9 @@
 """Response schemas for reviewed medical knowledge."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class MedicalReferenceRead(BaseModel):
@@ -40,3 +40,55 @@ class RecommendationListResponse(BaseModel):
     total: int = Field(ge=0)
     disease_code: str
     disclaimer: str
+
+
+class CatalogReferenceLinkRequest(BaseModel):
+    """Request to link an existing medical source to a catalog entry."""
+
+    target_type: str = Field(pattern="^(disease|symptom|disease_symptom)$")
+    target_key: str = Field(min_length=1, max_length=200)
+    reference_id: UUID
+    reason: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("reason must contain at least 8 non-whitespace characters")
+        return cleaned
+
+
+class CatalogReferenceRemovalRequest(BaseModel):
+    """Reason required to remove a catalog source link."""
+
+    reason: str = Field(min_length=8, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 8:
+            raise ValueError("reason must contain at least 8 non-whitespace characters")
+        return cleaned
+
+
+class CatalogReferenceRead(BaseModel):
+    """Source metadata and provenance for one catalog link."""
+
+    id: UUID
+    reference_id: UUID
+    title: str
+    publisher: str
+    url: HttpUrl
+    evidence_type: str
+    version: str
+    published_on: date | None
+    accessed_on: date
+    review_status: str
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    next_review_due: date | None
+    link_reason: str
+    linked_by: UUID
+    linked_at: datetime
