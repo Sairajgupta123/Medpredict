@@ -31,6 +31,8 @@ erDiagram
     DISEASES ||--o{ CARE_RECOMMENDATIONS : contextualizes
     CARE_RECOMMENDATIONS ||--o{ RECOMMENDATION_REFERENCES : cites
     MEDICAL_REFERENCES ||--o{ RECOMMENDATION_REFERENCES : supports
+    MEDICAL_REFERENCES ||--o{ CATALOG_REFERENCES : linked_source
+    CATALOG_REFERENCES ||--o{ CATALOG_REFERENCE_EVENTS : audited_by
 ```
 
 ## Tables
@@ -49,6 +51,8 @@ erDiagram
 | `medical_references` | Versioned source provenance | publisher, URL, evidence type, version, review status, reviewer |
 | `care_recommendations` | General-care information | disease, locale, category, urgency, version, approval and validity |
 | `recommendation_references` | Recommendation-to-source links | recommendation ID, reference ID, reviewer note |
+| `catalog_references` | Current source links for catalog entries | target type/key, reference ID, linking actor/reason, soft-removal metadata |
+| `catalog_reference_events` | Immutable catalog source-link history | link, source, target, linked/removed action, actor, reason, timestamp |
 | `catalog_reviewer_scopes` | Current reviewer access grants | reviewer, catalog type/key, grant and revocation metadata |
 | `catalog_reviewer_scope_events` | Immutable reviewer-scope audit | grant/revoke event, reviewer, operator, scope, reason, timestamp |
 
@@ -96,6 +100,23 @@ capture a grant event before persisting health text.
 - Draft, in-review, retired and inactive symptoms are excluded from public search and pagination counts.
 - No research taxonomy entries are automatically copied into the reviewed database catalog.
 - A qualified reviewer must independently verify terminology, definition, scope and suitability before approving a record. No reviewer UI or clinical approval is claimed.
+
+### Catalog source-reference governance
+
+- Catalog source links use the existing versioned `medical_references` registry; they do not
+  create a second source catalogue.
+- A link identifies a disease, symptom, or disease-symptom relation by stable target type/key
+  and points to an existing medical-reference version.
+- Link creation and removal require an active reviewer scope and a reason of at least eight
+  non-whitespace characters.
+- Link removal is soft removal. Re-linking a previously removed source reactivates the
+  association while retaining prior immutable link/remove events.
+- Source records are created by administrators and always start in `draft`. Attachment does
+  not change source review state.
+- Inspection displays publisher, URL, evidence type, version, publication/access dates, source
+  review state, review due date, and link reason.
+- Source attachment is provenance metadata, not clinical proof. The public knowledge endpoint
+  continues to require an approved, current source independently of catalog review status.
 
 ### Reviewer scope governance
 
@@ -145,9 +166,10 @@ threat-model and operational decisions before use.
 - `backend/app/models/feedback.py`
 - `backend/app/models/knowledge.py`
 - `backend/app/models/reviewer_scope.py`
+- `backend/app/models/catalog_reference.py`
 - `backend/app/models/__init__.py`
 
-Alembic migrations through `0012_reviewer_scopes.py` extend the initial schema, including
-catalog approval governance, reviewer roles, audit history, and scoped reviewer access. They are
+Alembic migrations through `0013_catalog_references.py` extend the initial schema, including
+catalog approval governance, reviewer roles, scoped reviewer access, and audited catalog source links. They are
 committed to the development branch and validated through the automated PostgreSQL test workflow;
 they have not been applied to a production database.
