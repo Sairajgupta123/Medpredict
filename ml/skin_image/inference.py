@@ -32,12 +32,22 @@ def predict_skin_image(
         or len(set(class_names)) != len(class_names)
     ):
         raise ValueError("class_names must contain at least two unique labels, all non-empty")
-    if not np.isfinite(temperature) or temperature <= 0:
-        raise ValueError("temperature must be positive and finite")
-    if not 0 <= minimum_confidence <= 1:
-        raise ValueError("minimum_confidence must be between 0 and 1")
-    if image_size < 32:
-        raise ValueError("image_size must be at least 32 pixels")
+    if (
+        isinstance(temperature, bool)
+        or not isinstance(temperature, (int, float, np.integer, np.floating))
+        or not np.isfinite(temperature)
+        or temperature <= 0
+    ):
+        raise ValueError("temperature must be a positive finite number")
+    if (
+        isinstance(minimum_confidence, bool)
+        or not isinstance(minimum_confidence, (int, float, np.integer, np.floating))
+        or not np.isfinite(minimum_confidence)
+        or not 0 <= minimum_confidence <= 1
+    ):
+        raise ValueError("minimum_confidence must be a finite number between 0 and 1")
+    if isinstance(image_size, bool) or not isinstance(image_size, int) or image_size < 32:
+        raise ValueError("image_size must be an integer of at least 32 pixels")
 
     quality = inspect_image_quality(image, policy=quality_policy)
     if not quality["accepted_by_quality_checks"]:
