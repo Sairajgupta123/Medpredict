@@ -40,3 +40,16 @@ def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_catalog_reviewer(user: CurrentUser) -> User:
+    """Allow only explicitly provisioned reviewers and admins to review catalog data."""
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Catalog reviewer permission required.",
+        )
+    return user
+
+
+CatalogReviewer = Annotated[User, Depends(require_catalog_reviewer)]
