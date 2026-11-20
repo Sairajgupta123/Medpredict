@@ -22,12 +22,30 @@ class Disease(Base):
     """A condition supported by the curated prediction catalog."""
 
     __tablename__ = "diseases"
+    __table_args__ = (
+        CheckConstraint(
+            "review_status IN ('draft', 'in_review', 'approved', 'retired')",
+            name="ck_diseases_review_status",
+        ),
+        CheckConstraint(
+            "review_status != 'approved' OR "
+            "(reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_diseases_approval_audit",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    review_status: Mapped[str] = mapped_column(
+        String(20), default="draft", server_default="draft", index=True
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
