@@ -1,7 +1,7 @@
 # MediPredict initial database schema
 
 **Status:** Initial ORM schema drafted on the `develop` branch. This document describes the
-first persistence layer; it is not a clinical data standard or a claim of production readiness.
+persistence design; it is not a clinical data standard or a claim of production readiness.
 
 ## Design goals
 
@@ -10,8 +10,8 @@ first persistence layer; it is not a clinical data standard or a claim of produc
 - Allow guest predictions while supporting an optional registered account.
 - Keep uploaded image bytes outside PostgreSQL; store only a private object-storage key and
   verification metadata in the database.
-- Store symptom input text only when the user has explicitly consented to history storage.
-  The API/service layer must enforce this rule; a database boolean alone is not consent.
+- Do not store raw symptom text by default. Persist it only after explicit, purpose-specific
+  history-storage consent has been captured.
 - Preserve model version and disclaimer version so later reviews can identify the system version
   that produced a result.
 - Treat prediction output as decision support, never as a confirmed diagnosis.
@@ -22,6 +22,7 @@ first persistence layer; it is not a clinical data standard or a claim of produc
 erDiagram
     USERS ||--o{ PREDICTIONS : owns
     PREDICTIONS ||--o{ PREDICTION_RESULTS : produces
+    PREDICTIONS ||--o{ PREDICTION_CONSENT_EVENTS : records
     DISEASES ||--o{ PREDICTION_RESULTS : candidate
     PREDICTIONS ||--o| SKIN_IMAGE_ANALYSES : describes
     PREDICTIONS ||--o{ PREDICTION_FEEDBACK : receives
@@ -32,15 +33,16 @@ erDiagram
     MEDICAL_REFERENCES ||--o{ RECOMMENDATION_REFERENCES : supports
 ```
 
-## Tables in the first schema
+## Tables
 
 | Table | Purpose | Important fields |
 |---|---|---|
 | `users` | Registered accounts | UUID, unique email, password hash, display name, timestamps |
 | `diseases` | Curated supported-condition catalog | stable code, name, description, active flag |
-| `symptoms` | Normalized symptom catalog | stable code, unique name, active flag, review status, reviewer and timestamp |
+| `symptoms` | Normalized symptom catalog | stable code, name, review status, reviewer and timestamp |
 | `disease_symptoms` | Many-to-many catalog mapping | disease ID, symptom ID, relevance weight |
 | `predictions` | One analysis request and lifecycle | optional user, modality, status, consent flag, model/disclaimer versions |
+| `prediction_consent_events` | Consent decision audit | prediction, purpose, granted/revoked action, policy version, capture timestamp |
 | `prediction_results` | Ranked candidate conditions | prediction, disease, rank, probability field, explanation |
 | `skin_image_analyses` | Metadata for image analysis | private object key, MIME type, SHA-256, class, confidence, quality/review flags |
 | `prediction_feedback` | Feedback about usefulness | prediction, helpful flag, comment, review status |
@@ -50,23 +52,30 @@ erDiagram
 
 ## Key rules
 
-### Prediction lifecycle
+### Prediction lifecycle and consent
 
 - `modality` is restricted to `text`, `skin_image`, or `combined`.
 - `status` is restricted to `pending`, `completed`, `failed`, or `review_required`.
-- A guest request may have a null `user_id`; account deletion should not erase aggregate monitoring evidence by accident.
+- A guest request may have a null `user_id`; account deletion and guest-history deletion need explicit service workflows.
 - `combined` is a storage capability only. It does not imply clinically validated multimodal fusion.
-- Ranked result probabilities are constrained to the inclusive range 0–1. Their interpretation and calibration must be validated by the ML evaluation pipeline.
+- Raw `input_text` must be null unless `input_storage_consent=true`; a database check constraint enforces this invariant.
+- The consent-event table records the purpose (`prediction_history`), action (`granted` or `revoked`), policy version and timestamp. It is an audit record, not a substitute for an explicit UI action.
+- A service must verify a matching grant event before writing health text or retaining history. A boolean alone is never proof of consent.
+- Revocation must stop future storage and trigger deletion of retained input text and associated user-visible history according to the approved deletion policy. Consent-event handling must not silently rewrite the prior decision.
+- History must be off by default. The user must be able to use symptom analysis without creating an account or saving a history record.
+- Do not store raw symptom text, uploaded image bytes, or user-entered free text in application logs, analytics, traces, or error reports.
+- Before history APIs are enabled, define and enforce a retention period, scheduled purge, user export/deletion flow, backup expiry, and guest-session ownership mechanism. These workflows are not yet implemented.
+- A deletion request must remove linked prediction results, feedback, consent events and private image objects as applicable; foreign-key cascades alone cannot delete external object-storage files or backups.
 
 ### Symptom catalog publication
 
 - The packaged `/symptoms/catalog` taxonomy is research vocabulary and remains explicitly unvalidated.
 - The database-backed `/catalog/symptoms` endpoint is a separate curated publication channel.
 - A database symptom is public only when `is_active=true` and `review_status='approved'`.
-- Approval requires both a non-empty reviewer identifier and a review timestamp; the database check constraint rejects incomplete approval metadata.
+- Approval requires both a non-empty reviewer identifier and a review timestamp.
 - Draft, in-review, retired and inactive symptoms are excluded from public search and pagination counts.
 - No research taxonomy entries are automatically copied into the reviewed database catalog.
-- A qualified reviewer must independently verify terminology, definition, scope and suitability before approving a record. This project does not currently provide a reviewer UI or claim that any symptom terms have received real clinical approval.
+- A qualified reviewer must independently verify terminology, definition, scope and suitability before approving a record. No reviewer UI or clinical approval is claimed.
 
 ### Skin-image privacy and quality
 
@@ -79,7 +88,7 @@ erDiagram
 ### Account security
 
 - `password_hash` must contain a modern password hash (for example Argon2id), never a plaintext or reversible password.
-- Authentication, email verification, rate limiting, and account recovery are separate application-layer work and are not implemented by these models.
+- Authentication, email verification, rate limiting, and account recovery are separate application-layer work.
 - Do not log passwords, raw health text, image object keys, or secrets.
 
 ### Medical safety and governance
@@ -91,13 +100,11 @@ erDiagram
 - Draft and in-review material is not exposed by the public knowledge endpoint. The endpoint returns general education only, not diagnosis or treatment plans.
 - Feedback is a usefulness signal, not proof of a diagnosis or clinical outcome.
 
-## Deliberately deferred tables
+## Deliberately deferred
 
-The initial ORM pass now includes medical references and care recommendations with provenance links.
-Generated reports, chat sessions/messages, audit events, consent receipts, model registry/evaluation
-runs, and admin roles remain deferred.
-These need their own retention, access-control, provenance, and threat-model decisions before schema
-implementation.
+Generated reports, chat sessions/messages, deletion/export APIs, audit events beyond consent decisions,
+model registry/evaluation runs, admin roles, retention jobs and reviewer workflows remain deferred.
+They need their own access-control, provenance, threat-model and operational decisions before use.
 
 ## ORM source
 
@@ -108,7 +115,7 @@ implementation.
 - `backend/app/models/knowledge.py`
 - `backend/app/models/__init__.py`
 
-Alembic migrations `0002_reviewed_medical_knowledge.py` and
-`0003_reviewed_symptom_catalog.py` add provenance-aware knowledge tables and symptom approval
-metadata after the initial schema. Migrations are committed but have not been applied to a live
-PostgreSQL database.
+Alembic migrations `0002_reviewed_medical_knowledge.py`,
+`0003_reviewed_symptom_catalog.py`, and `0004_prediction_history_consent.py`
+extend the initial schema. They are committed to the development branch and have only been
+validated through the automated PostgreSQL test workflow, not applied to a production database.
