@@ -3,6 +3,12 @@
 No health dataset is bundled with this repository. Do not download or commit patient-level data
 until its source, license, permitted use, privacy constraints and suitability have been reviewed.
 
+## Candidate comparison
+
+The current research shortlist and the limitations of each candidate are documented in
+[`candidate_assessment.md`](candidate_assessment.md). A source that is useful for an educational
+baseline is not automatically suitable for patient-facing predictions.
+
 ## Intake checklist
 
 Before accepting a dataset, record:
@@ -31,6 +37,19 @@ Never place names, phone numbers, addresses, email addresses, medical record num
 direct identifiers in `symptom_text` or `group_id`. A pseudonymous group key is still sensitive
 and must not be committed or logged. Keep datasets outside version control in approved, access-
 controlled storage.
+
+## Run the local audit
+
+Install `ml/requirements.txt`, then run from the repository root:
+
+```bash
+python -m ml.datasets.audit_csv --data path/to/reviewed_dataset.csv
+```
+
+The audit reports schema, row counts, missingness, exact and normalized duplicate rates, label
+distribution, group counts, and text-length summaries. It does not print symptom text or group IDs.
+The tool does not establish dataset provenance, licensing, clinical validity, or absence of privacy
+risks; those require separate review.
 
 ## Evaluation readiness
 
