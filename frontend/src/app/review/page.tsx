@@ -7,6 +7,7 @@ import {
   CatalogReviewQueueItem,
   getCatalogReviewHistory,
   getCatalogReviewQueue,
+  getReviewerWorkload,
   getSessionUser,
   SESSION_COOKIE,
 } from "@/lib/auth-proxy";
@@ -89,12 +90,17 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
 
-  const [{ items: queueItems, error }, { items: history, error: historyError }, params] =
-    await Promise.all([
-      getCatalogReviewQueue(),
-      getCatalogReviewHistory(),
-      searchParams,
-    ]);
+  const [
+    { items: queueItems, error },
+    { items: history, error: historyError },
+    { data: workload, error: workloadError },
+    params,
+  ] = await Promise.all([
+    getCatalogReviewQueue(),
+    getCatalogReviewHistory(),
+    getReviewerWorkload(),
+    searchParams,
+  ]);
 
   const query = (params.q ?? "").trim().slice(0, 120);
   const selectedType = ["disease", "symptom", "disease_symptom"].includes(params.type ?? "")
@@ -131,6 +137,51 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         {params.error === "save" && <div className="review-alert" role="alert">The review decision could not be saved. Please refresh and try again.</div>}
         {params.error === "conflict" && <div className="review-alert" role="alert">This entry was changed by another reviewer after you opened it. The queue has been refreshed; please review the latest status before deciding.</div>}
         {error && <div className="review-alert" role="alert">{error}</div>}
+
+        <section className="review-workload" aria-labelledby="review-workload-title">
+          <div className="review-section-heading">
+            <div>
+              <span className="eyebrow">ASSIGNED RESPONSIBILITIES</span>
+              <h2 id="review-workload-title">Your review workload</h2>
+            </div>
+            <span className="review-count">LIVE SUMMARY</span>
+          </div>
+          {workloadError ? (
+            <div className="review-alert" role="alert">{workloadError}</div>
+          ) : workload ? (
+            <>
+              <div className="review-workload-grid">
+                <article className="review-workload-card review-workload-primary">
+                  <span>Pending items</span>
+                  <strong>{workload.pending_total}</strong>
+                  <small>Across your active assignments</small>
+                </article>
+                <article className="review-workload-card">
+                  <span>Diseases</span>
+                  <strong>{workload.pending_by_type.disease}</strong>
+                  <small>Pending disease reviews</small>
+                </article>
+                <article className="review-workload-card">
+                  <span>Symptoms</span>
+                  <strong>{workload.pending_by_type.symptom}</strong>
+                  <small>Pending symptom reviews</small>
+                </article>
+                <article className="review-workload-card">
+                  <span>Relationships</span>
+                  <strong>{workload.pending_by_type.disease_symptom}</strong>
+                  <small>Pending disease–symptom links</small>
+                </article>
+              </div>
+              <div className="review-activity-strip">
+                <div><strong>{workload.activity.total_decisions}</strong><span>Total decisions recorded</span></div>
+                <div><strong>{workload.activity.approved_decisions}</strong><span>Approvals recorded</span></div>
+                <div><strong>{workload.activity.retired_decisions}</strong><span>Retirements recorded</span></div>
+                <div><strong>{workload.activity.decisions_last_7_days}</strong><span>Decisions in last 7 days</span></div>
+              </div>
+              <p className="review-workload-note">Workload counts include only items in your active review scope. Activity figures reflect decisions recorded under your account.</p>
+            </>
+          ) : null}
+        </section>
 
         <div className="review-section-heading">
           <div><span className="eyebrow">PENDING DECISIONS</span><h2>Catalog review queue</h2></div>
