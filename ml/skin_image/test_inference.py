@@ -75,3 +75,102 @@ def test_inference_rejects_invalid_numeric_parameters(
     kwargs[parameter] = value
     with pytest.raises(ValueError, match=message):
         predict_skin_image(NeverCalledModel(), image, **kwargs)
+
+def _valid_checkpoint_and_metadata():
+    import hashlib
+    import json
+
+    config = {
+        "architecture": "mobilenet_v3",
+        "variant": "large",
+        "image_size": 224,
+    }
+    digest = hashlib.sha256(
+        json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    checkpoint = {
+        "model_state_dict": {},
+        "class_names": ["class_a", "class_b"],
+        "class_to_index": {"class_a": 0, "class_b": 1},
+        "architecture": "mobilenet_v3",
+        "model_variant": "large",
+        "image_size": 224,
+        "normalization": "ImageNet mean/std",
+        "calibration_temperature": 1.2,
+        "abstention_threshold": 0.65,
+        "threshold_selection_partition": "validation_only",
+        "experiment_config": config,
+        "experiment_config_sha256": digest,
+        "manifest_sha256": "manifest-digest",
+    }
+    metadata = {
+        "architecture": "mobilenet_v3",
+        "variant": "large",
+        "class_names": ["class_a", "class_b"],
+        "class_to_index": {"class_a": 0, "class_b": 1},
+        "image_size": 224,
+        "normalization": {
+            "name": "ImageNet",
+            "mean": [0.485, 0.456, 0.406],
+            "std": [0.229, 0.224, 0.225],
+        },
+        "manifest_sha256": "manifest-digest",
+        "experiment_config_sha256": digest,
+        "calibration_temperature": 1.2,
+        "abstention_threshold": 0.65,
+        "threshold_selection_partition": "validation_only",
+        "clinical_validation": False,
+        "intended_use": "offline_research_only",
+    }
+    return checkpoint, metadata
+
+
+def test_checkpoint_metadata_validation_returns_inference_settings() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    result = validate_skin_checkpoint(checkpoint, metadata)
+    assert result == {
+        "class_names": ["class_a", "class_b"],
+        "architecture": "mobilenet_v3",
+        "variant": "large",
+        "image_size": 224,
+        "temperature": 1.2,
+        "minimum_confidence": 0.65,
+    }
+
+
+def test_checkpoint_validation_rejects_wrong_class_index_mapping() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint["class_to_index"] = {"class_a": 1, "class_b": 0}
+    with pytest.raises(ValueError, match="class mapping"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
+def test_checkpoint_validation_rejects_metadata_calibration_mismatch() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    metadata["abstention_threshold"] = 0.8
+    with pytest.raises(ValueError, match="abstention_threshold"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
+def test_checkpoint_validation_rejects_modified_experiment_config() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint["experiment_config"]["image_size"] = 256
+    with pytest.raises(ValueError, match="digest"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
+def test_checkpoint_validation_requires_validation_selected_threshold() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint["threshold_selection_partition"] = "test"
+    with pytest.raises(ValueError, match="validation data only"):
+        validate_skin_checkpoint(checkpoint, metadata)
