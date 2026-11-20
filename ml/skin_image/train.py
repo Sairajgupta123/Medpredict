@@ -104,6 +104,19 @@ def train_skin_model(
     if manifest["label"].eq("").any():
         raise ValueError("Training manifest contains blank labels")
 
+    # Enforce the same file-integrity and duplicate-content gate used during dataset intake.
+    # This remains a technical gate only; it does not approve licensing or clinical labels.
+    from ml.datasets.audit_skin_manifest import audit_skin_manifest
+
+    intake_report = audit_skin_manifest(manifest_path, image_root, inspect_images=True)
+    readiness = intake_report["training_readiness"]
+    if not readiness["ready_for_reviewer_signoff"]:
+        reasons = ", ".join(readiness["blocking_reasons"])
+        raise ValueError(
+            "Skin dataset failed technical intake checks; training is blocked: "
+            f"{reasons}"
+        )
+
     from ml.skin_image.splits import patient_grouped_split
 
     splits = patient_grouped_split(manifest, random_state=seed)
