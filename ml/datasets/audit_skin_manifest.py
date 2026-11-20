@@ -153,6 +153,10 @@ def audit_skin_manifest(
 
     # Training readiness is deliberately stricter than a successful file audit.
     blockers: list[str] = []
+    if frame.empty:
+        blockers.append("manifest_has_no_rows")
+    if report["class_count"] < 2:
+        blockers.append("at_least_two_classes_required")
     if "patient_id" not in frame.columns:
         blockers.append("patient_id_column_missing")
         patient_support: dict[str, int] = {}
