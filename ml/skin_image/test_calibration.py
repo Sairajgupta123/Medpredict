@@ -54,3 +54,8 @@ def test_calibration_metrics_reject_non_integer_bin_counts() -> None:
         calibration_metrics([[1.0, 0.0]], [0], bins=1.5)
     with pytest.raises(ValueError, match="positive integer"):
         calibration_metrics([[1.0, 0.0]], [0], bins=True)
+
+@pytest.mark.parametrize("temperature", [True, float("nan"), float("inf"), "hot"])
+def test_calibration_rejects_invalid_temperature_types(temperature: object) -> None:
+    with pytest.raises(ValueError, match="positive finite"):
+        multiclass_nll([[1.0, 0.0]], [0], temperature=temperature)
