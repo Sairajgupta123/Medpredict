@@ -67,12 +67,25 @@ password hash are not writable through this endpoint.
   this field as proof that an address has been verified.
 - `last_login_at`: updated after successful login.
 
+## Password reset foundation
+
+The backend now has a `password_reset_tokens` table and token lifecycle helpers. Tokens are
+created with a cryptographically random value, only a SHA-256 digest is stored, unused prior
+tokens are invalidated when a replacement is issued, and consumption is guarded by a conditional
+database update so a token can succeed only once. Tokens expire after 30 minutes by default.
+
+This is the persistence/service foundation only: public request/confirm endpoints and email
+delivery are not wired yet. Do not expose the raw token in API responses or logs. The future
+request endpoint must return the same generic response for known and unknown email addresses.
+The future confirmation endpoint must validate the token, update the password hash, and consume
+the token in one database transaction.
+
 ## Security boundaries and deferred work
 
 The current implementation does not yet include:
 
 - Email verification or verified-email enforcement
-- Password reset and recovery
+- Public password reset request/confirmation endpoints and email delivery
 - Refresh tokens, rotation, or token revocation
 - Server-side logout/session invalidation
 - Login/registration rate limiting and abuse detection
