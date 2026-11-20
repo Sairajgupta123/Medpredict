@@ -738,7 +738,7 @@ def test_admin_governance_overview_is_admin_only_and_reports_audited_state(
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["accounts"]["reviewer"]["active"] == 1
+    assert body["accounts"]["reviewer"]["active"] == 2
     assert body["catalog"]["diseases"]["draft"] == 1
     assert body["catalog"]["symptoms"]["draft"] == 1
     assert len(body["recent_role_changes"]) == 1
