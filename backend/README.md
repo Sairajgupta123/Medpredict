@@ -61,6 +61,7 @@ The API currently provides:
 - `POST /api/v1/auth/register` — register with email and password; returns a short-lived bearer token.
 - `POST /api/v1/auth/login` — authenticate using JSON email/password credentials.
 - `GET /api/v1/auth/me` — return the current account profile; requires an Authorization bearer token.
+- `PATCH /api/v1/auth/me` — update or clear the authenticated user's display name.
 
 Passwords are hashed using Argon2. Access tokens are signed JWTs with an issuer, token type,
 issued-at timestamp, and expiration. The access-token lifetime is configurable through
@@ -104,6 +105,10 @@ future migration before applying it, and take backups before production schema c
 
 The liveness endpoint `/api/v1/health` only reports that the API process responds. The readiness
 endpoint `/api/v1/health/ready` executes `SELECT 1` and returns HTTP 503 if the database is unavailable.
+
+## Profile management
+
+Only the signed-in user's display name is currently editable. Email changes, password changes, account deletion, and verified-email flows require additional security workflows and are not exposed as profile fields.
 
 ## Current scope and safety
 
