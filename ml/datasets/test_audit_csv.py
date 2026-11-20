@@ -84,3 +84,35 @@ def test_audit_rejects_missing_file(tmp_path) -> None:
 
     with pytest.raises(FileNotFoundError):
         audit_dataset(tmp_path / "missing.csv")
+
+
+def test_audit_detects_contact_patterns_without_echoing_values(tmp_path) -> None:
+    path = tmp_path / "contacts.csv"
+    pd.DataFrame(
+        {
+            "symptom_text": [
+                "Contact person@example.com",
+                "Call +1 555 123 4567",
+                "ordinary fever and cough",
+            ],
+            "condition_label": ["A", "B", "A"],
+        }
+    ).to_csv(path, index=False)
+
+    report = audit_dataset(path)
+    rendered = json.dumps(report)
+    assert report["symptom_text"]["possible_email_pattern_rows"] == 1
+    assert report["symptom_text"]["possible_phone_pattern_rows"] == 1
+    assert "person@example.com" not in rendered
+    assert "+1 555 123 4567" not in rendered
+
+
+def test_audit_rejects_header_only_csv(tmp_path) -> None:
+    path = tmp_path / "empty.csv"
+    pd.DataFrame(columns=["symptom_text", "condition_label"]).to_csv(
+        path, index=False
+    )
+    import pytest
+
+    with pytest.raises(ValueError, match="no data rows"):
+        audit_dataset(path)
