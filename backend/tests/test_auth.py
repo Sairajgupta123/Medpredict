@@ -106,6 +106,153 @@ def test_token_from_untrusted_issuer_is_rejected() -> None:
     assert decode_access_token(token) is None
 
 
+def test_password_reset_request_uses_generic_response_for_unknown_email(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    def unexpected_delivery(*args, **kwargs):
+        raise AssertionError("No email should be sent for an unknown account.")
+
+    monkeypatch.setattr(auth, "send_password_reset_email", unexpected_delivery)
+    response = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "nobody@example.com"},
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "message": (
+            "If an account exists for this email, password reset instructions "
+            "will be sent."
+        )
+    }
+
+
+def test_password_reset_request_sends_email_without_returning_token(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "recover@example.com", "password": "OldPassword123!"},
+    )
+    assert registration.status_code == 201
+
+    delivered = {}
+
+    def capture_delivery(recipient: str, raw_token: str) -> None:
+        delivered["recipient"] = recipient
+        delivered["token"] = raw_token
+
+    monkeypatch.setattr(auth, "send_password_reset_email", capture_delivery)
+    response = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "RECOVER@example.com"},
+    )
+
+    assert response.status_code == 202
+    assert delivered["recipient"] == "recover@example.com"
+    assert delivered["token"] not in response.text
+
+
+def test_password_reset_confirmation_changes_password_and_consumes_token(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "change-password@example.com", "password": "OldPassword123!"},
+    )
+    assert registration.status_code == 201
+
+    delivered = {}
+
+    def capture_delivery(recipient: str, raw_token: str) -> None:
+        delivered["token"] = raw_token
+
+    monkeypatch.setattr(auth, "send_password_reset_email", capture_delivery)
+    request = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "change-password@example.com"},
+    )
+    assert request.status_code == 202
+
+    confirmation = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": delivered["token"],
+            "new_password": "NewPassword456!",
+        },
+    )
+    assert confirmation.status_code == 200
+
+    old_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "change-password@example.com",
+            "password": "OldPassword123!",
+        },
+    )
+    new_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "change-password@example.com",
+            "password": "NewPassword456!",
+        },
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+    replay = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": delivered["token"],
+            "new_password": "AnotherPassword789!",
+        },
+    )
+    assert replay.status_code == 400
+
+
+def test_password_reset_confirmation_rejects_invalid_token(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": "x" * 40, "new_password": "NewPassword456!"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "The password reset link is invalid or has expired."
+    )
+
+
+def test_password_reset_delivery_failure_does_not_leak_account_existence(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "delivery-failure@example.com", "password": "OldPassword123!"},
+    )
+    assert registration.status_code == 201
+
+    def fail_delivery(*args, **kwargs):
+        raise RuntimeError("SMTP unavailable")
+
+    monkeypatch.setattr(auth, "send_password_reset_email", fail_delivery)
+    response = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "delivery-failure@example.com"},
+    )
+
+    assert response.status_code == 202
+    assert "token" not in response.text.lower()
+
+
 def test_register_login_and_read_profile(client: TestClient) -> None:
     registration = client.post(
         "/api/v1/auth/register",
