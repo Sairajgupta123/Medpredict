@@ -1255,8 +1255,8 @@ def test_pending_entry_inspection_returns_relationship_context_and_no_fake_evide
     assert body["entry"]["status"] == "in_review"
     assert body["entry"]["description"] == "Condition description."
     assert body["evidence"]["references"] == []
-    assert body["evidence"]["reference_support"] == "not_implemented"
-    assert "No source-reference records" in body["evidence"]["message"]
+    assert body["evidence"]["reference_support"] == "available"
+    assert "No source references are attached" in body["evidence"]["message"]
 
     link_detail = client.get(
         "/api/v1/catalog/review/queue/entry",
@@ -1494,9 +1494,10 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
     )
     assert denied.status_code == 403
 
+    admin_headers = _user_headers("admin")
     created = client.post(
         "/api/v1/admin/medical-references",
-        headers=_user_headers("admin"),
+        headers=admin_headers,
         json=payload,
     )
     assert created.status_code == 201
@@ -1505,7 +1506,7 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
 
     duplicate = client.post(
         "/api/v1/admin/medical-references",
-        headers=_user_headers("admin"),
+        headers=admin_headers,
         json=payload,
     )
     assert duplicate.status_code == 409
