@@ -1,11 +1,21 @@
 """Administrator-only operational governance overview."""
 
-from fastapi import APIRouter, Query
+from datetime import datetime, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.user import RoleProvisioningEvent, User
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+from app.schemas.admin import (
+    ReviewerScopeCreate,
+    ReviewerScopeEventRead,
+    ReviewerScopeRead,
+    ReviewerScopeRevoke,
+)
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
 
@@ -68,3 +78,184 @@ def read_governance_overview(
             for event in provisioning_events
         ],
     }
+
+def _scope_key_filter(scope_type: str, scope_key: str | None):
+    statement = select(CatalogReviewerScope).where(
+        CatalogReviewerScope.scope_type == scope_type
+    )
+    if scope_key is None:
+        return statement.where(CatalogReviewerScope.scope_key.is_(None))
+    return statement.where(CatalogReviewerScope.scope_key == scope_key)
+
+
+def _validate_scope_target(db: DbSession, scope_type: str, scope_key: str | None) -> None:
+    """Ensure exact assignments refer to existing catalog keys."""
+    if scope_key is None:
+        return
+    if scope_type == "disease":
+        exists = db.scalar(select(Disease.id).where(Disease.code == scope_key))
+    elif scope_type == "symptom":
+        exists = db.scalar(select(Symptom.id).where(Symptom.code == scope_key))
+    else:
+        parts = scope_key.split(":")
+        if len(parts) != 2 or not all(parts):
+            raise HTTPException(
+                status_code=422,
+                detail="Disease-symptom scopes must use DISEASE_CODE:SYMPTOM_CODE.",
+            )
+        disease_id = db.scalar(select(Disease.id).where(Disease.code == parts[0]))
+        symptom_id = db.scalar(select(Symptom.id).where(Symptom.code == parts[1]))
+        exists = disease_id and symptom_id
+    if not exists:
+        raise HTTPException(status_code=404, detail="The requested catalog scope was not found.")
+
+
+@router.get("/reviewer-scopes", response_model=list[ReviewerScopeRead])
+def list_reviewer_scopes(
+    administrator: Administrator,
+    db: DbSession,
+    include_revoked: bool = Query(default=True),
+) -> list[dict]:
+    """List current and historical reviewer scope grants for administrators."""
+    statement = (
+        select(CatalogReviewerScope, User.email)
+        .join(User, User.id == CatalogReviewerScope.reviewer_id)
+        .order_by(CatalogReviewerScope.granted_at.desc(), CatalogReviewerScope.id.desc())
+    )
+    if not include_revoked:
+        statement = statement.where(CatalogReviewerScope.revoked_at.is_(None))
+    rows = db.execute(statement).all()
+    return [
+        {
+            **ReviewerScopeRead.model_validate(scope).model_dump(),
+            "reviewer_email": email,
+        }
+        for scope, email in rows
+    ]
+
+
+@router.post("/reviewer-scopes", response_model=ReviewerScopeRead, status_code=201)
+def grant_reviewer_scope(
+    payload: ReviewerScopeCreate,
+    administrator: Administrator,
+    db: DbSession,
+) -> dict:
+    """Grant a reviewer an exact catalog item or whole catalog-type scope."""
+    target = db.get(User, payload.reviewer_id)
+    if target is None or not target.is_active or target.role != "reviewer":
+        raise HTTPException(
+            status_code=404,
+            detail="An active reviewer account is required for scope assignment.",
+        )
+    _validate_scope_target(db, payload.scope_type, payload.scope_key)
+
+    existing = db.scalar(
+        _scope_key_filter(payload.scope_type, payload.scope_key).where(
+            CatalogReviewerScope.reviewer_id == target.id
+        )
+    )
+    if existing is not None and existing.revoked_at is None:
+        raise HTTPException(status_code=409, detail="This reviewer scope is already active.")
+
+    if existing is None:
+        scope = CatalogReviewerScope(
+            reviewer_id=target.id,
+            scope_type=payload.scope_type,
+            scope_key=payload.scope_key,
+            granted_by=administrator.id,
+            grant_reason=payload.reason,
+        )
+        db.add(scope)
+        db.flush()
+    else:
+        scope = existing
+        scope.granted_by = administrator.id
+        scope.grant_reason = payload.reason
+        scope.granted_at = datetime.now(timezone.utc)
+        scope.revoked_by = None
+        scope.revoked_at = None
+        scope.revoke_reason = None
+
+    db.add(
+        CatalogReviewerScopeEvent(
+            scope_id=scope.id,
+            reviewer_id=target.id,
+            event_type="granted",
+            scope_type=payload.scope_type,
+            scope_key=payload.scope_key,
+            operator_id=administrator.id,
+            reason=payload.reason,
+        )
+    )
+    db.commit()
+    db.refresh(scope)
+    return {
+        **ReviewerScopeRead.model_validate(scope).model_dump(),
+        "reviewer_email": target.email,
+    }
+
+
+@router.post(
+    "/reviewer-scopes/{scope_id}/revoke",
+    response_model=ReviewerScopeRead,
+)
+def revoke_reviewer_scope(
+    scope_id: UUID,
+    payload: ReviewerScopeRevoke,
+    administrator: Administrator,
+    db: DbSession,
+) -> dict:
+    """Revoke an active scope and append an immutable audit event atomically."""
+    scope = db.scalar(
+        select(CatalogReviewerScope)
+        .where(CatalogReviewerScope.id == scope_id)
+        .with_for_update()
+    )
+    if scope is None:
+        raise HTTPException(status_code=404, detail="Reviewer scope not found.")
+    if scope.revoked_at is not None:
+        raise HTTPException(status_code=409, detail="This reviewer scope is already revoked.")
+
+    target = db.get(User, scope.reviewer_id)
+    scope.revoked_by = administrator.id
+    scope.revoked_at = datetime.now(timezone.utc)
+    scope.revoke_reason = payload.reason
+    db.add(
+        CatalogReviewerScopeEvent(
+            scope_id=scope.id,
+            reviewer_id=scope.reviewer_id,
+            event_type="revoked",
+            scope_type=scope.scope_type,
+            scope_key=scope.scope_key,
+            operator_id=administrator.id,
+            reason=payload.reason,
+        )
+    )
+    db.commit()
+    db.refresh(scope)
+    return {
+        **ReviewerScopeRead.model_validate(scope).model_dump(),
+        "reviewer_email": target.email if target else "",
+    }
+
+
+@router.get(
+    "/reviewer-scopes/history",
+    response_model=list[ReviewerScopeEventRead],
+)
+def list_reviewer_scope_history(
+    administrator: Administrator,
+    db: DbSession,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[ReviewerScopeEventRead]:
+    """Return append-only scope grant/revocation events to administrators."""
+    events = db.scalars(
+        select(CatalogReviewerScopeEvent)
+        .order_by(
+            CatalogReviewerScopeEvent.created_at.desc(),
+            CatalogReviewerScopeEvent.id.desc(),
+        )
+        .limit(limit)
+    ).all()
+    return [ReviewerScopeEventRead.model_validate(event) for event in events]
+
