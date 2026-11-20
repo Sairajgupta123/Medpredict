@@ -94,6 +94,10 @@ def test_taxonomy_rejects_alias_collision(tmp_path) -> None:
     path.write_text(
         json.dumps(
             {
+                "taxonomy_version": "1.2.3",
+                "status": "test_fixture",
+                "language": "en",
+                "normalization_policy": {},
                 "symptoms": [
                     {"id": "A", "label": "A", "category": "x", "aliases": ["fever"]},
                     {"id": "B", "label": "B", "category": "x", "aliases": ["FEVER!"]},
@@ -121,3 +125,45 @@ def test_scope_cues_cover_common_variations(text, expected_flag) -> None:
     assert result["matched_symptoms"] == []
     assert result["contextual_mentions"]
     assert result["contextual_mentions"][0]["context_flag"] == expected_flag
+
+
+def test_default_taxonomy_declares_semantic_version() -> None:
+    result = normalize_symptoms("fever")
+    assert result["taxonomy_version"] == "0.1.0"
+
+
+def test_taxonomy_rejects_invalid_version_metadata(tmp_path) -> None:
+    path = tmp_path / "bad_version.json"
+    path.write_text(
+        json.dumps(
+            {
+                "taxonomy_version": "v1",
+                "status": "test",
+                "language": "en",
+                "normalization_policy": {},
+                "symptoms": [
+                    {"id": "A", "label": "A", "category": "x", "aliases": ["alpha"]}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="semantic taxonomy_version"):
+        load_taxonomy(path)
+
+
+def test_taxonomy_rejects_missing_governance_metadata(tmp_path) -> None:
+    path = tmp_path / "missing_metadata.json"
+    path.write_text(
+        json.dumps(
+            {
+                "taxonomy_version": "1.0.0",
+                "symptoms": [
+                    {"id": "A", "label": "A", "category": "x", "aliases": ["alpha"]}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="governance status"):
+        load_taxonomy(path)
