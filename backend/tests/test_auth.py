@@ -146,3 +146,79 @@ def test_inactive_account_cannot_log_in(client: TestClient) -> None:
         json={"email": "inactive@example.com", "password": "StrongPass123!"},
     )
     assert response.status_code == 401
+
+
+def test_user_can_update_own_display_name(client: TestClient) -> None:
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "profile@example.com", "password": "StrongPass123!"},
+    )
+    token = registration.json()["access_token"]
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"display_name": "  MediPredict Student  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "MediPredict Student"
+
+
+def test_user_can_clear_display_name(client: TestClient) -> None:
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "clearname@example.com",
+            "password": "StrongPass123!",
+            "display_name": "Old Name",
+        },
+    )
+    token = registration.json()["access_token"]
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"display_name": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] is None
+
+
+def test_profile_update_requires_authentication(client: TestClient) -> None:
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "No Token"},
+    )
+    assert response.status_code == 401
+
+
+def test_profile_update_rejects_blank_name(client: TestClient) -> None:
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "blankname@example.com", "password": "StrongPass123!"},
+    )
+    token = registration.json()["access_token"]
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"display_name": "   "},
+    )
+    assert response.status_code == 422
+
+
+def test_profile_update_rejects_empty_payload(client: TestClient) -> None:
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "emptyprofile@example.com", "password": "StrongPass123!"},
+    )
+    token = registration.json()["access_token"]
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={},
+    )
+    assert response.status_code == 422
