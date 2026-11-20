@@ -33,6 +33,17 @@ def _validate_logits_and_targets(
     return scores, labels
 
 
+def _validate_temperature(temperature: float) -> float:
+    if (
+        isinstance(temperature, (bool, np.bool_))
+        or not isinstance(temperature, (int, float, np.integer, np.floating))
+        or not np.isfinite(temperature)
+        or temperature <= 0
+    ):
+        raise ValueError("temperature must be a positive finite number")
+    return float(temperature)
+
+
 def multiclass_nll(
     logits: list[list[float]] | np.ndarray,
     targets: list[int] | np.ndarray,
@@ -41,8 +52,7 @@ def multiclass_nll(
 ) -> float:
     """Compute multiclass negative log likelihood after temperature scaling."""
     scores, labels = _validate_logits_and_targets(logits, targets)
-    if not np.isfinite(temperature) or temperature <= 0:
-        raise ValueError("temperature must be a positive finite number")
+    temperature = _validate_temperature(temperature)
     scaled = scores / temperature
     return float(np.mean(logsumexp(scaled, axis=1) - scaled[np.arange(len(labels)), labels]))
 
@@ -88,8 +98,7 @@ def calibration_metrics(
     scores, labels = _validate_logits_and_targets(logits, targets)
     if isinstance(bins, bool) or not isinstance(bins, (int, np.integer)) or bins < 1:
         raise ValueError("bins must be a positive integer")
-    if not np.isfinite(temperature) or temperature <= 0:
-        raise ValueError("temperature must be a positive finite number")
+    temperature = _validate_temperature(temperature)
 
     probabilities = softmax(scores / temperature, axis=1)
     predictions = probabilities.argmax(axis=1)
