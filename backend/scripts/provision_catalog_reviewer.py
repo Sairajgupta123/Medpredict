@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.user import RoleProvisioningEvent, User
+from app.models.reviewer_scope import CatalogReviewerScope
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,6 +76,22 @@ def main() -> int:
         if user.role == args.role:
             print(f"Account already has role '{args.role}'; no change made.")
             return 0
+        if user.role == "reviewer" and args.role == "patient":
+            active_scope = db.scalar(
+                select(CatalogReviewerScope.id)
+                .where(
+                    CatalogReviewerScope.reviewer_id == user.id,
+                    CatalogReviewerScope.revoked_at.is_(None),
+                )
+                .limit(1)
+            )
+            if active_scope is not None:
+                print(
+                    "Revoke all active catalog scopes through the administrator workspace "
+                    "before demoting this reviewer account.",
+                    file=sys.stderr,
+                )
+                return 1
 
         previous_role = user.role
         print(f"Target account: {user.email}")
