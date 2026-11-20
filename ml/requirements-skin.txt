@@ -1,0 +1,4 @@
+# Keep the skin-image deep-learning stack separate from the lightweight ML requirements.
+# Select matching wheels for the local OS/CPU/CUDA environment using the official PyTorch selector.
+torch>=2.3,<3.0
+torchvision>=0.18,<1.0
