@@ -42,6 +42,8 @@ def _published_recommendation_filter(today: date):
             MedicalReference.review_status == "approved",
             MedicalReference.reviewed_by.is_not(None),
             MedicalReference.reviewed_at.is_not(None),
+            (MedicalReference.next_review_due.is_(None))
+            | (MedicalReference.next_review_due >= today),
         )
         .exists()
     )
@@ -54,6 +56,8 @@ def _published_recommendation_filter(today: date):
         | (CareRecommendation.valid_from <= today),
         (CareRecommendation.valid_until.is_(None))
         | (CareRecommendation.valid_until >= today),
+        (CareRecommendation.next_review_due.is_(None))
+        | (CareRecommendation.next_review_due >= today),
         approved_source,
     )
 
@@ -109,6 +113,10 @@ def list_disease_recommendations(
                 link.reference.review_status == "approved"
                 and link.reference.reviewed_by is not None
                 and link.reference.reviewed_at is not None
+                and (
+                    link.reference.next_review_due is None
+                    or link.reference.next_review_due >= date.today()
+                )
             )
         ]
         if not approved_sources:
