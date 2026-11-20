@@ -50,6 +50,9 @@ export default async function DashboardPage() {
                 {user.role === "reviewer" || user.role === "admin" ? (
                   <Link className="review-access-link" href="/review">Reviewer console ↗</Link>
                 ) : null}
+                {user.role === "admin" ? (
+                  <Link className="review-access-link" href="/admin">Admin governance ↗</Link>
+                ) : null}
                 <LogoutButton />
               </div>
             ) : (
