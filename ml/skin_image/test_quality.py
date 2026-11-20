@@ -46,3 +46,22 @@ def test_quality_policy_rejects_invalid_thresholds() -> None:
         ImageQualityPolicy(min_mean_luminance=200, max_mean_luminance=100)
     with pytest.raises(ValueError, match="positive"):
         ImageQualityPolicy(min_width=0)
+
+def test_quality_policy_rejects_non_finite_thresholds() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="finite"):
+        ImageQualityPolicy(min_mean_luminance=float("nan"))
+    with pytest.raises(ValueError, match="finite"):
+        ImageQualityPolicy(max_clipped_pixel_fraction=float("inf"))
+    with pytest.raises(ValueError, match="finite"):
+        ImageQualityPolicy(min_laplacian_variance=float("nan"))
+
+
+def test_quality_policy_requires_integer_dimensions() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="positive integers"):
+        ImageQualityPolicy(min_width=128.5)
+    with pytest.raises(ValueError, match="positive integers"):
+        ImageQualityPolicy(min_height=True)
