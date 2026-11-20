@@ -142,3 +142,30 @@ def test_audit_blocks_training_readiness_without_patient_groups(tmp_path) -> Non
     report = audit_skin_manifest(manifest, image_root)
     assert report["training_readiness"]["ready_for_reviewer_signoff"] is False
     assert "patient_id_column_missing" in report["training_readiness"]["blocking_reasons"]
+
+
+
+def test_audit_blocks_empty_manifest_and_single_class_dataset(tmp_path) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+
+    empty_manifest = tmp_path / "empty.csv"
+    pd.DataFrame(columns=["image_id", "image_path", "label", "patient_id"]).to_csv(
+        empty_manifest, index=False
+    )
+    empty_report = audit_skin_manifest(empty_manifest, image_root)
+    assert "manifest_has_no_rows" in empty_report["training_readiness"]["blocking_reasons"]
+    assert "at_least_two_classes_required" in empty_report["training_readiness"]["blocking_reasons"]
+
+    Image.new("RGB", (32, 32), color="orange").save(image_root / "only.png")
+    single_class_manifest = tmp_path / "single.csv"
+    pd.DataFrame(
+        {
+            "image_id": ["i1", "i2", "i3"],
+            "image_path": ["only.png", "only.png", "only.png"],
+            "label": ["A", "A", "A"],
+            "patient_id": ["p1", "p2", "p3"],
+        }
+    ).to_csv(single_class_manifest, index=False)
+    single_report = audit_skin_manifest(single_class_manifest, image_root)
+    assert "at_least_two_classes_required" in single_report["training_readiness"]["blocking_reasons"]
