@@ -177,5 +177,9 @@ seeded medical advice. A qualified reviewer must verify the source, wording, app
 validity period and approval metadata before content can be published. This initial module does not
 store medication instructions or dosage advice.
 
+The endpoint also requires the disease catalog entry itself to be active, explicitly approved,
+and backed by reviewer audit metadata. Draft, in-review, retired or unaudited disease entries
+cannot be used to retrieve public guidance.
+
 The endpoint is a source-backed education layer, not a diagnosis or treatment plan. Emergency
 information must be carefully reviewed and localized before any production use.
