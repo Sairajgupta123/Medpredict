@@ -110,6 +110,31 @@ def _validate_scope_target(db: DbSession, scope_type: str, scope_key: str | None
         raise HTTPException(status_code=404, detail="The requested catalog scope was not found.")
 
 
+@router.get("/reviewers")
+def list_eligible_reviewers(
+    administrator: Administrator,
+    db: DbSession,
+) -> list[dict]:
+    """List active, verified reviewer accounts for scoped assignment."""
+    reviewers = db.scalars(
+        select(User)
+        .where(
+            User.role == "reviewer",
+            User.is_active.is_(True),
+            User.email_verified.is_(True),
+        )
+        .order_by(User.email.asc())
+    ).all()
+    return [
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+        }
+        for user in reviewers
+    ]
+
+
 @router.get("/reviewer-scopes", response_model=list[ReviewerScopeRead])
 def list_reviewer_scopes(
     administrator: Administrator,
@@ -142,7 +167,12 @@ def grant_reviewer_scope(
 ) -> dict:
     """Grant a reviewer an exact catalog item or whole catalog-type scope."""
     target = db.get(User, payload.reviewer_id)
-    if target is None or not target.is_active or target.role != "reviewer":
+    if (
+        target is None
+        or not target.is_active
+        or not target.email_verified
+        or target.role != "reviewer"
+    ):
         raise HTTPException(
             status_code=404,
             detail="An active reviewer account is required for scope assignment.",
