@@ -1,13 +1,13 @@
 """Merge reviewed-knowledge and prediction-consent migration branches.
 
-Revision ID: 0005_merge_knowledge_and_consent_heads
+Revision ID: 0005_merge_knowledge_consent
 Revises: 0004_knowledge_review_due_dates, 0004_prediction_history_consent
 Create Date: 2026-11-20
 """
 
 from typing import Sequence, Union
 
-revision: str = "0005_merge_knowledge_and_consent_heads"
+revision: str = "0005_merge_knowledge_consent"
 down_revision: Union[str, tuple[str, str], None] = (
     "0004_knowledge_review_due_dates",
     "0004_prediction_history_consent",
