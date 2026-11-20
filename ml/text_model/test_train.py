@@ -1,4 +1,4 @@
-"""Unit tests for text dataset validation, splitting and evaluation helpers."""
+"""Tests for text dataset validation, splitting and evaluation helpers."""
 
 import pandas as pd
 import pytest
@@ -46,5 +46,44 @@ def test_group_split_rejects_missing_group_identifiers() -> None:
             "group_id": ["1", "", "3", "4"],
         }
     )
-    with pytest.raises(ValueError, match="blank values"):
+    with pytest.raises(ValueError, match="blanks"):
         split_dataset(frame, test_size=0.25, random_state=1)
+
+
+def test_duplicate_normalized_text_never_crosses_partitions() -> None:
+    frame = pd.DataFrame(
+        {
+            "symptom_text": [
+                "Fever and cough", " fever   and cough ",
+                "itchy rash", " itchy   rash ",
+                "headache", " headache ",
+                "joint pain", " joint  pain ",
+            ],
+            "condition_label": ["A", "A", "A", "A", "B", "B", "B", "B"],
+        }
+    )
+    with pytest.warns(RuntimeWarning, match="No group_id"):
+        train, test, method = split_dataset(frame, test_size=0.5, random_state=7)
+
+    assert method == "normalized_text_group_split_provisional"
+    normalize = lambda values: values.str.strip().str.lower().str.replace(
+        r"\\s+", " ", regex=True
+    )
+    assert set(normalize(train["symptom_text"])).isdisjoint(
+        set(normalize(test["symptom_text"]))
+    )
+
+
+def test_unique_text_uses_provisional_stratified_split() -> None:
+    frame = pd.DataFrame(
+        {
+            "symptom_text": [f"unique symptom {i}" for i in range(20)],
+            "condition_label": ["A"] * 10 + ["B"] * 10,
+        }
+    )
+    with pytest.warns(RuntimeWarning, match="No group_id"):
+        train, test, method = split_dataset(frame, test_size=0.2, random_state=42)
+
+    assert method == "stratified_row_split_provisional"
+    assert set(train["condition_label"]) == {"A", "B"}
+    assert set(test["condition_label"]) == {"A", "B"}
