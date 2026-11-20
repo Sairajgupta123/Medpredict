@@ -13,6 +13,7 @@ from app.schemas.catalog import (
     DiseaseSymptomItemRead,
     CatalogReviewRequest,
     CatalogReviewEventRead,
+    CatalogReviewQueueItemRead,
 )
 
 router = APIRouter(prefix="/catalog", tags=["Medical Catalog"])
@@ -225,6 +226,95 @@ def review_disease_symptom_link(
     result = _apply_review_decision(item, payload, reviewer, db, "disease_symptom", f"{disease_code}:{symptom_code}")
     db.commit()
     return result
+
+@router.get(
+    "/review/queue",
+    response_model=list[CatalogReviewQueueItemRead],
+)
+def list_catalog_review_queue(
+    reviewer: CatalogReviewer,
+    db: DbSession,
+    target_type: str | None = Query(
+        default=None, pattern="^(disease|symptom|disease_symptom)$"
+    ),
+    statuses: list[str] = Query(default=["draft", "in_review"], alias="status"),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[CatalogReviewQueueItemRead]:
+    """List pending catalog entries for authorized reviewers only."""
+    allowed_statuses = {"draft", "in_review", "approved", "retired"}
+    if not statuses or any(value not in allowed_statuses for value in statuses):
+        raise HTTPException(status_code=422, detail="Unsupported review status filter.")
+
+    queue: list[CatalogReviewQueueItemRead] = []
+    if target_type in (None, "disease"):
+        diseases = db.scalars(
+            select(Disease)
+            .where(Disease.review_status.in_(statuses))
+            .order_by(Disease.created_at.asc(), Disease.code.asc())
+            .limit(limit)
+        ).all()
+        queue.extend(
+            CatalogReviewQueueItemRead(
+                target_type="disease",
+                target_key=item.code,
+                name=item.name,
+                description=item.description,
+                status=item.review_status,
+                created_at=item.created_at,
+            )
+            for item in diseases
+        )
+
+    if target_type in (None, "symptom"):
+        symptoms = db.scalars(
+            select(Symptom)
+            .where(Symptom.review_status.in_(statuses))
+            .order_by(Symptom.created_at.asc(), Symptom.code.asc())
+            .limit(limit)
+        ).all()
+        queue.extend(
+            CatalogReviewQueueItemRead(
+                target_type="symptom",
+                target_key=item.code,
+                name=item.name,
+                description=item.description,
+                status=item.review_status,
+                created_at=item.created_at,
+            )
+            for item in symptoms
+        )
+
+    if target_type in (None, "disease_symptom"):
+        links = db.execute(
+            select(DiseaseSymptom, Disease, Symptom)
+            .join(Disease, Disease.id == DiseaseSymptom.disease_id)
+            .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+            .where(DiseaseSymptom.review_status.in_(statuses))
+            .order_by(Disease.code.asc(), Symptom.code.asc())
+            .limit(limit)
+        ).all()
+        queue.extend(
+            CatalogReviewQueueItemRead(
+                target_type="disease_symptom",
+                target_key=f"{disease.code}:{symptom.code}",
+                name=f"{disease.name} — {symptom.name}",
+                description=None,
+                status=link.review_status,
+                created_at=None,
+            )
+            for link, disease, symptom in links
+        )
+
+    queue.sort(
+        key=lambda item: (
+            item.created_at is None,
+            item.created_at.isoformat() if item.created_at else "",
+            item.target_type,
+            item.target_key,
+        )
+    )
+    return queue[:limit]
+
 
 @router.get(
     "/review/history",
