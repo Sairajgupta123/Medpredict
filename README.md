@@ -1,1 +1,45 @@
-# Medpredict
+# MediPredict
+
+**AI-Powered Disease Prediction and Healthcare Assistance System**
+
+MediPredict is an academic major project exploring two complementary AI-assisted analysis workflows in one web application:
+
+1. **Text-based symptom analysis** — users enter symptoms in text or through a guided symptom interface. A machine-learning pipeline estimates possible conditions from a defined and evaluated dataset.
+2. **Skin-image analysis** — users upload a skin image for classification among explicitly supported dataset classes using a separately trained and evaluated image model.
+
+Both workflows connect to a shared, curated health-information and care-guidance layer. The application is intended as an educational decision-support prototype, not a substitute for a qualified healthcare professional or a clinical diagnosis.
+
+## Project principles
+
+- Evidence-led recommendations; no fabricated cures or unsupported medication/dosage advice.
+- Clear model limitations and calibrated uncertainty; no unverified accuracy claims.
+- Separate text and image models, datasets, evaluation and versioning.
+- Privacy-conscious handling of account details and uploaded images.
+- Human clinical review is required before any real-world clinical use.
+
+## Planned architecture
+
+- `frontend/` — responsive web application.
+- `backend/` — API, authentication, validation and application services.
+- `ml/` — symptom model, skin-image model, preprocessing and evaluation.
+- `knowledge_base/` — curated condition, symptom, care-guidance and reference content.
+- `database/` — schema, migrations and seed data.
+- `docs/` — architecture, API, database, testing and project documentation.
+- `deployment/` — container and deployment configuration.
+- `scripts/` — development and maintenance utilities.
+
+The exact framework versions and interfaces will be documented as implementation is added.
+
+## Development workflow
+
+- `main` is reserved for stable, reviewed project milestones.
+- `develop` is the active integration branch.
+- Feature work should be small, reviewable and tested before integration.
+
+## Current status
+
+The repository foundation and detailed implementation are being developed incrementally. Features listed above are planned scope, not claims that they are already implemented.
+
+## Safety notice
+
+MediPredict is an academic prototype. Its outputs must not be used to self-diagnose, delay urgent care, or start, stop, or change treatment. Skin-image classification is limited to the classes and image conditions supported by the validated model. If symptoms are severe or urgent, seek immediate professional medical care.
