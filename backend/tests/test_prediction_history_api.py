@@ -62,6 +62,7 @@ def _prediction(user_id, *, modality="text", input_text=None) -> Prediction:
             input_storage_consent=input_text is not None,
         )
         db.add(item)
+        db.flush()
         if input_text is not None:
             db.add(
                 PredictionConsentEvent(
