@@ -110,9 +110,13 @@ Authorized review actions:
 - `PATCH /api/v1/catalog/review/symptoms/{symptom_code}`
 - `PATCH /api/v1/catalog/review/diseases/{disease_code}/symptoms/{symptom_code}`
 
-The request body contains one `status`: `draft`, `in_review`, `approved`, or
-`retired`. The API derives `reviewed_by` from the authenticated reviewer identity and
-sets `reviewed_at` on approval; clients cannot supply or impersonate these audit fields.
+The request body contains `expected_status`, the status observed when the reviewer
+opened the queue item, the desired `status` (`draft`, `in_review`, `approved`, or
+`retired`), and a reason. The API locks the catalog row during the decision and returns
+HTTP 409 if the current status no longer matches `expected_status`; the reviewer must
+refresh and reassess instead of overwriting another reviewer's newer decision. The API
+derives `reviewed_by` from the authenticated reviewer identity and sets `reviewed_at`
+on approval; clients cannot supply or impersonate these audit fields.
 Moving an item out of approved state clears its current approval metadata.
 
 Every review action must include a reason of 8–1,000 characters. The decision and its
