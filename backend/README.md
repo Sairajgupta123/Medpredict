@@ -130,10 +130,11 @@ credentials must be stored in the deployment environment, never committed to Git
 ## Reviewed medical knowledge API
 
 The public knowledge endpoint returns general-care information only when all publication gates pass:
-- The recommendation is marked active and approved.
+- The recommendation is marked active and approved, with a non-empty reviewer ID and review timestamp.
 - Its validity window includes the current date.
-- At least one linked medical reference is approved.
+- At least one linked medical reference is approved and has its own reviewer ID and review timestamp.
 - The requested locale matches the recommendation locale.
+- Database check constraints prevent approved records without review audit metadata and invalid validity windows.
 
 Endpoint:
 
