@@ -18,6 +18,9 @@ type NormalizeResult = {
   review_required: boolean;
   reported_context: ReportedContext;
   clinical_interpretation_performed: false;
+  model_inference_performed: false;
+  disease_prediction_performed: false;
+  research_only: true;
   disclaimer: string;
 };
 type SymptomCatalog = {
