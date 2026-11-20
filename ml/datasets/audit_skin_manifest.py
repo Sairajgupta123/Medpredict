@@ -184,6 +184,8 @@ def audit_skin_manifest(
         blockers.append("image_paths_missing")
     if frame["label"].eq("").any():
         blockers.append("labels_missing")
+    if report["content_duplicates"]["duplicate_content_groups"]:
+        blockers.append("duplicate_image_content_may_cause_data_leakage")
     if report["content_duplicates"]["duplicate_groups_with_conflicting_labels"]:
         blockers.append("duplicate_image_content_has_conflicting_labels")
     if not inspect_images:
