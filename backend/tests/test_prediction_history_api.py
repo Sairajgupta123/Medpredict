@@ -95,8 +95,8 @@ def test_history_requires_authentication(client: TestClient) -> None:
 def test_history_is_scoped_to_authenticated_user_and_hides_health_text(
     client: TestClient,
 ) -> None:
-    token_a, user_a = _register(client, "history-a@example.test")
-    _, user_b = _register(client, "history-b@example.test")
+    token_a, user_a = _register(client, "history-a@example.com")
+    _, user_b = _register(client, "history-b@example.com")
     own = _prediction(user_a.id, input_text="private symptom narrative")
     _prediction(user_b.id, input_text="another private narrative")
 
@@ -112,7 +112,7 @@ def test_history_is_scoped_to_authenticated_user_and_hides_health_text(
 
 
 def test_history_rejects_invalid_pagination(client: TestClient) -> None:
-    token, _ = _register(client, "history-page@example.test")
+    token, _ = _register(client, "history-page@example.com")
     response = client.get(
         "/api/v1/predictions/history?limit=0",
         headers=_headers(token),
@@ -121,7 +121,7 @@ def test_history_rejects_invalid_pagination(client: TestClient) -> None:
 
 
 def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
-    token, user = _register(client, "revoke@example.test")
+    token, user = _register(client, "revoke@example.com")
     item = _prediction(user.id, input_text="private symptom narrative")
     db = TestingSessionLocal()
     try:
@@ -173,8 +173,8 @@ def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
 
 
 def test_user_cannot_revoke_another_users_history(client: TestClient) -> None:
-    token, _ = _register(client, "not-owner@example.test")
-    _, owner = _register(client, "owner@example.test")
+    token, _ = _register(client, "not-owner@example.com")
+    _, owner = _register(client, "owner@example.com")
     item = _prediction(owner.id, input_text="private text")
 
     response = client.post(
@@ -185,7 +185,7 @@ def test_user_cannot_revoke_another_users_history(client: TestClient) -> None:
 
 
 def test_user_can_delete_own_text_history(client: TestClient) -> None:
-    token, user = _register(client, "delete-own@example.test")
+    token, user = _register(client, "delete-own@example.com")
     item = _prediction(user.id)
     response = client.delete(
         f"/api/v1/predictions/history/{item.id}",
@@ -200,8 +200,8 @@ def test_user_can_delete_own_text_history(client: TestClient) -> None:
 
 
 def test_user_cannot_delete_another_users_history(client: TestClient) -> None:
-    token, _ = _register(client, "delete-not-owner@example.test")
-    _, owner = _register(client, "delete-owner@example.test")
+    token, _ = _register(client, "delete-not-owner@example.com")
+    _, owner = _register(client, "delete-owner@example.com")
     item = _prediction(owner.id)
     response = client.delete(
         f"/api/v1/predictions/history/{item.id}",
@@ -213,7 +213,7 @@ def test_user_cannot_delete_another_users_history(client: TestClient) -> None:
 def test_image_history_delete_is_blocked_until_object_cleanup_exists(
     client: TestClient,
 ) -> None:
-    token, user = _register(client, "image-delete@example.test")
+    token, user = _register(client, "image-delete@example.com")
     item = _prediction(user.id, modality="skin_image")
     db = TestingSessionLocal()
     try:
