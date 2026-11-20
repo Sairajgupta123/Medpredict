@@ -59,3 +59,27 @@ split, sufficient independent groups per class, and documented class coverage in
 
 A public dataset license does not automatically establish clinical validity or permission for
 deployment. Record dataset limitations and intended-use restrictions in the model card.
+
+## Skin-image manifest contract
+
+The exploratory skin-image audit expects a CSV manifest with:
+
+| Column | Required | Description |
+|---|---|---|
+| `image_id` | Yes | Non-identifying image key |
+| `image_path` | Yes | Path relative to the image root |
+| `label` | Yes | Dataset-provided class label |
+| `patient_id` | Recommended | Pseudonymous patient grouping key |
+| `lesion_id` | Recommended | Pseudonymous lesion grouping key |
+
+Run the aggregate audit from the repository root:
+
+```bash
+python -m ml.datasets.audit_skin_manifest --manifest path/to/manifest.csv --image-root path/to/images
+```
+
+The audit checks missing/duplicate manifest values, group counts, path traversal, missing files,
+image decoding, supported formats and exact duplicate image content. Its JSON output excludes raw
+image paths and group identifiers. It does not verify source authenticity, license, diagnostic
+labels, skin-tone coverage or clinical suitability. Keep the manifest and all images in approved
+local/private storage; do not commit them to Git.
