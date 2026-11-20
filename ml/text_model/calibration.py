@@ -9,6 +9,30 @@ from scipy.optimize import minimize_scalar
 from scipy.special import logsumexp, softmax
 
 
+def _positive_finite_number(value: Any, name: str) -> float:
+    """Accept real numeric scalars only; reject booleans, strings and non-finite values."""
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, float, np.integer, np.floating))
+        or not np.isfinite(value)
+        or value <= 0
+    ):
+        raise ValueError(f"{name} must be a positive finite number")
+    return float(value)
+
+
+def _unit_interval_number(value: Any, name: str) -> float:
+    """Validate a finite numeric threshold in the closed unit interval."""
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, float, np.integer, np.floating))
+        or not np.isfinite(value)
+        or not 0 <= value <= 1
+    ):
+        raise ValueError(f"{name} must be a finite number between 0 and 1")
+    return float(value)
+
+
 def _validate(
     probabilities: list[list[float]] | np.ndarray,
     targets: list[int] | np.ndarray,
@@ -20,8 +44,8 @@ def _validate(
     if not np.isfinite(values).all() or (values < 0).any():
         raise ValueError("probabilities must be finite and non-negative")
     row_sums = values.sum(axis=1)
-    if (row_sums <= 0).any():
-        raise ValueError("each probability row must have a positive sum")
+    if not np.isfinite(row_sums).all() or (row_sums <= 0).any():
+        raise ValueError("each probability row must have a positive finite sum")
     values = values / row_sums[:, None]
     if labels.ndim != 1 or len(labels) != len(values):
         raise ValueError("targets must be a 1D array matching probability rows")
@@ -80,8 +104,7 @@ def apply_temperature(
     row_sums = values.sum(axis=1)
     if (row_sums <= 0).any():
         raise ValueError("each probability row must have a positive sum")
-    if not np.isfinite(temperature) or temperature <= 0:
-        raise ValueError("temperature must be positive and finite")
+    temperature = _positive_finite_number(temperature, "temperature")
     normalized = values / row_sums[:, None]
     return softmax(_logits(normalized) / temperature, axis=1)
 
@@ -95,8 +118,8 @@ def calibration_metrics(
 ) -> dict[str, Any]:
     """Report NLL, multiclass Brier score and top-label expected calibration error."""
     values, labels = _validate(probabilities, targets)
-    if bins < 1:
-        raise ValueError("bins must be at least 1")
+    if isinstance(bins, (bool, np.bool_)) or not isinstance(bins, (int, np.integer)) or bins < 1:
+        raise ValueError("bins must be a positive integer")
     calibrated = apply_temperature(values, temperature=temperature)
     predicted = calibrated.argmax(axis=1)
     confidence = calibrated.max(axis=1)
@@ -144,8 +167,9 @@ def selective_predictions(
 ) -> dict[str, Any]:
     """Return class indices only above a validation-selected confidence threshold."""
     calibrated = apply_temperature(probabilities, temperature=temperature)
-    if not np.isfinite(minimum_confidence) or not 0 <= minimum_confidence <= 1:
-        raise ValueError("minimum_confidence must be between 0 and 1")
+    minimum_confidence = _unit_interval_number(
+        minimum_confidence, "minimum_confidence"
+    )
     confidence = calibrated.max(axis=1)
     raw_predictions = calibrated.argmax(axis=1)
     predictions = [
@@ -174,7 +198,10 @@ def select_threshold_for_coverage(
 
     The threshold is a technical operating point, not a clinically safe threshold.
     """
-    if not np.isfinite(minimum_coverage) or not 0 < minimum_coverage <= 1:
+    minimum_coverage = _unit_interval_number(
+        minimum_coverage, "minimum_coverage"
+    )
+    if minimum_coverage == 0:
         raise ValueError("minimum_coverage must be in (0, 1]")
     calibrated = apply_temperature(
         validation_probabilities, temperature=temperature
