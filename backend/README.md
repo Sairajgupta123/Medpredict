@@ -88,6 +88,15 @@ Both endpoints support case-insensitive name/code search and bounded pagination 
 They return an empty list until eligible database catalog entries have been added. These endpoints
 do not perform symptom interpretation or return disease predictions.
 
+The disease-to-symptom association endpoint is:
+
+- `GET /api/v1/catalog/diseases/{disease_code}/symptoms?limit=50`
+
+It returns only links that are explicitly approved with reviewer audit metadata, where both the
+disease and symptom are active, approved, and have reviewer audit metadata. Existing links are
+migrated as drafts. A relationship row alone never makes a symptom eligible for a disease.
+This endpoint is catalog metadata only; it does not calculate disease likelihood or make a diagnosis.
+
 ## Database foundation
 
 - SQLAlchemy 2.x declarative base: `app.db.base.Base`
