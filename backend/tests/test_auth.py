@@ -1,5 +1,9 @@
 """Authentication endpoint tests using an isolated in-memory SQLite database."""
 
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -41,6 +45,65 @@ def client():
         yield test_client
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=test_engine)
+
+
+def _signed_test_token(**overrides: object) -> str:
+    from app.core.config import get_settings
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(uuid4()),
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        "type": "access",
+        "iss": "medipredict-api",
+    }
+    payload.update(overrides)
+    return jwt.encode(payload, get_settings().app_secret_key, algorithm="HS256")
+
+
+def test_expired_access_token_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    now = datetime.now(timezone.utc)
+    token = _signed_test_token(
+        iat=now - timedelta(minutes=10),
+        exp=now - timedelta(minutes=1),
+    )
+
+    assert decode_access_token(token) is None
+
+
+def test_access_token_with_invalid_signature_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(uuid4()),
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        "type": "access",
+        "iss": "medipredict-api",
+    }
+    token = jwt.encode(payload, "not-the-application-secret", algorithm="HS256")
+
+    assert decode_access_token(token) is None
+
+
+def test_non_access_jwt_type_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(type="refresh")
+
+    assert decode_access_token(token) is None
+
+
+def test_token_from_untrusted_issuer_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(iss="untrusted-service")
+
+    assert decode_access_token(token) is None
 
 
 def test_register_login_and_read_profile(client: TestClient) -> None:
