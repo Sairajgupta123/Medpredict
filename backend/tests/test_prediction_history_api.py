@@ -1,18 +1,15 @@
 """Authenticated API tests for prediction-history privacy controls."""
 
-from uuid import uuid4
-
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models  # noqa: F401
-from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.catalog import Disease
 from app.models.prediction import (
     Prediction,
     PredictionConsentEvent,
@@ -29,24 +26,6 @@ engine = create_engine(
 TestingSessionLocal = sessionmaker(
     bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
 )
-
-
-@pytest.fixture()
-def client():
-    Base.metadata.create_all(bind=engine)
-
-    def override_get_db():
-        db = TestingSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-    Base.metadata.drop_all(bind=engine)
 
 
 def _register(client: TestClient, email: str) -> tuple[str, User]:
@@ -87,6 +66,28 @@ def _prediction(user_id, *, modality="text", input_text=None) -> Prediction:
         db.close()
 
 
+import pytest
+
+
+@pytest.fixture()
+def client():
+    """Create an isolated database and authenticated API test client."""
+    Base.metadata.create_all(bind=engine)
+
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=engine)
+
+
 def test_history_requires_authentication(client: TestClient) -> None:
     assert client.get("/api/v1/predictions/history").status_code == 401
 
@@ -124,18 +125,23 @@ def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
     item = _prediction(user.id, input_text="private symptom narrative")
     db = TestingSessionLocal()
     try:
+        disease = Disease(
+            code="TEST_DISEASE",
+            name="Test Condition",
+            is_active=True,
+        )
+        db.add(disease)
+        db.flush()
         db.add(
             PredictionResult(
                 prediction_id=item.id,
-                disease_id=uuid4(),
+                disease_id=disease.id,
                 rank=1,
                 probability=0.25,
                 explanation="private explanation",
             )
         )
-        # The disease FK requires an existing catalog row, so no result is
-        # inserted here; revocation still must remove retained input text.
-        db.rollback()
+        db.commit()
     finally:
         db.close()
 
@@ -151,6 +157,11 @@ def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
         assert stored is not None
         assert stored.input_text is None
         assert stored.input_storage_consent is False
+        assert db.scalar(
+            select(PredictionResult).where(
+                PredictionResult.prediction_id == item.id
+            )
+        ) is None
         event = db.scalar(
             select(PredictionConsentEvent).where(
                 PredictionConsentEvent.prediction_id == item.id
