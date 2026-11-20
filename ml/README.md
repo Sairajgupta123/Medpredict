@@ -81,6 +81,11 @@ metadata, patient/lesion grouping counts, safe relative paths, image decoding an
 image content without printing raw identifiers or file paths. See `ml/datasets/README.md` for
 the expected CSV columns and command. This is not a clinical validation tool.
 
+The skin trainer now runs this same full image-integrity audit before creating any model or
+training artifacts. It stops if the manifest, patient grouping, image files, decoding, formats or
+duplicate-content checks fail. A passing audit still requires independent human review of source
+permissions, privacy, label provenance, representativeness and intended use.
+
 ## Text model comparison (research only)
 
 The initial Logistic Regression baseline remains available. A separate controlled comparison runner
