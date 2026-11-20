@@ -1,5 +1,7 @@
 """Tests for public disease and symptom catalog endpoints."""
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -7,10 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app import models  # noqa: F401 - register ORM metadata
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app import models  # noqa: F401 - register ORM metadata
 from app.models.catalog import Disease, Symptom
 
 test_engine = create_engine(
@@ -45,6 +47,18 @@ def client():
     Base.metadata.drop_all(bind=test_engine)
 
 
+def _approved_symptom(code: str, name: str) -> Symptom:
+    """Build a symptom fixture with the required approval audit metadata."""
+    return Symptom(
+        code=code,
+        name=name,
+        is_active=True,
+        review_status="approved",
+        reviewed_by="reviewer-test",
+        reviewed_at=datetime.now(timezone.utc),
+    )
+
+
 def test_symptom_catalog_returns_only_active_approved_items(
     client: TestClient,
 ) -> None:
@@ -52,16 +66,7 @@ def test_symptom_catalog_returns_only_active_approved_items(
     try:
         db.add_all(
             [
-                Symptom(
-                    code="SYM_FEVER",
-                    name="Fever",
-                    is_active=True,
-                    review_status="approved",
-                    reviewed_by="reviewer-test",
-                    reviewed_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ),
-                ),
+                _approved_symptom("SYM_FEVER", "Fever"),
                 Symptom(
                     code="SYM_COUGH",
                     name="Cough",
@@ -74,9 +79,7 @@ def test_symptom_catalog_returns_only_active_approved_items(
                     is_active=True,
                     review_status="retired",
                     reviewed_by="reviewer-test",
-                    reviewed_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ),
+                    reviewed_at=datetime.now(timezone.utc),
                 ),
                 Symptom(
                     code="SYM_INACTIVE",
@@ -84,9 +87,7 @@ def test_symptom_catalog_returns_only_active_approved_items(
                     is_active=False,
                     review_status="approved",
                     reviewed_by="reviewer-test",
-                    reviewed_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ),
+                    reviewed_at=datetime.now(timezone.utc),
                 ),
             ]
         )
@@ -108,26 +109,8 @@ def test_symptom_catalog_searches_approved_items_by_name_and_code(
     try:
         db.add_all(
             [
-                Symptom(
-                    code="SYM_FEVER",
-                    name="Fever",
-                    is_active=True,
-                    review_status="approved",
-                    reviewed_by="reviewer-test",
-                    reviewed_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ),
-                ),
-                Symptom(
-                    code="SYM_COUGH",
-                    name="Cough",
-                    is_active=True,
-                    review_status="approved",
-                    reviewed_by="reviewer-test",
-                    reviewed_at=__import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ),
-                ),
+                _approved_symptom("SYM_FEVER", "Fever"),
+                _approved_symptom("SYM_COUGH", "Cough"),
             ]
         )
         db.commit()
