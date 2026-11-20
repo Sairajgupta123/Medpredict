@@ -69,3 +69,14 @@ or emergencies. Every result requires review. It does not diagnose or perform tr
 not yet connected to the backend API or model training pipeline.
 
 See `ml/SYMPTOM_NORMALIZATION.md` for its scope and limitations.
+
+## Skin-image research
+
+See `ml/datasets/skin_image_assessment.md` for the HAM10000 versus PAD-UFES-20 modality and
+provenance assessment, and `ml/model_cards/skin_image_baseline.md` for the required validation
+gates. No skin-image dataset has been approved or model trained.
+
+A manifest audit utility is available at `ml/datasets/audit_skin_manifest.py`. It checks aggregate
+metadata, patient/lesion grouping counts, safe relative paths, image decoding and exact duplicate
+image content without printing raw identifiers or file paths. See `ml/datasets/README.md` for
+the expected CSV columns and command. This is not a clinical validation tool.
