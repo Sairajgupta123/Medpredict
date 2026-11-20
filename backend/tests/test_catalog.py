@@ -1273,16 +1273,17 @@ def test_pending_entry_inspection_enforces_role_scope_and_pending_state(
     )
     assert denied.status_code == 403
 
+    assigned_headers = _user_headers("reviewer", email_suffix="inspect-assigned")
     assigned = client.get(
         "/api/v1/catalog/review/queue/entry",
-        headers=_user_headers("reviewer"),
+        headers=assigned_headers,
         params={"target_type": "disease", "target_key": "DIS_INSPECT_ALLOWED"},
     )
     assert assigned.status_code == 200
 
     approved = client.get(
         "/api/v1/catalog/review/queue/entry",
-        headers=_user_headers("reviewer"),
+        headers=assigned_headers,
         params={"target_type": "disease", "target_key": "DIS_INSPECT_APPROVED"},
     )
     assert approved.status_code == 404
