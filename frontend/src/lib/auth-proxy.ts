@@ -183,3 +183,47 @@ export async function getCatalogReviewHistory(): Promise<{
   }
 }
 
+export type GovernanceOverview = {
+  accounts: Record<string, { active: number; inactive: number }>;
+  catalog: {
+    diseases: Record<string, number>;
+    symptoms: Record<string, number>;
+    disease_symptom_links: Record<string, number>;
+  };
+  recent_role_changes: Array<{
+    id: string;
+    target_user_id: string;
+    previous_role: string;
+    new_role: string;
+    operator_identity: string;
+    reason: string;
+    created_at: string;
+  }>;
+};
+
+export async function getGovernanceOverview(): Promise<{
+  data: GovernanceOverview | null;
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) return { data: null, error: "Your session has expired. Please sign in again." };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/governance?history_limit=20`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return {
+        data: null,
+        error: response.status === 403
+          ? "Administrator access is required to view governance information."
+          : "The governance overview could not be loaded. Please try again.",
+      };
+    }
+    return { data: await response.json() as GovernanceOverview, error: null };
+  } catch {
+    return { data: null, error: "The MediPredict server is unavailable." };
+  }
+}
+
