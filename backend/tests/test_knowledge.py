@@ -55,7 +55,14 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
     client = make_client()
     try:
         db = TestingSessionLocal()
-        disease = Disease(code="DIS_TEST", name="Test condition", is_active=True)
+        disease = Disease(
+            code="DIS_TEST",
+            name="Test condition",
+            is_active=True,
+            review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+        )
         db.add(disease)
         db.flush()
         approved_source = MedicalReference(
@@ -170,7 +177,14 @@ def test_knowledge_api_filters_locale_and_category() -> None:
     client = make_client()
     try:
         db = TestingSessionLocal()
-        disease = Disease(code="DIS_FILTER", name="Filter condition", is_active=True)
+        disease = Disease(
+            code="DIS_FILTER",
+            name="Filter condition",
+            is_active=True,
+            review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+        )
         db.add(disease)
         db.flush()
         source = MedicalReference(
@@ -233,7 +247,14 @@ def test_knowledge_api_excludes_overdue_source_and_recommendation_reviews() -> N
     client = make_client()
     try:
         db = TestingSessionLocal()
-        disease = Disease(code="DIS_OVERDUE", name="Review condition", is_active=True)
+        disease = Disease(
+            code="DIS_OVERDUE",
+            name="Review condition",
+            is_active=True,
+            review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+        )
         db.add(disease)
         db.flush()
         overdue_source = MedicalReference(
