@@ -78,3 +78,13 @@ remain future work.
 likelihood, multiclass Brier score and top-label expected calibration error. Follow
 `CALIBRATION.md`: fit temperature on validation logits only and evaluate on an untouched test set.
 The helper is not yet wired into the training runner; no calibration result is claimed.
+
+## Safety-gated research inference
+
+`ml.skin_image.inference.predict_skin_image` performs image-quality screening before model
+execution, applies the supplied temperature and abstention threshold, and returns a research class,
+an uncertainty status, or an image-quality rejection. See `INFERENCE.md`.
+
+The helper is not connected to the FastAPI backend. The caller must provide a trained model, exact
+class order, validation-fitted temperature and validation-selected threshold. No model has been
+trained, and this helper is not approved for patient-facing use.
