@@ -68,6 +68,48 @@ async function grantReviewerScope(formData: FormData) {
   redirect("/admin?scope_updated=granted");
 }
 
+async function createMedicalReference(formData: FormData) {
+  "use server";
+  const token = await requireAdminToken();
+  const title = String(formData.get("title") ?? "").trim();
+  const publisher = String(formData.get("publisher") ?? "").trim();
+  const url = String(formData.get("url") ?? "").trim();
+  const evidenceType = String(formData.get("evidence_type") ?? "").trim();
+  const version = String(formData.get("version") ?? "1").trim();
+  const publishedOn = String(formData.get("published_on") ?? "").trim();
+  const accessedOn = String(formData.get("accessed_on") ?? "").trim();
+  const nextReviewDue = String(formData.get("next_review_due") ?? "").trim();
+  const licenseName = String(formData.get("license_name") ?? "").trim();
+  const contentHash = String(formData.get("content_sha256") ?? "").trim();
+  if (title.length < 3 || publisher.length < 2 || !url || evidenceType.length < 2 || !version) {
+    redirect("/admin?reference_error=invalid");
+  }
+  if (contentHash && !/^[a-fA-F0-9]{64}$/.test(contentHash)) {
+    redirect("/admin?reference_error=invalid");
+  }
+  const response = await fetch(`${API_BASE_URL}/admin/medical-references`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      title, publisher, url, evidence_type: evidenceType, version,
+      published_on: publishedOn || null,
+      accessed_on: accessedOn || new Date().toISOString().slice(0, 10),
+      next_review_due: nextReviewDue || null,
+      license_name: licenseName || null,
+      content_sha256: contentHash || null,
+    }),
+    cache: "no-store",
+  });
+  if (response.status === 409) redirect("/admin?reference_error=duplicate");
+  if (!response.ok) redirect("/admin?reference_error=create");
+  revalidatePath("/admin");
+  redirect("/admin?reference_updated=created");
+}
+
 async function revokeReviewerScope(formData: FormData) {
   "use server";
   const token = await requireAdminToken();
@@ -99,6 +141,8 @@ type AdminPageProps = {
   searchParams: Promise<{
     scope_updated?: string;
     scope_error?: string;
+    reference_updated?: string;
+    reference_error?: string;
   }>;
 };
 
@@ -108,11 +152,31 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
   const user = session.user as { role?: string; display_name?: string | null };
   if (user.role !== "admin") redirect("/dashboard");
 
+  const token = await requireAdminToken();
+  const referencesResponse = await fetch(`${API_BASE_URL}/admin/medical-references?limit=50`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+  const medicalReferences = referencesResponse.ok
+    ? await referencesResponse.json() as Array<{
+        id: string; title: string; publisher: string; url: string; evidence_type: string;
+        version: string; review_status: string; next_review_due: string | null;
+      }>
+    : [];
+
   const [{ data, error }, scopeData, params] = await Promise.all([
     getGovernanceOverview(),
     getReviewerScopeGovernance(),
     searchParams,
   ]);
+
+  const referenceError = params.reference_error
+    ? ({
+        invalid: "Check the source metadata, URL and optional SHA-256 checksum.",
+        duplicate: "A source with this URL and version already exists.",
+        create: "The source record could not be created. Check the URL and metadata.",
+      } as Record<string, string>)[params.reference_error] ?? "The source operation could not be completed."
+    : null;
 
   const scopeError = params.scope_error
     ? ({
@@ -143,6 +207,8 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
         {error && <div className="review-alert" role="alert">{error}</div>}
         {scopeData.error && <div className="review-alert" role="alert">{scopeData.error}</div>}
         {scopeError && <div className="review-alert" role="alert">{scopeError}</div>}
+        {referenceError && <div className="review-alert" role="alert">{referenceError}</div>}
+        {params.reference_updated && <div className="review-alert review-alert-success" role="status">Medical source metadata created as a draft.</div>}
         {params.scope_updated && (
           <div className="review-alert review-alert-success" role="status">
             Reviewer scope {params.scope_updated} successfully. The audit event has been recorded.
@@ -297,6 +363,43 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
             ))}
           </div>
         )}
+
+        <div className="admin-section-heading admin-subsection">
+          <div><span className="eyebrow">SOURCE PROVENANCE</span><h2>Medical reference registry</h2></div>
+          <span className="review-count">{medicalReferences.length} RECORDS</span>
+        </div>
+        <div className="admin-scope-layout">
+          <form action={createMedicalReference} className="admin-scope-form">
+            <label>Source title<input name="title" minLength={3} maxLength={300} required placeholder="Publication or guideline title" /></label>
+            <label>Publisher / organization<input name="publisher" minLength={2} maxLength={200} required placeholder="Issuing organization" /></label>
+            <label>Source URL<input name="url" type="url" maxLength={1000} required placeholder="https://..." /></label>
+            <label>Evidence type<input name="evidence_type" minLength={2} maxLength={80} required placeholder="Guideline, systematic review, official page..." /></label>
+            <label>Version<input name="version" defaultValue="1" maxLength={80} required /></label>
+            <label>Publication date<input name="published_on" type="date" /></label>
+            <label>Accessed date<input name="accessed_on" type="date" /></label>
+            <label>Next review due<input name="next_review_due" type="date" /></label>
+            <label>License<input name="license_name" maxLength={200} placeholder="Optional license details" /></label>
+            <label>Content SHA-256<input name="content_sha256" minLength={64} maxLength={64} pattern="[a-fA-F0-9]{64}" placeholder="Optional 64-character checksum" /></label>
+            <button type="submit">Register source as draft</button>
+            <p className="admin-scope-hint">New source records remain drafts. Registration does not approve the source or establish clinical validity.</p>
+          </form>
+          <div className="admin-scope-list">
+            <h3>Registered sources</h3>
+            {medicalReferences.length === 0 ? (
+              <div className="review-history-empty">No medical source records have been registered.</div>
+            ) : medicalReferences.map((source) => (
+              <article className="admin-scope-card" key={source.id}>
+                <div className="review-history-topline">
+                  <strong>{source.title}</strong>
+                  <span className={source.review_status === "approved" ? "admin-scope-active" : "admin-scope-revoked"}>{source.review_status.replaceAll("_", " ")}</span>
+                </div>
+                <p>{source.publisher} · {source.evidence_type} · Version {source.version}</p>
+                <a href={source.url} target="_blank" rel="noopener noreferrer">{source.url}</a>
+                {source.next_review_due && <small>Review due: {source.next_review_due}</small>}
+              </article>
+            ))}
+          </div>
+        </div>
 
         <div className="review-safety-note">
           <strong>Governance boundary</strong>
