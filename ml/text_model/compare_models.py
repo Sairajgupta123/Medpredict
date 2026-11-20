@@ -29,7 +29,11 @@ from ml.text_model.calibration import (
     select_threshold_for_coverage,
 )
 from ml.text_model.metrics import evaluate_predictions
-from ml.text_model.train import load_dataset, split_dataset_three_way
+from ml.text_model.train import (
+    ensure_artifacts_do_not_exist,
+    load_dataset,
+    split_dataset_three_way,
+)
 
 
 def build_feature_union() -> FeatureUnion:
@@ -122,6 +126,15 @@ def compare_text_models(
     if target_validation_coverage == 0:
         raise ValueError("target_validation_coverage must be in (0, 1]")
 
+    ensure_artifacts_do_not_exist(
+        output_dir,
+        [
+            "comparison_report.json",
+            "logistic_regression_selected.joblib",
+            "random_forest_selected.joblib",
+            "xgboost_selected.joblib",
+        ],
+    )
     frame = load_dataset(data_path)
     train_frame, validation_frame, test_frame, split_methods = (
         split_dataset_three_way(
