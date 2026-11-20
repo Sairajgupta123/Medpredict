@@ -1,0 +1,33 @@
+# Symptom normalization
+
+This is a conservative phrase-matching utility, not a clinical NLP system.
+
+## Scope
+
+- Maps only explicitly curated English phrases to stable symptom identifiers.
+- Applies Unicode compatibility normalization, case folding and punctuation normalization.
+- Uses token-boundary matching and prefers longer phrases when aliases overlap.
+- Does not infer diseases, infer missing symptoms, understand negation, assess severity, or provide triage.
+- Returns no raw user text or unmatched phrase content.
+- Marks every result as requiring review.
+
+## Example
+
+```python
+from ml.symptom_normalizer import normalize_symptoms
+
+result = normalize_symptoms("My head hurts and I feel like vomiting.")
+```
+
+## Taxonomy governance
+
+The initial vocabulary is an engineering seed only. It is not a validated medical terminology
+standard and has not been reviewed by a clinician. Before expanding or using it in patient-facing
+workflows, obtain clinical review, document language and regional coverage, define synonyms and
+ambiguous terms, and add versioned regression tests.
+
+## Safety boundary
+
+Phrase matches are not confirmed symptoms: the utility cannot reliably detect negation
+("no fever"), uncertainty ("maybe a fever"), history ("I had fever last week"), or quoted text.
+It must not be used alone to drive diagnosis, treatment, triage, or emergency decisions.
