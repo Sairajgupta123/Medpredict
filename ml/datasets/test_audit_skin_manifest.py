@@ -33,6 +33,10 @@ def test_audit_checks_images_groups_and_duplicate_content(tmp_path) -> None:
     assert report["content_duplicates"]["duplicate_content_groups"] == 1
     assert report["file_integrity"]["missing_files"] == 0
     assert report["file_integrity"]["decode_failures"] == 0
+    assert report["training_readiness"]["ready_for_reviewer_signoff"] is False
+    assert "duplicate_image_content_may_cause_data_leakage" in report[
+        "training_readiness"
+    ]["blocking_reasons"]
     rendered = json.dumps(report)
     assert "p1" not in rendered
     assert "one.jpg" not in rendered
@@ -84,3 +88,57 @@ def test_metadata_only_skips_content_duplicate_check(tmp_path) -> None:
     report = audit_skin_manifest(manifest, image_root, inspect_images=False)
     assert report["file_integrity"]["inspection_performed"] is False
     assert report["content_duplicates"]["duplicate_content_groups"] == 0
+
+
+def test_audit_marks_dataset_ready_only_after_technical_gates(tmp_path) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    rows = []
+    for label in ("A", "B"):
+        for patient_index in range(3):
+            filename = f"{label}_{patient_index}.png"
+            Image.new(
+                "RGB",
+                (256, 256),
+                color=(patient_index * 20 + (0 if label == "A" else 100), 80, 120),
+            ).save(image_root / filename)
+            rows.append(
+                {
+                    "image_id": f"image-{label}-{patient_index}",
+                    "image_path": filename,
+                    "label": label,
+                    "patient_id": f"patient-{label}-{patient_index}",
+                }
+            )
+
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(rows).to_csv(manifest, index=False)
+    report = audit_skin_manifest(manifest, image_root)
+
+    assert report["training_readiness"]["ready_for_reviewer_signoff"] is True
+    assert report["training_readiness"]["automatic_training_approval"] is False
+    assert report["training_readiness"]["distinct_patients_per_class"] == {
+        "A": 3,
+        "B": 3,
+    }
+    rendered = json.dumps(report)
+    assert "patient-A-0" not in rendered
+    assert "A_0.png" not in rendered
+
+
+def test_audit_blocks_training_readiness_without_patient_groups(tmp_path) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    Image.new("RGB", (256, 256), color="purple").save(image_root / "one.png")
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_id": ["i1"],
+            "image_path": ["one.png"],
+            "label": ["A"],
+        }
+    ).to_csv(manifest, index=False)
+
+    report = audit_skin_manifest(manifest, image_root)
+    assert report["training_readiness"]["ready_for_reviewer_signoff"] is False
+    assert "patient_id_column_missing" in report["training_readiness"]["blocking_reasons"]
