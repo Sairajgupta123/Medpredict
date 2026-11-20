@@ -163,6 +163,7 @@ type AdminPageProps = {
     scope_error?: string;
     reference_updated?: string;
     reference_error?: string;
+    reference_history?: string;
   }>;
 };
 
@@ -181,6 +182,19 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
     ? await referencesResponse.json() as Array<{
         id: string; title: string; publisher: string; url: string; evidence_type: string;
         version: string; review_status: string; next_review_due: string | null;
+      }>
+    : [];
+  const historyId = params.reference_history ?? "";
+  const historyResponse = /^[0-9a-f-]{36}$/i.test(historyId)
+    ? await fetch(`${API_BASE_URL}/admin/medical-references/${encodeURIComponent(historyId)}/history`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      })
+    : null;
+  const referenceHistory = historyResponse?.ok
+    ? await historyResponse.json() as Array<{
+        id: string; event_type: string; previous_status: string | null;
+        new_status: string; reason: string; actor_id: string; created_at: string;
       }>
     : [];
 
@@ -441,6 +455,30 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
           </div>
         </div>
 
+        {historyId && (
+          <section className="admin-section-heading admin-subsection" aria-labelledby="source-history-title">
+            <div><span className="eyebrow">SOURCE AUDIT TRAIL</span><h2 id="source-history-title">Medical reference history</h2></div>
+            <span className="review-count">{referenceHistory.length} EVENTS</span>
+          </section>
+        )}
+        {historyId && (
+          referenceHistory.length > 0 ? (
+            <div className="admin-event-list">
+              {referenceHistory.map((event) => (
+                <article className="admin-event-card" key={event.id}>
+                  <div className="review-history-topline">
+                    <strong>{event.event_type.replaceAll("_", " ")} · {event.previous_status ? event.previous_status + " → " : ""}{event.new_status}</strong>
+                    <time dateTime={event.created_at}>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.created_at))}</time>
+                  </div>
+                  <p>{event.reason}</p>
+                  <div className="admin-event-meta"><span>Actor account: {event.actor_id}</span></div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="review-history-empty">No source audit events were found for this reference.</div>
+          )
+        )}
         <div className="review-safety-note">
           <strong>Governance boundary</strong>
           <p>This page reports operational account and catalog review metadata only. It does not assess clinical evidence quality, certify reviewers, or establish that any medical content is clinically validated.</p>
