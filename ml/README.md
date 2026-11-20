@@ -80,3 +80,25 @@ A manifest audit utility is available at `ml/datasets/audit_skin_manifest.py`. I
 metadata, patient/lesion grouping counts, safe relative paths, image decoding and exact duplicate
 image content without printing raw identifiers or file paths. See `ml/datasets/README.md` for
 the expected CSV columns and command. This is not a clinical validation tool.
+
+## Text model comparison (research only)
+
+The initial Logistic Regression baseline remains available. A separate controlled comparison runner
+now supports TF-IDF word/character features with Logistic Regression and Random Forest, plus optional
+XGBoost. Install `ml/requirements-text-boosted.txt` only when using the XGBoost option.
+
+Run:
+
+```bash
+python -m ml.text_model.compare_models --data ml/datasets/curated/text_symptoms.csv --output-dir ml/artifacts/text_comparison
+```
+
+All candidates use one shared group-aware split and a vectorizer fitted on training text only.
+The runner reports macro-F1, balanced accuracy, per-class precision/recall/F1, sensitivity,
+specificity and confusion matrices. The same held-out partition is used to compare candidates,
+so ranking is exploratory and introduces selection bias. Freeze a candidate and evaluate it once
+on a new untouched external cohort before considering any future integration.
+
+The CSV audit's aggregate email/phone pattern checks and whitespace normalization have regression
+coverage. These heuristics may miss identifiers and can produce false positives; they are not a
+substitute for formal de-identification and privacy review.
