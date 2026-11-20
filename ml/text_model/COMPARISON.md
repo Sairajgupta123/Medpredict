@@ -60,3 +60,15 @@ replace prior experiment evidence.
 
 The simpler baseline trainer applies the same protection to `model.joblib` and `metrics.json`.
 Joblib files can execute code during deserialization, so load only artifacts from trusted storage.
+
+## Experiment provenance
+
+The comparison report records the raw dataset SHA-256, validated row count, class labels,
+partition sizes and split methods, random seed, model-selection and calibration settings,
+runtime versions, and a canonical experiment-configuration SHA-256. The configuration digest
+is generated from sorted JSON keys, so equivalent configurations produce the same digest.
+
+The baseline trainer records the same dataset fingerprint and configuration digest alongside
+its split details and Python, NumPy, pandas and scikit-learn versions. These fingerprints help
+identify the exact input file and settings associated with an experiment; they do not prove
+that a dataset is clinically valid, licensed, de-identified, or trustworthy.
