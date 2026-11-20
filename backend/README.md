@@ -115,6 +115,18 @@ The request body contains one `status`: `draft`, `in_review`, `approved`, or
 sets `reviewed_at` on approval; clients cannot supply or impersonate these audit fields.
 Moving an item out of approved state clears its current approval metadata.
 
+Every review action must include a reason of 8–1,000 characters. The decision and its
+audit event are committed in the same database transaction. Each event records target type,
+target key, previous status, new status, reason, authenticated reviewer ID, and server timestamp.
+The history is append-only through the API; there are no update or delete endpoints.
+
+Authorized reviewers can inspect the latest history:
+
+- `GET /api/v1/catalog/review/history?target_type=disease&target_key=DIS_CODE&limit=50`
+
+Filters are optional; `limit` is bounded to 1–100. Patients cannot access the review history.
+The audit record is operational traceability, not proof of clinical validity or reviewer credentials.
+
 There is intentionally no public endpoint to grant reviewer/admin roles. Role provisioning
 must be performed through a controlled, authenticated operational process by an authorized
 database administrator, with identity verification and an audit trail. Do not promote accounts
