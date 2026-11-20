@@ -80,6 +80,7 @@ type ReviewPageProps = {
     q?: string;
     type?: string;
     status?: string;
+    page?: string;
     history_q?: string;
     history_type?: string;
     history_from?: string;
@@ -95,6 +96,18 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
 
   const params = await searchParams;
+  const query = (params.q ?? "").trim().slice(0, 120);
+  const selectedType = ["disease", "symptom", "disease_symptom"].includes(params.type ?? "")
+    ? params.type
+    : "all";
+  const selectedStatus = ["draft", "in_review"].includes(params.status ?? "")
+    ? params.status
+    : "all";
+  const parsedPage = Number.parseInt(params.page ?? "1", 10);
+  const pageNumber = Number.isSafeInteger(parsedPage) && parsedPage > 0
+    ? Math.min(parsedPage, 500)
+    : 1;
+  const pageSize = 20;
   const historyQuery = (params.history_q ?? "").trim().slice(0, 120);
   const historyType = ["disease", "symptom", "disease_symptom"].includes(params.history_type ?? "")
     ? params.history_type
@@ -107,11 +120,17 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
     : "";
 
   const [
-    { items: queueItems, error },
+    { items: queueWindow, error },
     { items: history, error: historyError },
     { data: workload, error: workloadError },
   ] = await Promise.all([
-    getCatalogReviewQueue(),
+    getCatalogReviewQueue({
+      q: query,
+      target_type: selectedType,
+      status: selectedStatus,
+      offset: (pageNumber - 1) * pageSize,
+      limit: pageSize,
+    }),
     getCatalogReviewHistory({
       q: historyQuery,
       target_type: historyType,
@@ -121,18 +140,17 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
     getReviewerWorkload(),
   ]);
 
-  const query = (params.q ?? "").trim().slice(0, 120);
-  const selectedType = ["disease", "symptom", "disease_symptom"].includes(params.type ?? "")
-    ? params.type
-    : "all";
-  const selectedStatus = ["draft", "in_review"].includes(params.status ?? "")
-    ? params.status
-    : "all";
-  const items = queueItems.filter((item) => {
-    const matchesType = selectedType === "all" || item.target_type === selectedType;
-    const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
-    const searchableText = [item.name, item.target_key, item.description ?? ""].join(" ").toLowerCase();
-    return matchesType && matchesStatus && searchableText.includes(query.toLowerCase());
+  const queueHasMore = queueWindow.length > pageSize;
+  const items = queueWindow.slice(0, pageSize);
+  const queuePageParams = new URLSearchParams({
+    page: String(pageNumber),
+    q: query,
+    type: selectedType ?? "all",
+    status: selectedStatus ?? "all",
+    history_q: historyQuery,
+    history_type: historyType ?? "all",
+    history_from: historyFrom,
+    history_to: historyTo,
   });
 
   return (
@@ -224,11 +242,16 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         </section>
 
         <div className="review-section-heading">
-          <div><span className="eyebrow">PENDING DECISIONS</span><h2>Catalog review queue</h2></div>
-          <span className="review-count">{items.length} OF {queueItems.length} ITEMS</span>
+          <div><span className="eyebrow">PENDING DECISIONS</span><h2 id="queue-title">Catalog review queue</h2></div>
+          <span className="review-count">PAGE {pageNumber} · {items.length} ITEMS</span>
         </div>
 
         <form method="get" className="review-filters" role="search" aria-label="Filter catalog review queue">
+          <input type="hidden" name="page" value="1" />
+          <input type="hidden" name="history_q" value={historyQuery} />
+          <input type="hidden" name="history_type" value={historyType} />
+          <input type="hidden" name="history_from" value={historyFrom} />
+          <input type="hidden" name="history_to" value={historyTo} />
           <label>
             Search entries
             <input type="search" name="q" defaultValue={query} maxLength={120} placeholder="Search name, code or description" />
@@ -259,10 +282,10 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
         {items.length === 0 && !error ? (
           <div className="review-empty">
             <span aria-hidden="true">✓</span>
-            <h3>{queueItems.length === 0 ? "No pending entries" : "No matching entries"}</h3>
-            <p>{queueItems.length === 0
-              ? "There are no draft or in-review catalog entries in your current queue."
-              : "Try changing the search term or filters to see other pending entries."}</p>
+            <h3>{items.length === 0 ? "No entries on this page" : "No matching entries"}</h3>
+            <p>{pageNumber > 1
+              ? "There are no more matching entries on this page. Go back to the previous page."
+              : "There are no entries matching your current search and filters."}</p>
           </div>
         ) : (
           <div className="review-list">
@@ -307,6 +330,23 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
             ))}
           </div>
         )}
+        <nav className="review-pagination" aria-label="Review queue pages">
+          {pageNumber > 1 ? (
+            <Link
+              className="review-page-link"
+              href={`/review?${new URLSearchParams({ ...Object.fromEntries(queuePageParams), page: String(pageNumber - 1) }).toString()}#queue-title`}
+              rel="prev"
+            >← Previous page</Link>
+          ) : <span className="review-page-disabled">← Previous page</span>}
+          <span className="review-page-indicator">Page {pageNumber}</span>
+          {queueHasMore ? (
+            <Link
+              className="review-page-link"
+              href={`/review?${new URLSearchParams({ ...Object.fromEntries(queuePageParams), page: String(pageNumber + 1) }).toString()}#queue-title`}
+              rel="next"
+            >Next page →</Link>
+          ) : <span className="review-page-disabled">Next page →</span>}
+        </nav>
 
         <section className="review-history-section" aria-labelledby="review-history-title">
           <div className="review-section-heading">
@@ -320,6 +360,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
             <input type="hidden" name="q" value={query} />
             <input type="hidden" name="type" value={selectedType} />
             <input type="hidden" name="status" value={selectedStatus} />
+            <input type="hidden" name="page" value="1" />
             <label>
               Search code or reason
               <input type="search" name="history_q" maxLength={120} defaultValue={historyQuery} placeholder="Search reviewed code or decision reason" />
