@@ -79,3 +79,16 @@ def test_validation_coverage_threshold_rejects_invalid_target() -> None:
 
     with pytest.raises(ValueError, match="minimum_coverage"):
         select_threshold_for_coverage([[0.8, 0.2]], minimum_coverage=0)
+
+@pytest.mark.parametrize("threshold", [True, float("nan"), float("inf"), "high"])
+def test_abstention_rejects_invalid_threshold_types(threshold: object) -> None:
+    with pytest.raises(ValueError, match="minimum_confidence"):
+        apply_abstention([[0.8, 0.2]], minimum_confidence=threshold)
+
+
+@pytest.mark.parametrize("coverage", [True, float("nan"), float("inf"), "most"])
+def test_coverage_selection_rejects_invalid_target_types(coverage: object) -> None:
+    from ml.skin_image.selective import select_threshold_for_coverage
+
+    with pytest.raises(ValueError, match="minimum_coverage"):
+        select_threshold_for_coverage([[0.8, 0.2]], minimum_coverage=coverage)
