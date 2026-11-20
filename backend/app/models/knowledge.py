@@ -122,3 +122,43 @@ class RecommendationReference(Base):
 
     recommendation: Mapped[CareRecommendation] = relationship(back_populates="references")
     reference: Mapped[MedicalReference] = relationship()
+
+
+class MedicalReferenceEvent(Base):
+    """Append-only audit of source registration and review-state changes."""
+
+    __tablename__ = "medical_reference_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('created', 'status_changed')",
+            name="ck_medical_reference_events_type",
+        ),
+        CheckConstraint(
+            "previous_status IS NULL OR previous_status IN "
+            "('draft', 'in_review', 'approved', 'retired')",
+            name="ck_medical_reference_events_previous_status",
+        ),
+        CheckConstraint(
+            "new_status IN ('draft', 'in_review', 'approved', 'retired')",
+            name="ck_medical_reference_events_new_status",
+        ),
+        CheckConstraint(
+            "length(trim(reason)) >= 8",
+            name="ck_medical_reference_events_reason",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    reference_id: Mapped[UUID] = mapped_column(
+        ForeignKey("medical_references.id", ondelete="RESTRICT"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(20))
+    previous_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text)
+    actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
