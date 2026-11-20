@@ -232,6 +232,9 @@ def test_reviewer_provisioning_cli_updates_role_and_writes_audit(
     from app.models.user import RoleProvisioningEvent, User
     from scripts import provision_catalog_reviewer
 
+    monkeypatch.setattr(
+        provision_catalog_reviewer, "SessionLocal", TestingSessionLocal
+    )
     db = TestingSessionLocal()
     try:
         db.add(
@@ -293,6 +296,9 @@ def test_reviewer_provisioning_cli_requires_verified_email(
     from app.models.user import User
     from scripts import provision_catalog_reviewer
 
+    monkeypatch.setattr(
+        provision_catalog_reviewer, "SessionLocal", TestingSessionLocal
+    )
     db = TestingSessionLocal()
     try:
         db.add(
@@ -335,6 +341,9 @@ def test_reviewer_provisioning_cli_cannot_modify_admin_accounts(
     from app.models.user import User
     from scripts import provision_catalog_reviewer
 
+    monkeypatch.setattr(
+        provision_catalog_reviewer, "SessionLocal", TestingSessionLocal
+    )
     db = TestingSessionLocal()
     try:
         db.add(
