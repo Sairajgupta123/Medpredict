@@ -203,7 +203,9 @@ def train_skin_model(
         "optimizer": "AdamW",
         "loss": "weighted_cross_entropy",
         "checkpoint_selection_metric": "validation_macro_f1",
-        "split_strategy": "patient_grouped_70_15_15_approximate",
+        "split_strategy": "class_aware_patient_grouped_70_15_15_candidate_search",
+        "split_search_attempts": 64,
+        "all_classes_required_in_each_partition": True,
         "manifest_sha256": manifest_digest,
     }
     config_json = json.dumps(experiment_config, sort_keys=True, separators=(",", ":"))
@@ -265,6 +267,16 @@ def train_skin_model(
         y_true, y_pred, class_names=class_names
     )
 
+    def class_support(frame: pd.DataFrame) -> dict[str, dict[str, int]]:
+        grouped = frame.groupby("label", sort=True)
+        return {
+            str(label): {
+                "image_count": int(grouped.size().loc[label]),
+                "patient_count": int(grouped["patient_id"].nunique().loc[label]),
+            }
+            for label in grouped.size().index
+        }
+
     report = {
         "status": "research_experiment_only",
         "model": f"{architecture}-{variant}",
@@ -288,14 +300,20 @@ def train_skin_model(
             "validation": int(validation_frame["patient_id"].nunique()),
             "test": int(test_frame["patient_id"].nunique()),
         },
+        "partition_class_support": {
+            "train": class_support(train_frame),
+            "validation": class_support(validation_frame),
+            "test": class_support(test_frame),
+        },
         "manifest_sha256": manifest_digest,
         "experiment_config": experiment_config,
         "experiment_config_sha256": config_digest,
         "history": history,
         "limitations": [
             "No clinical validation is implied.",
-            "GroupShuffleSplit proportions are approximate.",
-            "Class coverage and subgroup coverage require manual review.",
+            "Patient-grouped split proportions are approximate because patients are indivisible.",
+            "Every class is required in every partition; this does not guarantee adequate sample support.",
+            "Class coverage does not replace subgroup or external validation.",
             "The dataset license and label provenance must be reviewed separately.",
             "The test partition must not be used for model selection.",
         ],
@@ -318,6 +336,8 @@ def train_skin_model(
         "checkpoint_file": checkpoint_path.name,
         "best_epoch": best_epoch,
         "selection_metric": "validation_macro_f1",
+        "split_strategy": experiment_config["split_strategy"],
+        "partition_class_support": report["partition_class_support"],
         "intended_use": "offline_research_only",
         "clinical_validation": False,
     }
