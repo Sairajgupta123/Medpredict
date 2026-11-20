@@ -67,3 +67,6 @@ a leakage-aware evaluation.
 - Balanced accuracy is computed as mean per-class sensitivity over the complete configured
   label taxonomy. A class absent from an evaluation partition contributes zero sensitivity
   rather than disappearing from the metric; always inspect per-class support alongside it.
+
+- Training reports include a raw dataset SHA-256, canonical experiment-configuration SHA-256,
+  split details, and Python/NumPy/pandas/scikit-learn runtime versions to support reproducibility.
