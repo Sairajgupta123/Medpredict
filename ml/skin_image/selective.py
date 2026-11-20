@@ -66,6 +66,12 @@ def selective_classification_metrics(
     )
     if targets.ndim != 1 or len(targets) != len(result["predictions"]):
         raise ValueError("y_true must be a 1D array matching the probability rows")
+    if not np.issubdtype(targets.dtype, np.integer):
+        raise ValueError("y_true values must be integer class indices")
+    class_count = np.asarray(probabilities).shape[1]
+    if (targets < 0).any() or (targets >= class_count).any():
+        raise ValueError("y_true contains a class index outside the probability columns")
+
     accepted = np.asarray(result["accepted"], dtype=bool)
     predictions = np.asarray(
         [value for value in result["predictions"] if value is not None],
