@@ -63,6 +63,12 @@ def main() -> int:
         if not user.is_active:
             print("Inactive accounts cannot be provisioned.", file=sys.stderr)
             return 1
+        if user.role == "admin":
+            print(
+                "Admin accounts cannot be changed by the reviewer provisioning CLI.",
+                file=sys.stderr,
+            )
+            return 1
         if args.role == "reviewer" and not user.email_verified:
             print("Reviewer access requires a verified account email.", file=sys.stderr)
             return 1
