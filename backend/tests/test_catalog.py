@@ -16,6 +16,7 @@ from app.main import app
 from app.core.security import create_access_token
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.user import RoleProvisioningEvent, User
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -354,8 +355,8 @@ def test_disease_symptom_link_cannot_be_approved_without_reviewer_audit(
         db.rollback()
         db.close()
 
-def _user_headers(role: str) -> dict[str, str]:
-    """Create a test account with a role assigned outside public registration."""
+def _user_headers(role: str, grant_scopes: bool = True) -> dict[str, str]:
+    """Create a test account; reviewer fixtures receive explicit test scopes."""
     db = TestingSessionLocal()
     try:
         user = User(
@@ -364,6 +365,18 @@ def _user_headers(role: str) -> dict[str, str]:
             role=role,
         )
         db.add(user)
+        db.flush()
+        if role == "reviewer" and grant_scopes:
+            for scope_type in ("disease", "symptom", "disease_symptom"):
+                db.add(
+                    CatalogReviewerScope(
+                        reviewer_id=user.id,
+                        scope_type=scope_type,
+                        scope_key=None,
+                        granted_by=user.id,
+                        grant_reason="Test fixture scope grant.",
+                    )
+                )
         db.commit()
         db.refresh(user)
         token = create_access_token(user.id)
@@ -747,4 +760,151 @@ def test_admin_governance_overview_is_admin_only_and_reports_audited_state(
     assert event["new_role"] == "reviewer"
     assert event["operator_identity"] == "operations@example.org"
     assert "password" not in event
+
+def test_reviewer_without_assignment_cannot_read_queue_or_change_catalog(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_UNASSIGNED", name="Unassigned Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer", grant_scopes=False)
+    queue = client.get("/api/v1/catalog/review/queue", headers=headers)
+    assert queue.status_code == 200
+    assert queue.json() == []
+
+    decision = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_UNASSIGNED",
+        headers=headers,
+        json={
+            "expected_status": "draft",
+            "status": "approved",
+            "reason": "Reviewed evidence for this condition.",
+        },
+    )
+    assert decision.status_code == 403
+
+
+def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
+    client: TestClient,
+) -> None:
+    admin_headers = _user_headers("admin")
+    reviewer_headers = _user_headers("reviewer", grant_scopes=False)
+
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(email="reviewer-reviewer@example.com").one()
+        reviewer.email_verified = True
+        db.add_all([
+            Disease(code="DIS_SCOPE_ALLOWED", name="Allowed Condition"),
+            Disease(code="DIS_SCOPE_DENIED", name="Denied Condition"),
+        ])
+        db.commit()
+        reviewer_id = str(reviewer.id)
+    finally:
+        db.close()
+
+    granted = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json={
+            "reviewer_id": reviewer_id,
+            "scope_type": "disease",
+            "scope_key": "DIS_SCOPE_ALLOWED",
+            "reason": "Assigned this disease review responsibility.",
+        },
+    )
+    assert granted.status_code == 201
+    scope_id = granted.json()["id"]
+    assert granted.json()["reviewer_email"] == "reviewer-reviewer@example.com"
+
+    allowed = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_SCOPE_ALLOWED",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "draft",
+            "status": "in_review",
+            "reason": "Initial evidence review has started.",
+        },
+    )
+    assert allowed.status_code == 200
+
+    denied = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_SCOPE_DENIED",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "draft",
+            "status": "in_review",
+            "reason": "Attempt to review an unassigned item.",
+        },
+    )
+    assert denied.status_code == 403
+
+    revoked = client.post(
+        f"/api/v1/admin/reviewer-scopes/{scope_id}/revoke",
+        headers=admin_headers,
+        json={"reason": "Review assignment period has ended."},
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["revoked_at"]
+
+    after_revoke = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_SCOPE_ALLOWED",
+        headers=reviewer_headers,
+        json={
+            "expected_status": "in_review",
+            "status": "approved",
+            "reason": "Attempt after the scope was revoked.",
+        },
+    )
+    assert after_revoke.status_code == 403
+
+    history = client.get(
+        "/api/v1/admin/reviewer-scopes/history",
+        headers=admin_headers,
+    )
+    assert history.status_code == 200
+    assert [event["event_type"] for event in history.json()] == ["revoked", "granted"]
+
+
+def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
+    client: TestClient,
+) -> None:
+    reviewer_headers = _user_headers("reviewer")
+    patient_headers = _user_headers("patient")
+    admin_headers = _user_headers("admin")
+
+    forbidden = client.get("/api/v1/admin/reviewer-scopes", headers=reviewer_headers)
+    assert forbidden.status_code == 403
+    forbidden_patient = client.get("/api/v1/admin/reviewer-scopes", headers=patient_headers)
+    assert forbidden_patient.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        target = User(
+            email="unverified-reviewer@example.com",
+            password_hash="test-only-not-used",
+            role="reviewer",
+            email_verified=False,
+        )
+        db.add(target)
+        db.commit()
+        target_id = str(target.id)
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json={
+            "reviewer_id": target_id,
+            "scope_type": "disease",
+            "scope_key": None,
+            "reason": "Assign all disease catalog review work.",
+        },
+    )
+    assert response.status_code == 404
 
