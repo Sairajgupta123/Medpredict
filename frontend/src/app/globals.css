@@ -90,7 +90,7 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .hero-bottom-line { width: 46px; height: 1px; background: #bfd1c2; }
 
 .section { padding: 100px 0; }
-.section-heading { display: flex; justify-content: space-between; align-items: end; gap: 45px; margin-bottom: 43px; }
+.section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 45px; margin-bottom: 43px; }
 .section-heading h2, .principles-copy h2, .dashboard-bottom h2 { font: 600 clamp(31px, 4vw, 43px)/1.2 var(--font-display); letter-spacing: -1.8px; margin: 17px 0 0; }
 .section-heading > p { max-width: 365px; color: #75877e; font-size: 13px; line-height: 1.8; margin: 0 0 4px; }
 .workflow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 17px; }
@@ -137,14 +137,14 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .workspace-notice strong { color: #476654; font-size: 11px; }
 .workspace-notice small { color: #7c9082; font-size: 10px; line-height: 1.6; }
 .dashboard-modules { padding-top: 57px; padding-bottom: 65px; }
-.dashboard-section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 25px; }
+.dashboard-section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 25px; }
 .dashboard-section-heading h2 { margin: 10px 0 0; font: 700 24px var(--font-display); letter-spacing: -.7px; }
 .module-count { color: #8b9d91; font-size: 9px; font-weight: 700; letter-spacing: 1.5px; }
 .dashboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 17px; }
 .dashboard-card { min-height: 270px; padding: 24px; background: white; border: 1px solid var(--line); border-radius: 12px; }
 .dashboard-card p { min-height: 90px; }
 .dashboard-card-status { color: #8a795a; }
-.dashboard-bottom { display: flex; align-items: end; justify-content: space-between; gap: 40px; padding-top: 0; padding-bottom: 75px; }
+.dashboard-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; padding-top: 0; padding-bottom: 75px; }
 .dashboard-bottom h2 { font-size: 29px; }
 .dashboard-bottom > p { max-width: 430px; color: #78897f; font-size: 12px; line-height: 1.8; margin: 0 0 5px; }
 
