@@ -18,9 +18,12 @@ pretraining was enabled and review the upstream weights' terms before use.
 python -m ml.skin_image.compare_models --manifest private_manifest.csv --image-root private_images --output-dir private_comparison --epochs 10 --seed 42
 ```
 
-The runner executes each candidate using the same manifest, patient-grouped split seed and common
-training settings. Each candidate writes its own checkpoint, experiment configuration, model
-metadata and aggregate report. The comparison summary ranks candidates by best validation macro-F1.
+The runner executes each candidate using the same manifest, deterministic class-aware patient-grouped
+split seed and common training settings. Every class must occur in at least three distinct patients
+and in each partition; the splitter searches candidate partitions to reduce class-distribution and
+proportion imbalance. Each candidate writes its own checkpoint, experiment configuration, model
+metadata and aggregate report. The trainer fits temperature and selects its technical coverage threshold from validation data only.
+The comparison summary ranks candidates by best validation macro-F1. Test metrics remain report-only.
 
 **Never choose the winning architecture from test metrics.** Test metrics are included for
 transparent reporting only. If architecture selection or repeated tuning has exhausted the
