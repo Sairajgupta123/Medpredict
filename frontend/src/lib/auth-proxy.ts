@@ -311,3 +311,46 @@ export async function getReviewerScopeGovernance(): Promise<{
   }
 }
 
+export type ReviewerWorkload = {
+  pending_total: number;
+  pending_by_type: {
+    disease: number;
+    symptom: number;
+    disease_symptom: number;
+  };
+  activity: {
+    total_decisions: number;
+    approved_decisions: number;
+    retired_decisions: number;
+    decisions_last_7_days: number;
+  };
+};
+
+export async function getReviewerWorkload(): Promise<{
+  data: ReviewerWorkload | null;
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) {
+    return { data: null, error: "Your session has expired. Please sign in again." };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/catalog/review/workload`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return {
+        data: null,
+        error: response.status === 403
+          ? "Your account does not have catalog reviewer access."
+          : "Your review workload could not be loaded.",
+      };
+    }
+    return { data: await response.json() as ReviewerWorkload, error: null };
+  } catch {
+    return { data: null, error: "The MediPredict server is unavailable." };
+  }
+}
+
