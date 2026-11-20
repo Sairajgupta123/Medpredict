@@ -125,3 +125,21 @@ def test_three_way_split_rejects_invalid_partition_sizes() -> None:
     )
     with pytest.raises(ValueError, match="below 0.8"):
         split_dataset_three_way(frame, test_size=0.4, validation_size=0.4)
+
+def test_three_way_split_reports_each_actual_split_method() -> None:
+    from ml.text_model.train import split_dataset_three_way
+
+    frame = pd.DataFrame(
+        {
+            "symptom_text": [f"symptom {label} {i}" for label in ("A", "B") for i in range(30)],
+            "condition_label": [label for label in ("A", "B") for _ in range(30)],
+            "group_id": [f"{label}-{i}" for label in ("A", "B") for i in range(30)],
+        }
+    )
+    _, _, _, methods = split_dataset_three_way(
+        frame, test_size=0.2, validation_size=0.2, random_state=29
+    )
+    assert methods == {
+        "train_validation": "group_shuffle_split",
+        "test": "group_shuffle_split",
+    }
