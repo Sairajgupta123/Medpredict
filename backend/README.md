@@ -155,7 +155,10 @@ python -m scripts.provision_catalog_reviewer --email reviewer@example.org --role
 
 The command requires an existing active account, verified email for reviewer grants, a reason,
 and exact-email interactive confirmation. Use `--role patient` to revoke reviewer access and
-`--dry-run` to validate a proposed change without committing it. The command records the
+`--dry-run` to validate a proposed change without committing it. Before demoting a reviewer,
+revoke all active catalog scopes through the administrator workspace; the CLI blocks demotion
+while any active scope remains so that a later role re-grant cannot silently restore old access.
+The command records the
 previous/new role, target account, operator identity, reason, and server timestamp in the
 append-only `role_provisioning_events` table in the same transaction as the role update.
 The operator identity is asserted by the trusted shell environment; it is not independently
