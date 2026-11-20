@@ -7,7 +7,7 @@ This is a conservative phrase-matching utility, not a clinical NLP system.
 - Maps only explicitly curated English phrases to stable symptom identifiers.
 - Applies Unicode compatibility normalization, case folding and punctuation normalization.
 - Uses token-boundary matching and prefers longer phrases when aliases overlap.
-- Does not infer diseases, infer missing symptoms, understand negation, assess severity, or provide triage.
+- Does not infer diseases or missing symptoms, reliably resolve negation/history/uncertainty, assess severity, or provide triage. A few obvious nearby negation, historical and uncertainty cues are flagged for review, but this is not comprehensive language understanding.
 - Returns no raw user text or unmatched phrase content.
 - Marks every result as requiring review.
 
@@ -28,6 +28,6 @@ ambiguous terms, and add versioned regression tests.
 
 ## Safety boundary
 
-Phrase matches are not confirmed symptoms: the utility cannot reliably detect negation
+Phrase matches are not confirmed current symptoms: the utility cannot reliably detect all negation
 ("no fever"), uncertainty ("maybe a fever"), history ("I had fever last week"), or quoted text.
 It must not be used alone to drive diagnosis, treatment, triage, or emergency decisions.
