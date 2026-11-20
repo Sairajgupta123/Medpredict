@@ -5,6 +5,7 @@
 - Temperature-scaled probability transformation.
 - Negative log likelihood, multiclass Brier score and top-label ECE.
 - Confidence-threshold abstention with explicit coverage reporting.
+- Validation-based threshold selection for a requested technical coverage target.
 
 ## Required evaluation protocol
 
