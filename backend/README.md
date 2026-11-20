@@ -167,6 +167,34 @@ changes require a separate DBA-controlled process outside the application. Do no
 SQL in a production database. Reviewer role assignment alone does not establish clinical
 qualification; the organization must verify credentials and scope before granting it.
 
+### Scoped reviewer responsibilities
+
+Reviewer role provisioning and catalog responsibility assignment are separate controls. A
+reviewer account does not receive catalog access merely because its role is `reviewer`.
+An administrator must grant one or more explicit scopes through the admin workspace or API.
+
+- `GET /api/v1/admin/reviewers` lists active, email-verified reviewer accounts.
+- `GET /api/v1/admin/reviewer-scopes` lists current and revoked grants.
+- `POST /api/v1/admin/reviewer-scopes` grants a scope.
+- `POST /api/v1/admin/reviewer-scopes/{scope_id}/revoke` revokes an active scope.
+- `GET /api/v1/admin/reviewer-scopes/history` returns immutable grant/revocation events.
+
+A scope uses one catalog type: `disease`, `symptom`, or `disease_symptom`. A null
+`scope_key` grants access to all entries of that type; an exact key limits access to one item.
+Relationship keys use `DISEASE_CODE:SYMPTOM_CODE`. Exact assignments are validated against
+existing catalog records. Every grant and revocation requires a reason and writes an immutable
+audit event in the same database transaction.
+
+Reviewers can only see queue items within their active scopes and can only change entries within
+those scopes. Reviewers see their own catalog decision history; administrators can inspect the
+full history. Administrators retain unrestricted review access. Patients and reviewers cannot
+grant or revoke scopes. Revoked scopes remain in the assignment register and cannot authorize
+further actions. Re-granting a previously revoked scope reactivates the existing grant record and
+appends a new grant event, preserving the earlier audit history.
+
+The new schema is introduced by migration `0012_reviewer_scopes`. Apply it with the normal
+development migration process before using the new admin scope-management page.
+
 ### Administrator governance overview
 
 Administrators can inspect operational account and catalog lifecycle metrics through:
