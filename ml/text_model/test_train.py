@@ -87,3 +87,41 @@ def test_unique_text_uses_provisional_stratified_split() -> None:
     assert method == "stratified_row_split_provisional"
     assert set(train["condition_label"]) == {"A", "B"}
     assert set(test["condition_label"]) == {"A", "B"}
+
+
+def test_three_way_group_split_has_disjoint_groups_and_all_classes() -> None:
+    from ml.text_model.train import split_dataset_three_way
+
+    frame = pd.DataFrame(
+        {
+            "symptom_text": [f"symptom {label} {i}" for label in ("A", "B") for i in range(20)],
+            "condition_label": [label for label in ("A", "B") for _ in range(20)],
+            "group_id": [f"{label}-{i}" for label in ("A", "B") for i in range(20)],
+        }
+    )
+    train, validation, test, methods = split_dataset_three_way(
+        frame, test_size=0.2, validation_size=0.2, random_state=19
+    )
+    groups = [
+        set(partition["group_id"])
+        for partition in (train, validation, test)
+    ]
+    assert not (groups[0] & groups[1])
+    assert not (groups[0] & groups[2])
+    assert not (groups[1] & groups[2])
+    for partition in (train, validation, test):
+        assert set(partition["condition_label"]) == {"A", "B"}
+    assert methods["test"] == "group_shuffle_split"
+
+
+def test_three_way_split_rejects_invalid_partition_sizes() -> None:
+    from ml.text_model.train import split_dataset_three_way
+
+    frame = pd.DataFrame(
+        {
+            "symptom_text": [f"symptom {i}" for i in range(20)],
+            "condition_label": ["A"] * 10 + ["B"] * 10,
+        }
+    )
+    with pytest.raises(ValueError, match="below 0.8"):
+        split_dataset_three_way(frame, test_size=0.4, validation_size=0.4)
