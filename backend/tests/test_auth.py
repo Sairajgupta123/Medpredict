@@ -222,3 +222,107 @@ def test_profile_update_rejects_empty_payload(client: TestClient) -> None:
         json={},
     )
     assert response.status_code == 422
+
+def test_reviewer_provisioning_cli_updates_role_and_writes_audit(
+    client: TestClient, monkeypatch
+) -> None:
+    import sys
+
+    from app.core.security import hash_password
+    from app.models.user import RoleProvisioningEvent, User
+    from scripts import provision_catalog_reviewer
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            User(
+                email="reviewer-provision@example.com",
+                password_hash=hash_password("StrongPass123!"),
+                email_verified=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setenv(
+        "MEDIPREDICT_ROLE_PROVISIONING_OPERATOR", "operations@example.org"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "provision_catalog_reviewer",
+            "--email",
+            "reviewer-provision@example.com",
+            "--role",
+            "reviewer",
+            "--reason",
+            "Verified appointment and scope.",
+        ],
+    )
+    monkeypatch.setattr(
+        "builtins.input", lambda _: "reviewer-provision@example.com"
+    )
+
+    assert provision_catalog_reviewer.main() == 0
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="reviewer-provision@example.com").one()
+        event = (
+            db.query(RoleProvisioningEvent)
+            .filter_by(target_user_id=user.id)
+            .one()
+        )
+        assert user.role == "reviewer"
+        assert event.previous_role == "patient"
+        assert event.new_role == "reviewer"
+        assert event.operator_identity == "operations@example.org"
+        assert event.reason == "Verified appointment and scope."
+    finally:
+        db.close()
+
+
+def test_reviewer_provisioning_cli_requires_verified_email(
+    client: TestClient, monkeypatch, capsys
+) -> None:
+    import sys
+
+    from app.core.security import hash_password
+    from app.models.user import User
+    from scripts import provision_catalog_reviewer
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            User(
+                email="unverified-reviewer@example.com",
+                password_hash=hash_password("StrongPass123!"),
+                email_verified=False,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setenv(
+        "MEDIPREDICT_ROLE_PROVISIONING_OPERATOR", "operations@example.org"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "provision_catalog_reviewer",
+            "--email",
+            "unverified-reviewer@example.com",
+            "--role",
+            "reviewer",
+            "--reason",
+            "Verified appointment and scope.",
+        ],
+    )
+
+    assert provision_catalog_reviewer.main() == 1
+    assert "verified account email" in capsys.readouterr().err
+
