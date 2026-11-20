@@ -323,8 +323,7 @@ def split_dataset_three_way(
         validation_frame,
         test_frame,
         {
-            "train": validation_method,
-            "validation": validation_method,
+            "train_validation": validation_method,
             "test": test_method,
         },
     )
