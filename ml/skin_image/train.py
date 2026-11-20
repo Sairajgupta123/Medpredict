@@ -464,6 +464,7 @@ def main() -> None:
         pretrained=args.pretrained,
         architecture=args.architecture,
         num_workers=args.num_workers,
+        target_validation_coverage=args.target_validation_coverage,
     )
     print(
         json.dumps(
