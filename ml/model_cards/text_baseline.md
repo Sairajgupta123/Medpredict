@@ -39,6 +39,11 @@ a leakage-aware evaluation.
 - A predicted class is not a confirmed disease.
 - The current baseline does not provide clinically validated uncertainty or abstention thresholds.
 - No prospective, external, or clinical validation has been performed.
+- The comparison runner now performs three-way group-aware partitioning, validation-only candidate
+  selection, temperature fitting and abstention threshold selection, followed by a single frozen
+  test evaluation. These are technical safeguards, not evidence of clinical reliability.
+- The model artifact contains the selected vectorizer, estimator, label encoder, temperature and
+  technical abstention threshold. It is not approved for API or patient-facing use.
 - The model is not integrated into the public API.
 
 ## Risk controls required before integration
