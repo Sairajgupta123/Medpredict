@@ -92,14 +92,30 @@ def _mention_context(normalized_text: str, start: int) -> str:
 
 
 def _scope_status(normalized_text: str, start: int) -> str:
-    """Flag obvious nearby negation/history/uncertainty without claiming full NLP."""
+    """Flag a small set of nearby scope cues; this is not reliable clinical NLP."""
     context = _mention_context(normalized_text, start)
-    if any(context.endswith(cue) for cue in NEGATION_CUES):
-        return "negated_or_denied_context"
-    if any(context.endswith(cue) for cue in HISTORICAL_CUES):
-        return "possibly_historical_context"
+
+    # Uncertainty takes precedence in phrases such as "I am not sure if I have fever".
     if any(cue in context for cue in UNCERTAINTY_CUES):
         return "uncertain_context"
+
+    negation_patterns = (
+        r"\bno$",
+        r"\bwithout$",
+        r"\b(?:deny|denies|denied)$",
+        r"\b(?:do not|does not|did not|dont|doesnt|didnt)\s+"
+        r"(?:have\s+)?(?:any\s+|a\s+|an\s+)?$",
+    )
+    if any(re.search(pattern, context) for pattern in negation_patterns):
+        return "negated_or_denied_context"
+
+    historical_patterns = (
+        r"\b(?:previously|earlier|yesterday|last week|last month)$",
+        r"\b(?:used to have|had|had a|had an)$",
+    )
+    if any(re.search(pattern, context) for pattern in historical_patterns):
+        return "possibly_historical_context"
+
     return "explicit_mention_unresolved"
 
 
