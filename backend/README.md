@@ -144,7 +144,8 @@ The symptom-input milestone is deliberately non-diagnostic:
 - Negated, historical and uncertain mentions are returned separately for manual review.
 - Unrecognized wording is not echoed in the response.
 - The request is processed in memory by this endpoint and is not written to prediction history.
-- The response returns the supplied context unchanged and declares `clinical_interpretation_performed: false`.
+- The response returns the supplied context unchanged and declares `clinical_interpretation_performed: false`, `model_inference_performed: false`, `disease_prediction_performed: false`, and `research_only: true`.
+- These response flags are an API contract: this endpoint performs curated phrase matching only. It does not load or call either ML research pipeline, calculate disease probabilities, rank conditions, or make a diagnosis.
 
 The context fields are user descriptions only. They are not verified measurements, clinical severity scores or triage signals. The normalizer is a conservative phrase matcher, not a clinically validated NLP model. It does not reliably resolve all negation, timeline, severity, uncertainty or conversational context. Do not use it to infer diseases, rank conditions, triage patients or recommend treatment. The vocabulary is research scaffolding and needs clinical review before broader use.
 
