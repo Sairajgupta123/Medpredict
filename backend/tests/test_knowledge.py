@@ -111,6 +111,21 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             is_active=True,
             references=[RecommendationReference(reference=approved_source)],
         )
+        approved_without_approved_source = CareRecommendation(
+            disease_id=disease.id,
+            code="CARE_NO_APPROVED_SOURCE",
+            version="1",
+            locale="en",
+            category="general_care",
+            urgency="routine",
+            title="No approved source",
+            content="This must remain unpublished.",
+            review_status="approved",
+            is_active=True,
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
+            references=[RecommendationReference(reference=draft_source)],
+        )
         inactive_item = CareRecommendation(
             disease_id=disease.id,
             code="CARE_INACTIVE",
@@ -126,7 +141,12 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             reviewed_at=datetime.now(timezone.utc),
             references=[RecommendationReference(reference=approved_source)],
         )
-        db.add_all([approved_item, unreviewed_item, inactive_item])
+        db.add_all([
+            approved_item,
+            unreviewed_item,
+            approved_without_approved_source,
+            inactive_item,
+        ])
         db.commit()
         db.close()
 
@@ -141,6 +161,7 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
         assert len(body["items"][0]["references"]) == 1
         assert "not a diagnosis" in body["disclaimer"]
         assert "This must never be public." not in response.text
+        assert "This must remain unpublished." not in response.text
     finally:
         close_client(client)
 
