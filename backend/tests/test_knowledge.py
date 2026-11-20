@@ -1,6 +1,6 @@
 """Tests for the reviewed, source-backed medical knowledge API."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -67,6 +67,7 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             accessed_on=date.today(),
             review_status="approved",
             reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
         )
         draft_source = MedicalReference(
             title="Unreviewed draft",
@@ -90,6 +91,8 @@ def test_public_api_returns_only_approved_active_source_backed_guidance() -> Non
             content="Discuss persistent symptoms with a qualified healthcare professional.",
             review_status="approved",
             is_active=True,
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
             references=[
                 RecommendationReference(reference=approved_source),
                 RecommendationReference(reference=draft_source),
@@ -155,6 +158,8 @@ def test_knowledge_api_filters_locale_and_category() -> None:
             version="1",
             accessed_on=date.today(),
             review_status="approved",
+            reviewed_by="clinical-reviewer",
+            reviewed_at=datetime.now(timezone.utc),
         )
         db.add(source)
         db.flush()
@@ -164,14 +169,16 @@ def test_knowledge_api_filters_locale_and_category() -> None:
                     disease_id=disease.id, code="CARE_EN", version="1", locale="en",
                     category="precautions", urgency="routine", title="English",
                     content="Reviewed English guidance.", review_status="approved",
-                    is_active=True,
+                    is_active=True, reviewed_by="clinical-reviewer",
+                    reviewed_at=datetime.now(timezone.utc),
                     references=[RecommendationReference(reference=source)],
                 ),
                 CareRecommendation(
                     disease_id=disease.id, code="CARE_HI", version="1", locale="hi",
                     category="precautions", urgency="routine", title="Hindi",
                     content="Reviewed Hindi guidance.", review_status="approved",
-                    is_active=True,
+                    is_active=True, reviewed_by="clinical-reviewer",
+                    reviewed_at=datetime.now(timezone.utc),
                     references=[RecommendationReference(reference=source)],
                 ),
             ]
