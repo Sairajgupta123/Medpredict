@@ -26,6 +26,7 @@ from ml.text_model.calibration import (
     apply_temperature,
     calibration_metrics,
     fit_temperature,
+    select_threshold_for_coverage,
 )
 from ml.text_model.metrics import evaluate_predictions
 from ml.text_model.train import load_dataset, split_dataset_three_way
@@ -91,7 +92,8 @@ def compare_text_models(
     validation_size: float = 0.2,
     random_state: int = 42,
     include_xgboost: bool = False,
-    minimum_confidence: float = 0.0,
+    minimum_confidence: float | None = None,
+    target_validation_coverage: float = 0.9,
 ) -> dict[str, Any]:
     """Select on validation macro-F1, calibrate on validation, test winner once."""
     if not 0.05 <= test_size <= 0.4:
@@ -100,8 +102,10 @@ def compare_text_models(
         raise ValueError("validation_size must be between 0.05 and 0.4")
     if test_size + validation_size >= 0.8:
         raise ValueError("test_size + validation_size must be below 0.8")
-    if not 0 <= minimum_confidence <= 1:
+    if minimum_confidence is not None and not 0 <= minimum_confidence <= 1:
         raise ValueError("minimum_confidence must be between 0 and 1")
+    if not 0 < target_validation_coverage <= 1:
+        raise ValueError("target_validation_coverage must be in (0, 1]")
 
     frame = load_dataset(data_path)
     train_frame, validation_frame, test_frame, split_methods = (
@@ -157,6 +161,25 @@ def compare_text_models(
     calibrated_validation = apply_temperature(
         validation_probabilities, temperature=temperature
     )
+    if minimum_confidence is None:
+        threshold_selection = select_threshold_for_coverage(
+            validation_probabilities,
+            minimum_coverage=target_validation_coverage,
+            temperature=temperature,
+        )
+        selected_threshold = threshold_selection["threshold"]
+    else:
+        selected_threshold = float(minimum_confidence)
+        validation_threshold_coverage = float(
+            np.mean(calibrated_validation.max(axis=1) >= selected_threshold)
+        )
+        threshold_selection = {
+            "minimum_coverage_target": None,
+            "threshold": selected_threshold,
+            "achieved_validation_coverage": validation_threshold_coverage,
+            "validation_sample_count": int(len(y_validation)),
+            "note": "Explicit caller threshold; validate independently.",
+        }
     validation_calibration = calibration_metrics(
         validation_probabilities, y_validation, temperature=temperature
     )
@@ -180,7 +203,7 @@ def compare_text_models(
 
     confidence = calibrated_test.max(axis=1)
     selective_labels = [
-        int(label) if score >= minimum_confidence else None
+        int(label) if score >= selected_threshold else None
         for label, score in zip(
             test_calibrated_predictions, confidence, strict=True
         )
@@ -204,7 +227,7 @@ def compare_text_models(
         "label_encoder": encoder,
         "model_name": winner_name,
         "temperature": temperature,
-        "minimum_confidence": minimum_confidence,
+        "minimum_confidence": selected_threshold,
         "class_labels": class_labels,
         "purpose": "research_only_not_for_clinical_use",
     }
@@ -241,8 +264,13 @@ def compare_text_models(
             "calibration": test_calibration,
         },
         "selective_prediction": {
-            "minimum_confidence": minimum_confidence,
-            "threshold_source": "caller_supplied_not_optimized_on_test",
+            "minimum_confidence": selected_threshold,
+            "threshold_selection": threshold_selection,
+            "threshold_source": (
+                "validation_target_coverage"
+                if minimum_confidence is None
+                else "explicit_caller_value"
+            ),
             "coverage": selective_coverage,
             "accepted_count": int(accepted.sum()),
             "sample_count": int(len(accepted)),
@@ -280,7 +308,13 @@ def main() -> None:
     parser.add_argument("--validation-size", type=float, default=0.2)
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--include-xgboost", action="store_true")
-    parser.add_argument("--minimum-confidence", type=float, default=0.0)
+    parser.add_argument(
+        "--minimum-confidence",
+        type=float,
+        default=None,
+        help="Optional explicit threshold; by default derive a cutoff from validation coverage.",
+    )
+    parser.add_argument("--target-validation-coverage", type=float, default=0.9)
     args = parser.parse_args()
     result = compare_text_models(
         args.data,
@@ -290,6 +324,7 @@ def main() -> None:
         random_state=args.random_state,
         include_xgboost=args.include_xgboost,
         minimum_confidence=args.minimum_confidence,
+        target_validation_coverage=args.target_validation_coverage,
     )
     print(json.dumps({
         "status": result["purpose"],
