@@ -227,3 +227,87 @@ export async function getGovernanceOverview(): Promise<{
   }
 }
 
+export type ReviewerAccount = {
+  id: string;
+  email: string;
+  display_name: string | null;
+};
+
+export type ReviewerScope = {
+  id: string;
+  reviewer_id: string;
+  reviewer_email: string;
+  scope_type: "disease" | "symptom" | "disease_symptom";
+  scope_key: string | null;
+  granted_by: string;
+  grant_reason: string;
+  granted_at: string;
+  revoked_by: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+};
+
+export type ReviewerScopeEvent = {
+  id: string;
+  scope_id: string;
+  reviewer_id: string;
+  event_type: "granted" | "revoked";
+  scope_type: "disease" | "symptom" | "disease_symptom";
+  scope_key: string | null;
+  operator_id: string;
+  reason: string;
+  created_at: string;
+};
+
+export async function getReviewerScopeGovernance(): Promise<{
+  reviewers: ReviewerAccount[];
+  scopes: ReviewerScope[];
+  events: ReviewerScopeEvent[];
+  error: string | null;
+}> {
+  const token = await getSessionToken();
+  if (!token) {
+    return {
+      reviewers: [],
+      scopes: [],
+      events: [],
+      error: "Your session has expired. Please sign in again.",
+    };
+  }
+
+  try {
+    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+    const [reviewersResponse, scopesResponse, eventsResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/admin/reviewers`, { headers, cache: "no-store" }),
+      fetch(`${API_BASE_URL}/admin/reviewer-scopes`, { headers, cache: "no-store" }),
+      fetch(`${API_BASE_URL}/admin/reviewer-scopes/history?limit=30`, { headers, cache: "no-store" }),
+    ]);
+    if (![reviewersResponse, scopesResponse, eventsResponse].every((response) => response.ok)) {
+      return {
+        reviewers: [],
+        scopes: [],
+        events: [],
+        error: "Reviewer scope administration could not be loaded.",
+      };
+    }
+    const [reviewers, scopes, events] = await Promise.all([
+      reviewersResponse.json(),
+      scopesResponse.json(),
+      eventsResponse.json(),
+    ]);
+    return {
+      reviewers: reviewers as ReviewerAccount[],
+      scopes: scopes as ReviewerScope[],
+      events: events as ReviewerScopeEvent[],
+      error: null,
+    };
+  } catch {
+    return {
+      reviewers: [],
+      scopes: [],
+      events: [],
+      error: "The MediPredict server is unavailable.",
+    };
+  }
+}
+
