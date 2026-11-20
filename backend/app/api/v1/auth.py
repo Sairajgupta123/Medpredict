@@ -15,7 +15,13 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserRead
+from app.schemas.auth import (
+    LoginRequest,
+    ProfileUpdateRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserRead,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -94,4 +100,27 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
 )
 def read_current_user(user: CurrentUser) -> UserRead:
     """Return the current user's safe profile fields."""
+    return UserRead.model_validate(user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserRead,
+    summary="Update the authenticated user's profile",
+)
+def update_current_user(
+    payload: ProfileUpdateRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> UserRead:
+    """Update only profile fields explicitly supplied by the account owner."""
+    if not payload.model_fields_set:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one profile field must be supplied.",
+        )
+
+    user.display_name = payload.display_name
+    db.commit()
+    db.refresh(user)
     return UserRead.model_validate(user)
