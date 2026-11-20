@@ -24,8 +24,23 @@ class ImageQualityPolicy:
     min_laplacian_variance: float = 8.0
 
     def __post_init__(self) -> None:
-        if self.min_width < 1 or self.min_height < 1:
-            raise ValueError("Minimum image dimensions must be positive")
+        if (
+            isinstance(self.min_width, bool)
+            or isinstance(self.min_height, bool)
+            or not isinstance(self.min_width, int)
+            or not isinstance(self.min_height, int)
+            or self.min_width < 1
+            or self.min_height < 1
+        ):
+            raise ValueError("Minimum image dimensions must be positive integers")
+        numeric_thresholds = (
+            self.min_mean_luminance,
+            self.max_mean_luminance,
+            self.max_clipped_pixel_fraction,
+            self.min_laplacian_variance,
+        )
+        if not all(np.isfinite(value) for value in numeric_thresholds):
+            raise ValueError("Image-quality thresholds must be finite numbers")
         if not 0 <= self.min_mean_luminance < self.max_mean_luminance <= 255:
             raise ValueError("Luminance thresholds must satisfy 0 <= min < max <= 255")
         if not 0 <= self.max_clipped_pixel_fraction <= 1:
