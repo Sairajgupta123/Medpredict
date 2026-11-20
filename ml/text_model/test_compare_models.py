@@ -69,3 +69,16 @@ def test_comparison_refuses_to_overwrite_existing_report_before_loading_data(tmp
         )
 
     assert report.read_text(encoding="utf-8") == '{"preserve": true}'
+
+def test_comparison_uses_shared_stable_experiment_config_digest() -> None:
+    from ml.text_model.train import experiment_config_sha256
+
+    config = {
+        "pipeline": "tfidf_word_char_candidate_comparison",
+        "random_state": 42,
+        "test_size": 0.2,
+    }
+    assert len(experiment_config_sha256(config)) == 64
+    assert experiment_config_sha256(config) == experiment_config_sha256(
+        {"test_size": 0.2, "random_state": 42, "pipeline": "tfidf_word_char_candidate_comparison"}
+    )
