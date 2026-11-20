@@ -18,6 +18,11 @@ export async function proxyCredentials(
   request: Request,
   endpoint: "login" | "register",
 ): Promise<NextResponse> {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== new URL(request.url).origin) {
+    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();
