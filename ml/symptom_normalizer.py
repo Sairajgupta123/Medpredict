@@ -52,11 +52,36 @@ def normalize_phrase(value: str) -> str:
 def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
     """Load and validate the versioned symptom vocabulary."""
     payload: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    version = payload.get("taxonomy_version")
+    status = payload.get("status")
+    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+        raise ValueError("Taxonomy must declare a semantic taxonomy_version")
+    if not isinstance(status, str) or not status.strip():
+        raise ValueError("Taxonomy must declare its governance status")
+    if not isinstance(payload.get("language"), str) or not payload["language"].strip():
+        raise ValueError("Taxonomy must declare its language")
+    if not isinstance(payload.get("normalization_policy"), dict):
+        raise ValueError("Taxonomy must declare a normalization_policy")
+    entries = payload.get("symptoms")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("Taxonomy symptoms must be a non-empty list")
+
     symptoms: list[Symptom] = []
     seen_ids: set[str] = set()
     seen_aliases: dict[str, str] = {}
 
-    for item in payload.get("symptoms", []):
+    for item in entries:
+        if not isinstance(item, dict):
+            raise ValueError("Every taxonomy symptom must be an object")
+        for field in ("id", "label", "category", "aliases"):
+            if field not in item:
+                raise ValueError(f"Taxonomy symptom is missing required field: {field}")
+        if not all(isinstance(item[field], str) and item[field].strip() for field in ("id", "label", "category")):
+            raise ValueError("Symptom id, label and category must be non-empty strings")
+        if not isinstance(item["aliases"], list) or not all(
+            isinstance(alias, str) for alias in item["aliases"]
+        ):
+            raise ValueError(f"Symptom {item['id']} aliases must be a string list")
         symptom = Symptom(
             id=str(item["id"]),
             label=str(item["label"]),
@@ -83,6 +108,11 @@ def load_taxonomy(path: Path = DEFAULT_TAXONOMY_PATH) -> tuple[Symptom, ...]:
     if not symptoms:
         raise ValueError("Taxonomy contains no symptoms")
     return tuple(symptoms)
+
+
+def _taxonomy_version(path: Path = DEFAULT_TAXONOMY_PATH) -> str:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return str(payload["taxonomy_version"])
 
 
 def _mention_context(normalized_text: str, start: int) -> str:
@@ -132,7 +162,7 @@ def normalize_symptoms(
     normalized = normalize_phrase(text)
     if not normalized:
         return {
-            "taxonomy_version": "0.1.0",
+            "taxonomy_version": _taxonomy_version() if taxonomy is None else "custom",
             "matched_symptoms": [],
             "contextual_mentions": [],
             "unrecognized_text_present": False,
@@ -183,7 +213,7 @@ def normalize_symptoms(
             contextual.append({**item, "context_flag": status})
 
     return {
-        "taxonomy_version": "0.1.0",
+        "taxonomy_version": _taxonomy_version() if taxonomy is None else "custom",
         "matched_symptoms": matched,
         "contextual_mentions": contextual,
         "unrecognized_text_present": not bool(matched or contextual),
