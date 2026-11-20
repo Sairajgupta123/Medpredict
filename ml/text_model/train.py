@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 import pandas as pd
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -310,6 +311,7 @@ def main() -> None:
         "train_rows": int(len(train_frame)),
         "test_rows": int(len(test_frame)),
         "library_versions": {
+            "numpy": np.__version__,
             "pandas": pd.__version__,
             "scikit_learn": sklearn.__version__,
         },
