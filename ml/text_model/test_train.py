@@ -172,7 +172,7 @@ def test_dataset_allows_duplicate_normalized_text_with_same_label(tmp_path) -> N
                 "itchy rash",
                 "persistent headache",
             ],
-            "condition_label": ["A", "A", "A", "B"],
+            "condition_label": ["A", "A", "B", "B"],
         }
     ).to_csv(path, index=False)
 
