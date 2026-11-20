@@ -31,3 +31,15 @@ ambiguous terms, and add versioned regression tests.
 Phrase matches are not confirmed current symptoms: the utility cannot reliably detect all negation
 ("no fever"), uncertainty ("maybe a fever"), history ("I had fever last week"), or quoted text.
 It must not be used alone to drive diagnosis, treatment, triage, or emergency decisions.
+
+## Taxonomy structure validation
+
+The loader now requires semantic version metadata (`taxonomy_version`), a non-empty governance
+status, language, normalization policy, and a non-empty symptom list. Every symptom must have a
+non-empty ID, label and category plus a list of non-empty aliases. Duplicate IDs and normalized
+alias collisions across different symptom IDs are rejected. Normalization results report the
+loaded taxonomy version so downstream records can identify the vocabulary revision used.
+
+These checks establish structural consistency only. They do not establish clinical correctness,
+terminology-standard conformance, completeness, or approval. Taxonomy changes still require
+documented human review and regression tests.
