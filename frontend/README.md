@@ -44,6 +44,15 @@ Open http://localhost:3000.
 
 The dashboard intentionally describes symptom analysis, skin image analysis and reviewed guidance as in development. No fake prediction results, upload controls, medical advice, or authentication claims are presented.
 
+## Symptom phrase review prototype
+
+Open `/symptom-checker` from the workspace dashboard. This milestone provides a short-lived text input form and displays only recognized vocabulary phrases plus contextual mentions flagged for review.
+
+The browser sends text to the same-origin Next.js route `/api/symptoms/normalize`, which forwards it to FastAPI `POST /api/v1/symptoms/normalize`. The route does not store submitted text and disables upstream fetch caching. Keep request-body logging disabled in any reverse proxy, hosting platform or observability layer used for this application.
+
+This is phrase recognition only: no disease prediction, diagnosis, severity assessment, triage or treatment recommendation is performed. A missing phrase match does not mean the person has no symptoms. The vocabulary and contextual cue rules are not clinically validated.
+
+
 ## API configuration
 
 Set NEXT_PUBLIC_API_BASE_URL to the backend API root, for example:
