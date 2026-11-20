@@ -174,9 +174,10 @@ def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
             )
         ) is None
         event = db.scalar(
-            select(PredictionConsentEvent).where(
-                PredictionConsentEvent.prediction_id == item.id
-            )
+            select(PredictionConsentEvent)
+            .where(PredictionConsentEvent.prediction_id == item.id)
+            .order_by(PredictionConsentEvent.captured_at.desc())
+            .limit(1)
         )
         assert event is not None and event.action == "revoked"
     finally:
