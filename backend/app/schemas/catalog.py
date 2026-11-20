@@ -31,3 +31,9 @@ class DiseaseSymptomItemRead(BaseModel):
     relevance_weight: float
 
 
+
+
+class CatalogReviewRequest(BaseModel):
+    """Reviewer decision for a disease, symptom, or their association."""
+
+    status: str = Field(pattern="^(draft|in_review|approved|retired)$")
