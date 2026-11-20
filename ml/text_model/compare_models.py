@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from ml.text_model.calibration import (
 from ml.text_model.metrics import evaluate_predictions
 from ml.text_model.train import (
     ensure_artifacts_do_not_exist,
+    experiment_config_sha256,
     load_dataset,
     split_dataset_three_way,
 )
@@ -262,8 +264,35 @@ def compare_text_models(
     artifact_path = output_dir / f"{winner_name}_selected.joblib"
     joblib.dump(bundle, artifact_path)
 
+    experiment_config = {
+        "pipeline": "tfidf_word_char_candidate_comparison",
+        "feature_extraction": {
+            "word_ngram_range": [1, 2],
+            "character_ngram_range": [3, 5],
+            "max_features_per_vectorizer": 100_000,
+        },
+        "candidate_models": list(fitted.keys()),
+        "include_xgboost": include_xgboost,
+        "selection_metric": "validation_macro_f1",
+        "random_state": random_state,
+        "test_size": test_size,
+        "validation_size": validation_size,
+        "split_methods": split_methods,
+        "calibration_method": "scalar_temperature_scaling",
+        "minimum_confidence": minimum_confidence,
+        "target_validation_coverage": target_validation_coverage,
+        "threshold_source": (
+            "validation_target_coverage"
+            if minimum_confidence is None
+            else "explicit_caller_value"
+        ),
+    }
     summary = {
         "purpose": "research_three_way_evaluation_not_for_clinical_use",
+        "experiment_config": experiment_config,
+        "experiment_config_sha256": experiment_config_sha256(experiment_config),
+        "python_version": platform.python_version(),
+        "numpy_version": np.__version__,
         "dataset_file_name": data_path.name,
         "dataset_sha256": dataset_hash,
         "dataset_rows_after_validation": int(len(frame)),
