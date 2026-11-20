@@ -150,6 +150,14 @@ def _apply_review_decision(
 ) -> dict:
     """Apply a decision and append an immutable audit event in the same transaction."""
     previous_status = item.review_status
+    if previous_status != payload.expected_status:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This catalog entry changed after you opened it. "
+                "Refresh the review queue before submitting another decision."
+            ),
+        )
     item.review_status = payload.status
     if payload.status == "approved":
         item.reviewed_by = str(reviewer.id)
@@ -183,7 +191,7 @@ def review_disease(
     db: DbSession,
 ) -> dict:
     """Change disease publication state; only provisioned reviewers may act."""
-    item = db.scalar(select(Disease).where(Disease.code == disease_code))
+    item = db.scalar(select(Disease).where(Disease.code == disease_code).with_for_update())
     if item is None:
         raise HTTPException(status_code=404, detail="Disease not found.")
     result = _apply_review_decision(item, payload, reviewer, db, "disease", disease_code)
@@ -199,7 +207,7 @@ def review_symptom(
     db: DbSession,
 ) -> dict:
     """Change symptom publication state; only provisioned reviewers may act."""
-    item = db.scalar(select(Symptom).where(Symptom.code == symptom_code))
+    item = db.scalar(select(Symptom).where(Symptom.code == symptom_code).with_for_update())
     if item is None:
         raise HTTPException(status_code=404, detail="Symptom not found.")
     result = _apply_review_decision(item, payload, reviewer, db, "symptom", symptom_code)
@@ -220,7 +228,14 @@ def review_disease_symptom_link(
     symptom = db.scalar(select(Symptom).where(Symptom.code == symptom_code))
     if disease is None or symptom is None:
         raise HTTPException(status_code=404, detail="Disease or symptom not found.")
-    item = db.get(DiseaseSymptom, (disease.id, symptom.id))
+    item = db.scalar(
+        select(DiseaseSymptom)
+        .where(
+            DiseaseSymptom.disease_id == disease.id,
+            DiseaseSymptom.symptom_id == symptom.id,
+        )
+        .with_for_update()
+    )
     if item is None:
         raise HTTPException(status_code=404, detail="Disease-symptom link not found.")
     result = _apply_review_decision(item, payload, reviewer, db, "disease_symptom", f"{disease_code}:{symptom_code}")
