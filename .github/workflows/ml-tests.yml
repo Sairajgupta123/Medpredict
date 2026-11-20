@@ -11,13 +11,15 @@ on:
     paths:
       - "ml/**"
       - ".github/workflows/ml-tests.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  text-baseline-tests:
+  ml-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -29,10 +31,10 @@ jobs:
           cache: pip
           cache-dependency-path: ml/requirements.txt
 
-      - name: Install ML dependencies
+      - name: Install lightweight ML dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r ml/requirements.txt
+          python -m pip install -r ml/requirements.txt
 
-      - name: Run machine learning and dataset audit tests
-        run: pytest ml -q
+      - name: Run ML, dataset and preprocessing tests
+        run: python -m pytest ml -q
