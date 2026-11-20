@@ -13,7 +13,9 @@ from app import models  # noqa: F401 - register ORM metadata
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.core.security import create_access_token
 from app.models.catalog import Disease, DiseaseSymptom, Symptom
+from app.models.user import User
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -351,4 +353,125 @@ def test_disease_symptom_link_cannot_be_approved_without_reviewer_audit(
     finally:
         db.rollback()
         db.close()
+
+def _user_headers(role: str) -> dict[str, str]:
+    """Create a test account with a role assigned outside public registration."""
+    db = TestingSessionLocal()
+    try:
+        user = User(
+            email=f"{role}-reviewer@example.com",
+            password_hash="test-only-not-used",
+            role=role,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        token = create_access_token(user.id)
+    finally:
+        db.close()
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_patient_cannot_review_catalog_items(client: TestClient) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_REVIEW_DENIED", name="Review Denied"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("patient")
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_REVIEW_DENIED",
+        headers=headers,
+        json={"status": "approved"},
+    )
+    assert response.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        disease = db.query(Disease).filter_by(code="DIS_REVIEW_DENIED").one()
+        assert disease.review_status == "draft"
+        assert disease.reviewed_by is None
+    finally:
+        db.close()
+
+
+def test_reviewer_can_approve_disease_with_server_assigned_audit(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        db.add(Disease(code="DIS_REVIEW_OK", name="Reviewable Condition"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = _user_headers("reviewer")
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_REVIEW_OK",
+        headers=headers,
+        json={"status": "approved"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["review_status"] == "approved"
+    assert body["reviewed_by"]
+    assert body["reviewed_at"]
+
+    db = TestingSessionLocal()
+    try:
+        disease = db.query(Disease).filter_by(code="DIS_REVIEW_OK").one()
+        assert disease.review_status == "approved"
+        assert disease.reviewed_by == body["reviewed_by"]
+        assert disease.reviewed_at is not None
+    finally:
+        db.close()
+
+
+def test_registration_cannot_assign_reviewer_role(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "self-promote@example.com",
+            "password": "StrongPass123!",
+            "role": "admin",
+        },
+    )
+    assert response.status_code == 201
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="self-promote@example.com").one()
+        assert user.role == "patient"
+    finally:
+        db.close()
+
+
+def test_admin_can_review_disease_symptom_link(client: TestClient) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = _approved_disease("DIS_LINK_REVIEW", "Linked Condition")
+        symptom = _approved_symptom("SYM_LINK_REVIEW", "Linked Symptom")
+        db.add_all([disease, symptom])
+        db.flush()
+        db.add(
+            DiseaseSymptom(
+                disease_id=disease.id,
+                symptom_id=symptom.id,
+                relevance_weight=1.0,
+                review_status="draft",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch(
+        "/api/v1/catalog/review/diseases/DIS_LINK_REVIEW/symptoms/SYM_LINK_REVIEW",
+        headers=_user_headers("admin"),
+        json={"status": "approved"},
+    )
+    assert response.status_code == 200
+    assert response.json()["review_status"] == "approved"
+    assert response.json()["reviewed_by"]
 
