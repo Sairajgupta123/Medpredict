@@ -76,3 +76,31 @@ def test_threshold_rejects_invalid_coverage_target() -> None:
         select_threshold_for_coverage(
             [[0.8, 0.2]], minimum_coverage=0
         )
+
+@pytest.mark.parametrize("temperature", [True, False, "1.0", float("nan"), float("inf")])
+def test_apply_temperature_rejects_invalid_temperature_types(temperature) -> None:
+    with pytest.raises(ValueError, match="temperature"):
+        apply_temperature([[0.8, 0.2]], temperature=temperature)
+
+
+@pytest.mark.parametrize("bins", [True, False, 2.5, "5"])
+def test_calibration_metrics_rejects_non_integer_bins(bins) -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        calibration_metrics([[0.8, 0.2]], [0], bins=bins)
+
+
+@pytest.mark.parametrize("threshold", [True, False, "0.5", float("nan"), float("inf")])
+def test_selective_predictions_rejects_invalid_confidence_types(threshold) -> None:
+    with pytest.raises(ValueError, match="minimum_confidence"):
+        selective_predictions([[0.8, 0.2]], minimum_confidence=threshold)
+
+
+@pytest.mark.parametrize("coverage", [True, False, "0.8", float("nan"), float("inf"), 0])
+def test_coverage_selection_rejects_invalid_coverage_types(coverage) -> None:
+    with pytest.raises(ValueError, match="minimum_coverage"):
+        select_threshold_for_coverage([[0.8, 0.2]], minimum_coverage=coverage)
+
+
+def test_probability_validation_rejects_overflowed_row_sum() -> None:
+    with pytest.raises(ValueError, match="positive finite sum"):
+        fit_temperature([[1e308, 1e308]], [0])
