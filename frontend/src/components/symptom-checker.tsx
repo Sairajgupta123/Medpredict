@@ -105,6 +105,15 @@ export function SymptomChecker() {
         setError(body.detail ?? "We could not process this information. Please try again.");
         return;
       }
+      if (
+        body.clinical_interpretation_performed !== false ||
+        body.model_inference_performed !== false ||
+        body.disease_prediction_performed !== false ||
+        body.research_only !== true
+      ) {
+        setError("The symptom service returned an unexpected response. No result was displayed.");
+        return;
+      }
       setResult(body);
       const reviewItems = [...body.matched_symptoms, ...body.contextual_mentions];
       setReviewStatuses(Object.fromEntries(reviewItems.map((item) => [item.id, "unsure" as ReviewStatus])));
