@@ -1,4 +1,4 @@
-# Skin-image preprocessing research scaffold
+# Skin-image preprocessing and training research scaffold
 
 This module is for controlled offline experiments only. It does not diagnose skin conditions and
 must not be exposed as a patient-facing prediction endpoint.
@@ -12,68 +12,48 @@ pip install -r ml/requirements.txt
 pip install -r ml/requirements-skin.txt
 ```
 
-The PyTorch/torchvision versions are intentionally isolated from the lightweight text pipeline.
-Use a Python/PyTorch wheel combination supported by the official PyTorch installation selector
-for your operating system and accelerator.
+Choose compatible PyTorch and torchvision wheels for your operating system and accelerator using
+the official PyTorch installation selector.
 
-## Manifest contract
+## Private manifest contract
 
 The CSV must include:
 - `image_path`: path relative to the private image root
 - `label`: reviewed dataset label
-- `patient_id`: required for the patient-grouped split utility
+- `patient_id`: required for patient-grouped splitting
 
-Optional columns such as `image_id` and `lesion_id` can remain in the private manifest. Do not
-pass patient identifiers to the model, print them, commit them, or include them in experiment logs.
+Do not pass patient identifiers to the model, print them, commit them, or include them in experiment
+logs. Keep the manifest and images in approved private storage.
 
-## Patient-level split
+## Run an offline research experiment
 
-```python
-import pandas as pd
-from ml.skin_image.splits import patient_grouped_split
-
-manifest = pd.read_csv("private_manifest.csv")
-splits = patient_grouped_split(manifest)
-train = manifest.loc[list(splits.train)]
-validation = manifest.loc[list(splits.validation)]
-test = manifest.loc[list(splits.test)]
+```bash
+python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10
 ```
 
-Default target proportions are 70/15/15. GroupShuffleSplit makes proportions approximate because
-patients, not individual images, are the splitting unit. The utility refuses blank patient IDs
-and fewer than three distinct patients. It does not guarantee that every class appears in every
-partition; inspect class/group coverage before training and redesign the evaluation if coverage is
-insufficient. If patient IDs are unavailable, do not claim patient-independent evaluation.
+The trainer creates patient-grouped 70/15/15 approximate partitions, trains MobileNetV3, selects
+the checkpoint using validation macro-F1, and evaluates the held-out test partition once at the end.
+The test partition must not be used for model selection. The output directory contains a checkpoint
+and aggregate experiment report; keep both outside Git because model artifacts may be large and
+subject to dataset license restrictions.
 
-## Preprocessing policy
+## Important evaluation limitations
 
-- Apply EXIF orientation and decode with Pillow.
-- Convert to RGB and reject corrupt or extremely small images.
+GroupShuffleSplit proportions are approximate because patients are the splitting unit. The
+training script fails if validation or test contains labels not present in training, but it does not
+guarantee every class is represented in every partition. Inspect per-class and per-group counts
+before interpreting results. The script does not yet implement class-weighting, calibration,
+abstention, out-of-distribution detection, external validation or subgroup fairness analysis.
+
+## Preprocessing
+
+- Apply EXIF orientation, decode with Pillow and convert to RGB.
+- Reject corrupt or extremely small images.
 - Preserve aspect ratio using a fixed-size neutral-gray padded canvas.
-- Normalize using ImageNet mean and standard deviation for transfer-learning experiments.
-- Training-only augmentation is limited to horizontal flips and small rotations. No color jitter is
-  applied because color may carry clinically relevant visual information.
-- Validation and test data receive no random augmentation.
+- Normalize using ImageNet mean and standard deviation.
+- Training-only augmentation uses horizontal flips and small rotations; validation/test have no
+  random augmentation.
+- No color jitter is used because color may carry clinically relevant information.
 
-## Model input
-
-`SkinImageDataset` returns `(image_tensor, integer_label)`. The label mapping must be saved with
-the experiment artifact and reused unchanged for validation and inference. Patient IDs are never
-returned.
-
-## Current limitations
-
-This scaffold has not been run against an approved real dataset. The chosen input size, padding,
-augmentation and normalization are starting assumptions for controlled research, not clinically
-validated preprocessing. Dataset-specific review and clinician input are required. The module
-does not detect unsupported image modalities, out-of-distribution images, or diagnostic uncertainty.
-
-## Model factory and metrics
-
-`ml.skin_image.model.build_mobilenet_v3` provides MobileNetV3-Large and MobileNetV3-Small
-classifier factories. Pretrained weights are opt-in and may download external artifacts.
-`ml.skin_image.metrics.classification_metrics` reports macro-F1, balanced accuracy, confusion
-matrix and per-class metrics.
-
-See `MODEL_AND_EVALUATION.md`. No training run, benchmark result or clinical validation is
-claimed. The current preprocessing and model factory are research scaffolding only.
+All settings are research starting points, not clinically validated preprocessing. The model factory,
+trainer and metrics are not approved for patient-facing use.
