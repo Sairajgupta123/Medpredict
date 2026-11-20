@@ -128,14 +128,16 @@ blank audit target keys or reasons.
 
 Authorized reviewers can inspect pending work, filter decision history, and open a reviewed catalog entry:
 
-- `GET /api/v1/catalog/review/queue?status=draft&status=in_review&limit=50`
+- `GET /api/v1/catalog/review/queue?status=draft&status=in_review&q=fever&target_type=symptom&offset=0&limit=20`
 - `GET /api/v1/catalog/review/history?target_type=disease&date_from=2026-01-01&date_to=2026-12-31&q=source&limit=100`
 - `GET /api/v1/catalog/review/history/{event_id}/entry`
 
 The queue is restricted to reviewers/admins and includes draft and in-review entries by default.
-Use the optional `target_type` filter (`disease`, `symptom`, or `disease_symptom`) and repeat
-the `status` query parameter to select one or more valid lifecycle states. The total `limit`
-is bounded to 1–100. History supports category, exact target key, free-text search over target
+Use the optional `target_type` filter (`disease`, `symptom`, or `disease_symptom`), repeat
+the `status` query parameter to select one or more valid lifecycle states, and use `q` to search
+codes, names, or descriptions. Pagination uses a zero-based `offset` (0–10,000) and a `limit`
+of 1–50. Results are globally ordered across the selected categories; the API returns up to one
+additional item so clients can determine whether a next page exists. History supports category, exact target key, free-text search over target
 key and decision reason, and inclusive UTC date boundaries. A reversed date range is rejected.
 Reviewers can see only events created under their own account; administrators can inspect all
 events. The entry-detail endpoint checks the event owner before returning the current disease,
