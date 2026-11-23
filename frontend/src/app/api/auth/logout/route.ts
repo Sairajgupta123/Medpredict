@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 
+function privateJson(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "private, no-store, max-age=0");
+  headers.set("Pragma", "no-cache");
+  return NextResponse.json(body, { ...init, headers });
+}
+
 export async function POST(request: Request) {
   if (!hasSameRequestOrigin(request)) {
-    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+    return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
 
-  const response = NextResponse.json({ message: "Signed out successfully." });
+  const response = privateJson({ message: "Signed out successfully." });
   response.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
