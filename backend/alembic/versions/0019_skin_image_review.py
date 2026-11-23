@@ -40,10 +40,6 @@ def upgrade() -> None:
         "skin_image_analyses",
         sa.Column("review_outcome", sa.String(length=32), nullable=True),
     )
-    op.add_column(
-        "skin_image_analyses",
-        sa.Column("reviewer_note", sa.Text(), nullable=True),
-    )
     op.create_foreign_key(
         "fk_skin_image_assigned_reviewer", "skin_image_analyses", "users",
         ["assigned_reviewer_id"], ["id"], ondelete="RESTRICT",
@@ -100,7 +96,6 @@ def downgrade() -> None:
     op.drop_index("ix_skin_image_analyses_assigned_reviewer_id", table_name="skin_image_analyses")
     op.drop_constraint("fk_skin_image_assigned_by", "skin_image_analyses", type_="foreignkey")
     op.drop_constraint("fk_skin_image_assigned_reviewer", "skin_image_analyses", type_="foreignkey")
-    op.drop_column("skin_image_analyses", "reviewer_note")
     op.drop_column("skin_image_analyses", "review_outcome")
     op.drop_column("skin_image_analyses", "reviewed_at")
     op.drop_column("skin_image_analyses", "assigned_at")
