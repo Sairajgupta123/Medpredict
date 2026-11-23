@@ -13,8 +13,8 @@ const modules = [
   {
     number: "02",
     title: "Skin image analysis",
-    description: "A separate image workflow with supported-class boundaries, upload checks and uncertainty handling is in research.",
-    status: "Research in progress",
+    description: "Consent-first private image intake with separate processing, history and human-review permissions. No disease classification is performed.",
+    status: "Private intake prototype available",
     icon: "◈",
   },
   {
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
               <h3>{item.title}</h3>
               <p>{item.description}</p>
               <div className="dashboard-card-status"><span />{item.status}</div>
-              {item.number === "01" && <Link className="module-action" href="/symptom-checker">Open prototype <span aria-hidden="true">→</span></Link>}
+              {item.number === "01" && <Link className="module-action" href="/symptom-checker">Open prototype <span aria-hidden="true">→</span></Link>}{item.number === "02" && user && <Link className="module-action" href="/skin-image">Open private intake <span aria-hidden="true">→</span></Link>}
             </article>
           ))}
         </div>
