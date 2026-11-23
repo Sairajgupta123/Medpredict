@@ -47,13 +47,11 @@ await check(
   "reject cross-origin skin-image upload",
   { path: skinIntakePath, init: { method: "POST", headers: { Origin: "https://invalid.example" } } },
   403,
-  false,
 );
 await check(
   "require authentication before skin-image upload parsing",
   { path: skinIntakePath, init: { method: "POST", headers: { Origin: baseUrl } } },
   401,
-  false,
 );
 
 process.stdout.write("Production smoke checks completed. No personal health data was submitted.\n");
