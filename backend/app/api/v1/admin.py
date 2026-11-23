@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 
 from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
+from app.models.prediction import SkinImageAnalysis
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 from app.models.knowledge import MedicalReference, MedicalReferenceEvent
@@ -102,6 +103,19 @@ def _validate_scope_target(db: DbSession, scope_type: str, scope_key: str | None
         exists = db.scalar(select(Disease.id).where(Disease.code == scope_key))
     elif scope_type == "symptom":
         exists = db.scalar(select(Symptom.id).where(Symptom.code == scope_key))
+    elif scope_type == "skin_image":
+        try:
+            prediction_id = UUID(scope_key)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Skin-image scopes must use a prediction UUID.",
+            ) from exc
+        exists = db.scalar(
+            select(SkinImageAnalysis.id).where(
+                SkinImageAnalysis.prediction_id == prediction_id
+            )
+        )
     else:
         parts = scope_key.split(":")
         if len(parts) != 2 or not all(parts):
@@ -171,7 +185,7 @@ def grant_reviewer_scope(
     administrator: Administrator,
     db: DbSession,
 ) -> dict:
-    """Grant a reviewer an exact catalog item or whole catalog-type scope."""
+    """Grant a reviewer a catalog scope or explicit skin-image review scope."""
     target = db.scalar(
         select(User)
         .where(User.id == payload.reviewer_id)
