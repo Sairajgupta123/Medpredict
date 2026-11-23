@@ -2,17 +2,29 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
 
+function privateJson(body: unknown, init: ResponseInit = {}) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...init.headers,
+      "Cache-Control": "private, no-store, max-age=0",
+      Pragma: "no-cache",
+    },
+  });
+}
+
+
 type RouteContext = { params: Promise<{ predictionId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) {
-    return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
+    return privateJson({ detail: "Authentication required." }, { status: 401 });
   }
 
   const { predictionId } = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(predictionId)) {
-    return NextResponse.json({ detail: "Review image not found." }, { status: 404 });
+    return privateJson({ detail: "Review image not found." }, { status: 404 });
   }
 
   let upstream: Response;
@@ -26,12 +38,12 @@ export async function GET(_request: Request, context: RouteContext) {
       },
     );
   } catch {
-    return NextResponse.json({ detail: "Private image service is unavailable." }, { status: 503 });
+    return privateJson({ detail: "Private image service is unavailable." }, { status: 503 });
   }
 
   if (!upstream.ok) {
     const body = await upstream.json().catch(() => ({ detail: "Review image is unavailable." }));
-    return NextResponse.json(body, {
+    return privateJson(body, {
       status: upstream.status,
       headers: { "Cache-Control": "private, no-store" },
     });
@@ -39,7 +51,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const contentType = upstream.headers.get("content-type");
   if (!contentType || !["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
-    return NextResponse.json({ detail: "Unexpected image content type." }, { status: 502 });
+    return privateJson({ detail: "Unexpected image content type." }, { status: 502 });
   }
 
   // The backend stores sanitized image objects with an 8 MiB hard limit.
@@ -48,10 +60,10 @@ export async function GET(_request: Request, context: RouteContext) {
   const declaredLength = upstream.headers.get("content-length");
   if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxImageBytes)) {
     await upstream.body?.cancel().catch(() => undefined);
-    return NextResponse.json({ detail: "Review image exceeds the allowed size." }, { status: 502 });
+    return privateJson({ detail: "Review image exceeds the allowed size." }, { status: 502 });
   }
   if (!upstream.body) {
-    return NextResponse.json({ detail: "Review image is empty." }, { status: 502 });
+    return privateJson({ detail: "Review image is empty." }, { status: 502 });
   }
 
   const reader = upstream.body.getReader();
@@ -64,13 +76,13 @@ export async function GET(_request: Request, context: RouteContext) {
       totalBytes += value.byteLength;
       if (totalBytes > maxImageBytes) {
         await reader.cancel();
-        return NextResponse.json({ detail: "Review image exceeds the allowed size." }, { status: 502 });
+        return privateJson({ detail: "Review image exceeds the allowed size." }, { status: 502 });
       }
       chunks.push(value);
     }
   } catch {
     await reader.cancel().catch(() => undefined);
-    return NextResponse.json({ detail: "Review image could not be retrieved completely." }, { status: 502 });
+    return privateJson({ detail: "Review image could not be retrieved completely." }, { status: 502 });
   }
 
   const imageBytes = new Uint8Array(totalBytes);
