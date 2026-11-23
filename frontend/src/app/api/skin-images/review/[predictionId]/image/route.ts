@@ -22,6 +22,7 @@ export async function GET(_request: Request, context: RouteContext) {
       {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
       },
     );
   } catch {
