@@ -161,6 +161,7 @@ export default async function ReviewPage({ searchParams }: ReviewPageProps) {
           <div className="eyebrow"><span className="eyebrow-dot" /> CATALOG GOVERNANCE</div>
           <h1>Review with <em>care and evidence.</em></h1>
           <p>Review pending catalog entries against approved, reliable sources. Every decision requires a reason and is recorded in the audit history.</p>
+          <Link className="review-page-link" href="/review/skin-images">Open skin-image capture review →</Link>
           <div className="review-summary">
             <div><strong>{items.length.toString().padStart(2, "0")}</strong><span>ITEMS IN THIS QUEUE</span></div>
             <div><strong>{user.display_name || "Reviewer"}</strong><span>AUTHENTICATED REVIEWER</span></div>
