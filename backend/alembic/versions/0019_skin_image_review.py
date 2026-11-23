@@ -62,14 +62,14 @@ def upgrade() -> None:
     )
     op.create_check_constraint(
         "ck_skin_image_review_outcome", "skin_image_analyses",
-        "review_outcome IS NULL OR review_outcome IN ('image_adequate', 'unable_to_assess')",
+        "review_outcome IS NULL OR review_outcome IN ('capture_adequate', 'unable_to_assess')",
     )
 
     op.create_table(
         "skin_image_review_events",
         sa.Column("id", sa.Uuid(), primary_key=True, nullable=False),
-        sa.Column("prediction_id", sa.Uuid(), sa.ForeignKey("predictions.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("image_analysis_id", sa.Uuid(), sa.ForeignKey("skin_image_analyses.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("prediction_id", sa.Uuid(), nullable=False),
+        sa.Column("image_analysis_id", sa.Uuid(), nullable=False),
         sa.Column("event_type", sa.String(length=24), nullable=False),
         sa.Column("actor_id", sa.Uuid(), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("assigned_reviewer_id", sa.Uuid(), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=True),
