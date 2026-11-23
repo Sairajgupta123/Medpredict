@@ -25,6 +25,8 @@ IMAGE_DOMAINS = {"dermoscopy", "clinical_phone_photo", "not_applicable", "mixed"
 
 def validate_dataset_record(record: dict[str, Any]) -> dict[str, Any]:
     """Return aggregate validation results; never infer or grant approval."""
+    if not isinstance(record, dict):
+        raise ValueError("Dataset registry record must be an object")
     missing = sorted(REQUIRED_FIELDS - set(record))
     errors: list[str] = []
     if missing:
@@ -71,6 +73,9 @@ def audit_registry(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("datasets"), list):
         raise ValueError("Registry JSON must contain a datasets array")
+    for index, item in enumerate(data["datasets"]):
+        if not isinstance(item, dict):
+            raise ValueError(f"Dataset registry entry at index {index} must be an object")
     results = [validate_dataset_record(item) for item in data["datasets"]]
     ids = [item.get("dataset_id") for item in data["datasets"]]
     duplicate_ids = sorted(
