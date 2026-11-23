@@ -46,6 +46,24 @@ async function assignImage(formData: FormData) {
   if (!/^[0-9a-f-]{36}$/i.test(predictionId) || !/^[0-9a-f-]{36}$/i.test(reviewerId) || reason.length < 8 || reason.length > 1000) {
     redirect("/review/skin-images?error=invalid");
   }
+  const scopeResponse = await fetch(`${API_BASE_URL}/admin/reviewer-scopes`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      reviewer_id: reviewerId,
+      scope_type: "skin_image",
+      scope_key: predictionId,
+      reason: `Skin image assignment: ${reason}`.slice(0, 1000),
+    }),
+    cache: "no-store",
+  });
+  if (!scopeResponse.ok && scopeResponse.status !== 409) {
+    redirect("/review/skin-images?error=scope");
+  }
   const response = await fetch(`${API_BASE_URL}/skin-images/review/${encodeURIComponent(predictionId)}/assign`, {
     method: "POST",
     headers: {
@@ -142,6 +160,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
         {params.error === "forbidden" && <div className="review-alert" role="alert">Only administrators can assign images.</div>}
         {params.error === "conflict" && <div className="review-alert" role="alert">This image changed before your action. Refresh the queue and try again.</div>}
         {params.error === "save" && <div className="review-alert" role="alert">The action could not be saved. Please try again.</div>}
+        {params.error === "scope" && <div className="review-alert" role="alert">The image-specific reviewer permission could not be granted. No assignment was made.</div>}
         {queueError && <div className="review-alert" role="alert">{queueError}</div>}
         <div className="review-section-heading">
           <div><span className="eyebrow">WORK QUEUE</span><h2>Skin-image submissions</h2></div>
