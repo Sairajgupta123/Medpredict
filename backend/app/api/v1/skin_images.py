@@ -809,3 +809,74 @@ def list_skin_image_review_audit(
         }
         for event, actor in rows
     ]
+
+
+@router.get("/{prediction_id}/review-status")
+def get_owner_skin_image_review_status(
+    prediction_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    """Return a minimal, owner-only status for a skin-image technical review.
+
+    Reviewer identities, internal reasons, audit events, storage references,
+    image bytes and diagnostic fields are intentionally excluded.
+    """
+    from uuid import UUID
+
+    try:
+        parsed_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Image history item not found.") from exc
+
+    prediction = get_owned_prediction(db, user.id, parsed_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(status_code=404, detail="Image history item not found.")
+
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
+    )
+    if image_record is None:
+        raise HTTPException(status_code=404, detail="Image history item not found.")
+
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_review"
+    ):
+        return {
+            "prediction_id": str(prediction.id),
+            "status": "review_access_withdrawn",
+            "status_label": "Human review permission withdrawn",
+            "status_at": None,
+            "clinical_interpretation_performed": False,
+            "disease_prediction_performed": False,
+        }
+
+    if image_record.storage_status != "stored":
+        status_value = "submission_unavailable"
+        status_label = "Image is not currently available for technical review"
+        status_at = image_record.created_at
+    elif image_record.review_status == "pending":
+        status_value = "awaiting_review"
+        status_label = "Awaiting technical image review"
+        status_at = image_record.created_at
+    elif image_record.review_status == "assigned":
+        status_value = "assigned"
+        status_label = "Assigned for technical image review"
+        status_at = image_record.assigned_at or image_record.created_at
+    elif image_record.review_status == "reviewed" and image_record.review_outcome == "capture_adequate":
+        status_value = "reviewed"
+        status_label = "Technical image review completed"
+        status_at = image_record.reviewed_at
+    else:
+        status_value = "unable_to_assess"
+        status_label = "Image quality could not be assessed"
+        status_at = image_record.reviewed_at
+
+    return {
+        "prediction_id": str(prediction.id),
+        "status": status_value,
+        "status_label": status_label,
+        "status_at": status_at,
+        "clinical_interpretation_performed": False,
+        "disease_prediction_performed": False,
+    }
