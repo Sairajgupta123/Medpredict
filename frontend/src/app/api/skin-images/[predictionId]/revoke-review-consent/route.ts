@@ -2,22 +2,34 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
 
+function privateJson(body: unknown, init: ResponseInit = {}) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...init.headers,
+      "Cache-Control": "private, no-store, max-age=0",
+      Pragma: "no-cache",
+    },
+  });
+}
+
+
 type RouteContext = { params: Promise<{ predictionId: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) {
-    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+    return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
 
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) {
-    return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
+    return privateJson({ detail: "Authentication required." }, { status: 401 });
   }
 
   const { predictionId } = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(predictionId)) {
-    return NextResponse.json({ detail: "Image history item not found." }, { status: 404 });
+    return privateJson({ detail: "Image history item not found." }, { status: 404 });
   }
 
   try {
@@ -31,12 +43,12 @@ export async function POST(request: Request, context: RouteContext) {
       },
     );
     const body = await upstream.json().catch(() => null);
-    return NextResponse.json(
+    return privateJson(
       body ?? { detail: "The consent service returned an invalid response." },
       { status: upstream.status, headers: { "Cache-Control": "private, no-store" } },
     );
   } catch {
-    return NextResponse.json(
+    return privateJson(
       { detail: "The consent service is unavailable. Review access has not been confirmed as revoked." },
       { status: 503 },
     );
