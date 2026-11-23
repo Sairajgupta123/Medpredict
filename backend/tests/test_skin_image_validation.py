@@ -140,3 +140,31 @@ def test_strips_jpeg_exif_metadata() -> None:
         assert not sanitized.getexif()
         assert "exif" not in sanitized.info
 
+def test_applies_exif_orientation_before_metadata_is_removed() -> None:
+    buffer = BytesIO()
+    exif = Image.Exif()
+    exif[274] = 6  # Rotate 90 degrees clockwise when displayed.
+    Image.new("RGB", (20, 10), (30, 60, 90)).save(
+        buffer, format="JPEG", exif=exif
+    )
+
+    result = validate_and_sanitize_skin_image(buffer.getvalue(), "image/jpeg")
+
+    assert (result.width, result.height) == (10, 20)
+    with Image.open(BytesIO(result.content)) as sanitized:
+        assert sanitized.size == (10, 20)
+        assert not sanitized.getexif()
+
+
+def test_preserves_png_transparency_while_stripping_metadata() -> None:
+    buffer = BytesIO()
+    image = Image.new("RGBA", (12, 12), (20, 40, 60, 0))
+    image.putpixel((5, 5), (20, 40, 60, 128))
+    image.save(buffer, format="PNG")
+
+    result = validate_and_sanitize_skin_image(buffer.getvalue(), "image/png")
+
+    with Image.open(BytesIO(result.content)) as sanitized:
+        assert sanitized.mode == "RGBA"
+        assert sanitized.getpixel((0, 0))[3] == 0
+        assert sanitized.getpixel((5, 5))[3] == 128
