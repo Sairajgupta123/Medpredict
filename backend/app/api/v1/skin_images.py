@@ -101,6 +101,8 @@ def intake_skin_image(
         input_storage_consent=False,
         disclaimer_version=None,
     )
+    db.add(prediction)
+    db.flush()
     image_id = uuid4()
     object_key = build_skin_image_object_key(image_id, validated.format)
     image_record = SkinImageAnalysis(
@@ -117,7 +119,6 @@ def intake_skin_image(
     )
     db.add_all(
         [
-            prediction,
             image_record,
             PredictionConsentEvent(
                 prediction_id=prediction.id,
