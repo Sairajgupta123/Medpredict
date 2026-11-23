@@ -46,7 +46,7 @@ export async function GET(_request: Request, context: RouteContext) {
   // Enforce that contract again while proxying; never buffer an unbounded body.
   const maxImageBytes = 8 * 1024 * 1024;
   const declaredLength = upstream.headers.get("content-length");
-  if (declaredLength !== null && (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxImageBytes)) {
+  if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxImageBytes)) {
     await upstream.body?.cancel().catch(() => undefined);
     return NextResponse.json({ detail: "Review image exceeds the allowed size." }, { status: 502 });
   }
