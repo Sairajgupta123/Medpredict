@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -31,6 +32,13 @@ def validate_dataset_record(record: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     if missing:
         errors.append("required_fields_missing")
+
+    for field in (
+        "dataset_id", "name", "version", "retrieved_on", "license", "patient_grouping"
+    ):
+        value = record.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"invalid_{field}")
     if record.get("modality") not in MODALITIES:
         errors.append("invalid_modality")
     if record.get("image_domain") not in IMAGE_DOMAINS:
@@ -77,9 +85,13 @@ def audit_registry(path: Path) -> dict[str, Any]:
         if not isinstance(item, dict):
             raise ValueError(f"Dataset registry entry at index {index} must be an object")
     results = [validate_dataset_record(item) for item in data["datasets"]]
-    ids = [item.get("dataset_id") for item in data["datasets"]]
+    ids = [
+        item.get("dataset_id")
+        for item in data["datasets"]
+        if isinstance(item.get("dataset_id"), str) and item.get("dataset_id").strip()
+    ]
     duplicate_ids = sorted(
-        {str(value) for value in ids if ids.count(value) > 1}
+        value for value, count in Counter(ids).items() if count > 1
     )
     return {
         "dataset_count": len(results),
