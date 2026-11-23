@@ -385,9 +385,9 @@ export async function getReviewerScopeGovernance(): Promise<{
   try {
     const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
     const [reviewersResponse, scopesResponse, eventsResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/admin/reviewers`, { headers, cache: "no-store" }),
-      fetch(`${API_BASE_URL}/admin/reviewer-scopes`, { headers, cache: "no-store" }),
-      fetch(`${API_BASE_URL}/admin/reviewer-scopes/history?limit=30`, { headers, cache: "no-store" }),
+      fetch(`${API_BASE_URL}/admin/reviewers`, { headers, cache: "no-store", signal: AbortSignal.timeout(8_000) }),
+      fetch(`${API_BASE_URL}/admin/reviewer-scopes`, { headers, cache: "no-store", signal: AbortSignal.timeout(8_000) }),
+      fetch(`${API_BASE_URL}/admin/reviewer-scopes/history?limit=30`, { headers, cache: "no-store", signal: AbortSignal.timeout(8_000) }),
     ]);
     if (![reviewersResponse, scopesResponse, eventsResponse].every((response) => response.ok)) {
       return {
@@ -530,7 +530,7 @@ export async function getReviewableMedicalReferences(q = ""): Promise<{
   try {
     const response = await fetch(
       `${API_BASE_URL}/catalog/review/references?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(8_000) },
     );
     if (!response.ok) {
       return { items: [], error: "The medical source registry could not be loaded." };
