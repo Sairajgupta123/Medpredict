@@ -320,10 +320,15 @@ export function SymptomChecker() {
                       <select
                         id={`review-${item.id}`}
                         value={reviewStatuses[item.id] ?? "unsure"}
-                        onChange={(event) => setReviewStatuses((current) => ({
-                          ...current,
-                          [item.id]: event.target.value as ReviewStatus,
-                        }))}
+                        onChange={(event) => {
+                          setReviewStatuses((current) => ({
+                            ...current,
+                            [item.id]: event.target.value as ReviewStatus,
+                          }));
+                          // A changed confirmation invalidates any previous catalog comparison.
+                          setMatchResult(null);
+                          setMatchError("");
+                        }}
                       >
                         <option value="unsure">Not sure / needs review</option>
                         <option value="present">I am experiencing this</option>
