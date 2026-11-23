@@ -72,3 +72,10 @@ Image consent is separated into `skin_image_processing` (permission to process a
 Image metadata now tracks `unknown`, `pending_upload`, `stored`, `deletion_pending`, `deleted`, or `failed` storage states. Existing records migrate to `unknown` rather than being assumed to exist in configured private storage. The deletion service records `deletion_pending` and commits that marker before calling the storage adapter. It removes database history only after storage confirms deletion. If storage fails, the history record remains available for retry; if storage deletion succeeds but a later database operation fails, the retry repeats an idempotent object deletion. Unknown or incomplete storage states are blocked for manual reconciliation.
 
 The API continues to block image-history deletion because no production storage adapter is configured. The retry-safe service path is exercised with a fake adapter only; this is not a claim that production image deletion is active.
+
+
+### Explicit image retention scheduling
+
+Migration `0018_skin_image_retention` adds nullable `retention_expires_at` and `retention_policy_version` metadata with an index for expiry lookups. No default duration is imposed: a caller must provide a timezone-aware future expiry and a policy version, and the owner must have separately granted `skin_image_history` consent. The service only schedules retention for an image already confirmed as `stored`.
+
+`list_expired_skin_image_records` returns bounded batches of due, stored image records for a future retention worker. It does not delete objects or database rows. A production worker still needs a configured private storage adapter, retry/backoff and alerting, concurrency-safe claiming, deletion audit/reconciliation, and operational retention-policy approval. Until those exist, this query is only a tested building block and automatic expiry deletion is not active.
