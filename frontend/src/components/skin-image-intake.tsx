@@ -13,9 +13,9 @@ type IntakeResponse = {
 type ApiError = { detail?: string };
 
 const POLICY_VERSIONS = {
-  processing: "skin-image-processing-v1",
-  history: "skin-image-history-v1",
-  review: "skin-image-review-v1",
+  processing: "image-processing-v1",
+  history: "image-history-v1",
+  review: "image-review-v1",
 };
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
