@@ -63,6 +63,22 @@ def _admin_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _user_headers(role: str) -> dict[str, str]:
+    db = TestingSessionLocal()
+    try:
+        user = User(
+            email=f"skin-review-{role}-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role=role,
+        )
+        db.add(user)
+        db.commit()
+        token = create_access_token(user.id)
+    finally:
+        db.close()
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_static_review_queue_and_audit_routes_are_not_shadowed(
     client: TestClient,
 ) -> None:
@@ -85,3 +101,15 @@ def test_owner_image_route_rejects_non_uuid_path_segment(
         headers=_admin_headers(),
     )
     assert response.status_code == 404
+
+
+def test_patient_cannot_access_reviewer_queue_or_audit(
+    client: TestClient,
+) -> None:
+    headers = _user_headers("patient")
+
+    queue = client.get("/api/v1/skin-images/review/queue", headers=headers)
+    audit = client.get("/api/v1/skin-images/review/audit", headers=headers)
+
+    assert queue.status_code == 403
+    assert audit.status_code == 403
