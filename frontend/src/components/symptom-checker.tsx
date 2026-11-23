@@ -30,6 +30,22 @@ type SymptomCatalog = {
   disclaimer: string;
 };
 
+type CatalogMatchItem = {
+  disease_code: string;
+  disease_name: string;
+  catalog_symptom_count: number;
+  matched_symptoms: { symptom_code: string; symptom_name: string }[];
+  matched_symptom_count: number;
+  catalog_overlap_ratio: number;
+};
+type CatalogMatchResult = {
+  method: "approved_catalog_overlap";
+  results: CatalogMatchItem[];
+  disclaimer: string;
+  clinical_interpretation_performed: false;
+  disease_probability_provided: false;
+};
+
 const contextLabels: Record<string, string> = {
   negated_or_denied_context: "Mentioned as absent or denied",
   possibly_historical_context: "May refer to an earlier symptom",
@@ -58,6 +74,9 @@ export function SymptomChecker() {
   const [reviewStatuses, setReviewStatuses] = useState<Record<string, ReviewStatus>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [matchResult, setMatchResult] = useState<CatalogMatchResult | null>(null);
+  const [matchError, setMatchError] = useState("");
+  const [matchLoading, setMatchLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -84,6 +103,46 @@ export function SymptomChecker() {
       return `${withoutEnding}, ${addition}.`;
     });
     setSelectedIds((current) => current.includes(item.id) ? current : [...current, item.id]);
+  }
+
+  async function handleCatalogMatch() {
+    const symptomIds = reviewItems
+      .filter((item) => reviewStatuses[item.id] === "present")
+      .map((item) => item.id);
+    if (symptomIds.length === 0) {
+      setMatchError("Confirm at least one symptom as present before comparing the catalog.");
+      return;
+    }
+    setMatchError("");
+    setMatchResult(null);
+    setMatchLoading(true);
+    try {
+      const response = await fetch("/api/symptoms/catalog-match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ symptom_ids: symptomIds }),
+        cache: "no-store",
+      });
+      const body = await response.json() as CatalogMatchResult & { detail?: string };
+      if (!response.ok) {
+        setMatchError(body.detail ?? "The approved catalog could not be compared.");
+        return;
+      }
+      if (
+        body.method !== "approved_catalog_overlap" ||
+        body.clinical_interpretation_performed !== false ||
+        body.disease_probability_provided !== false ||
+        !Array.isArray(body.results)
+      ) {
+        setMatchError("The catalog service returned an unexpected response. No result was displayed.");
+        return;
+      }
+      setMatchResult(body);
+    } catch {
+      setMatchError("Unable to connect to the catalog service. Please try again later.");
+    } finally {
+      setMatchLoading(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -115,6 +174,8 @@ export function SymptomChecker() {
         return;
       }
       setResult(body);
+      setMatchResult(null);
+      setMatchError("");
       const reviewItems = [...body.matched_symptoms, ...body.contextual_mentions];
       setReviewStatuses(Object.fromEntries(reviewItems.map((item) => [item.id, "unsure" as ReviewStatus])));
     } catch {
@@ -135,6 +196,8 @@ export function SymptomChecker() {
     },
     { present: 0, not_present: 0, unsure: 0 },
   );
+
+  const confirmedSymptomCount = reviewItems.filter((item) => reviewStatuses[item.id] === "present").length;
 
   const groupedSymptoms = (catalog?.symptoms ?? []).reduce<Record<string, SymptomItem[]>>((groups, item) => {
     (groups[item.category] ??= []).push(item);
@@ -279,6 +342,43 @@ export function SymptomChecker() {
             </div>
           ) : (
             <p className="symptom-empty">No supported symptom phrases were confidently recognized from this limited vocabulary. This does not mean that no symptoms are present. Please review your original description with a healthcare professional if you are concerned.</p>
+          )}
+
+          {reviewItems.length > 0 && (
+            <section className="catalog-match-panel" aria-labelledby="catalog-match-title">
+              <div className="human-review-intro">
+                <h3 id="catalog-match-title">Compare with the approved catalog</h3>
+                <p>Only symptoms you explicitly confirm as present are sent. This compares catalog associations; it does not estimate disease risk or provide a diagnosis.</p>
+              </div>
+              <button
+                className="button button-secondary"
+                disabled={matchLoading || confirmedSymptomCount === 0}
+                onClick={handleCatalogMatch}
+                type="button"
+              >
+                {matchLoading ? "Comparing approved entries..." : `Compare ${confirmedSymptomCount} confirmed symptom(s)`}
+              </button>
+              {matchError && <p className="auth-error" role="alert">{matchError}</p>}
+              {matchResult && (
+                <div className="catalog-match-results" aria-live="polite">
+                  {matchResult.results.length > 0 ? (
+                    <ul>
+                      {matchResult.results.map((item) => (
+                        <li key={item.disease_code}>
+                          <strong>{item.disease_name}</strong>
+                          <span>{item.matched_symptom_count} of {item.catalog_symptom_count} approved catalog associations matched</span>
+                          <small>Catalog overlap: {(item.catalog_overlap_ratio * 100).toFixed(0)}% — not a probability or risk score</small>
+                          <small>Matched terms: {item.matched_symptoms.map((symptom) => symptom.symptom_name).join(", ")}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>No approved disease associations matched these confirmed symptoms. This does not rule out any condition.</p>
+                  )}
+                  <p className="human-review-note">{matchResult.disclaimer}</p>
+                </div>
+              )}
+            </section>
           )}
 
           <div className="reported-context-summary">
