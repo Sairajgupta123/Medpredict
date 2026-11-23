@@ -131,6 +131,14 @@ class SkinImageAnalysis(Base):
             "storage_status IN ('unknown', 'pending_upload', 'stored', 'deletion_pending', 'deleted', 'failed')",
             name="ck_skin_image_storage_status",
         ),
+        CheckConstraint(
+            "review_status IN ('pending', 'assigned', 'reviewed', 'unable_to_assess')",
+            name="ck_skin_image_review_status",
+        ),
+        CheckConstraint(
+            "review_outcome IS NULL OR review_outcome IN ('image_adequate', 'unable_to_assess')",
+            name="ck_skin_image_review_outcome",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -163,6 +171,55 @@ class SkinImageAnalysis(Base):
         String(32), default="not_checked"
     )
     review_required: Mapped[bool] = mapped_column(default=True)
+    review_status: Mapped[str] = mapped_column(
+        String(24), default="pending", server_default="pending", nullable=False
+    )
+    assigned_reviewer_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    assigned_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reviewer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class SkinImageReviewEvent(Base):
+    """Append-only audit events for non-diagnostic human image review."""
+
+    __tablename__ = "skin_image_review_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('assigned', 'reassigned', 'reviewed')",
+            name="ck_skin_image_review_event_type",
+        ),
+        CheckConstraint(
+            "length(trim(reason)) >= 8",
+            name="ck_skin_image_review_event_reason",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    prediction_id: Mapped[UUID] = mapped_column(
+        ForeignKey("predictions.id", ondelete="RESTRICT"), index=True
+    )
+    image_analysis_id: Mapped[UUID] = mapped_column(
+        ForeignKey("skin_image_analyses.id", ondelete="RESTRICT"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(24))
+    actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    assigned_reviewer_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
