@@ -42,10 +42,49 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ detail: "Unexpected image content type." }, { status: 502 });
   }
 
-  return new Response(await upstream.arrayBuffer(), {
+  // The backend stores sanitized image objects with an 8 MiB hard limit.
+  // Enforce that contract again while proxying; never buffer an unbounded body.
+  const maxImageBytes = 8 * 1024 * 1024;
+  const declaredLength = upstream.headers.get("content-length");
+  if (declaredLength !== null && (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxImageBytes)) {
+    await upstream.body?.cancel().catch(() => undefined);
+    return NextResponse.json({ detail: "Review image exceeds the allowed size." }, { status: 502 });
+  }
+  if (!upstream.body) {
+    return NextResponse.json({ detail: "Review image is empty." }, { status: 502 });
+  }
+
+  const reader = upstream.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxImageBytes) {
+        await reader.cancel();
+        return NextResponse.json({ detail: "Review image exceeds the allowed size." }, { status: 502 });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return NextResponse.json({ detail: "Review image could not be retrieved completely." }, { status: 502 });
+  }
+
+  const imageBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    imageBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new Response(imageBytes, {
     status: 200,
     headers: {
       "Content-Type": contentType,
+      "Content-Length": String(totalBytes),
       "Cache-Control": "private, no-store, max-age=0",
       Pragma: "no-cache",
       "X-Content-Type-Options": "nosniff",
