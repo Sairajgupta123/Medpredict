@@ -30,9 +30,47 @@ export async function proxyCredentials(
     return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
 
+  const maxCredentialBodyBytes = 32 * 1024;
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxCredentialBodyBytes)
+  ) {
+    return privateJson({ detail: "Authentication request is too large." }, { status: 413 });
+  }
+
   let payload: unknown;
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return privateJson({ detail: "Please provide valid JSON." }, { status: 400 });
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
   try {
-    payload = await request.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxCredentialBodyBytes) {
+        await reader.cancel();
+        return privateJson({ detail: "Authentication request is too large." }, { status: 413 });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return privateJson({ detail: "Please provide valid JSON." }, { status: 400 });
+  }
+
+  try {
+    const body = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    payload = JSON.parse(new TextDecoder().decode(body));
   } catch {
     return privateJson({ detail: "Please provide valid JSON." }, { status: 400 });
   }
@@ -119,7 +157,7 @@ export async function getSessionUser(): Promise<{
   } catch {
     return {
       user: null,
-      response: NextResponse.json(
+      response: privateJson(
         { detail: "The MediPredict server is unavailable." },
         { status: 503 },
       ),
