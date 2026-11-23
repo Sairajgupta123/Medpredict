@@ -25,7 +25,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: UUID) -> str:
+def create_access_token(subject: UUID, token_version: int = 0) -> str:
     """Create a short-lived signed JWT for a user UUID."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
@@ -35,12 +35,13 @@ def create_access_token(subject: UUID) -> str:
         "iat": now,
         "exp": expires_at,
         "type": "access",
+        "ver": token_version,
         "iss": "medipredict-api",
     }
     return jwt.encode(payload, settings.app_secret_key, algorithm="HS256")
 
 
-def decode_access_token(token: str) -> UUID | None:
+def decode_access_token(token: str) -> tuple[UUID, int] | None:
     """Validate a signed access token and return its user UUID."""
     settings = get_settings()
     try:
@@ -49,10 +50,15 @@ def decode_access_token(token: str) -> UUID | None:
             settings.app_secret_key,
             algorithms=["HS256"],
             issuer="medipredict-api",
-            options={"require": ["exp", "iat", "sub", "iss", "type"]},
+            options={"require": ["exp", "iat", "sub", "iss", "type", "ver"]},
         )
         if payload.get("type") != "access":
             return None
-        return UUID(payload["sub"])
+        token_version = payload["ver"]
+        if isinstance(token_version, bool) or not isinstance(token_version, int):
+            return None
+        if token_version < 0:
+            return None
+        return UUID(payload["sub"]), token_version
     except (jwt.InvalidTokenError, ValueError, TypeError, KeyError):
         return None
