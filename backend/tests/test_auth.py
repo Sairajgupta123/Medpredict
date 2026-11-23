@@ -293,6 +293,58 @@ def test_password_reset_delivery_failure_does_not_leak_account_existence(
     assert unusable_token.status_code == 400
 
 
+def test_logout_revokes_current_and_other_account_access_tokens(
+    client: TestClient,
+) -> None:
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "logout@example.com", "password": "StrongPass123!"},
+    )
+    assert registration.status_code == 201
+    first_token = registration.json()["access_token"]
+
+    second_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "logout@example.com", "password": "StrongPass123!"},
+    )
+    assert second_login.status_code == 200
+    second_token = second_login.json()["access_token"]
+
+    logout_response = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {first_token}"},
+    )
+    assert logout_response.status_code == 200
+    assert logout_response.json() == {
+        "message": "You have been logged out successfully."
+    }
+
+    for token in (first_token, second_token):
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 401
+
+    fresh_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "logout@example.com", "password": "StrongPass123!"},
+    )
+    assert fresh_login.status_code == 200
+    fresh_profile = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": f"Bearer {fresh_login.json()['access_token']}"
+        },
+    )
+    assert fresh_profile.status_code == 200
+
+
+def test_logout_requires_authentication(client: TestClient) -> None:
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 401
+
+
 def test_register_login_and_read_profile(client: TestClient) -> None:
     registration = client.post(
         "/api/v1/auth/register",
