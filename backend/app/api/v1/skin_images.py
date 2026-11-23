@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.api.dependencies import Administrator, CurrentUser, DbSession
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
@@ -50,10 +50,7 @@ def _has_active_skin_image_review_scope(
             CatalogReviewerScope.reviewer_id == reviewer.id,
             CatalogReviewerScope.scope_type == "skin_image",
             CatalogReviewerScope.revoked_at.is_(None),
-            or_(
-                CatalogReviewerScope.scope_key.is_(None),
-                CatalogReviewerScope.scope_key == str(prediction_id),
-            ),
+            CatalogReviewerScope.scope_key == str(prediction_id),
         )
         .limit(1)
     )
