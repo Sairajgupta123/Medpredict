@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     skin_image_s3_endpoint_url: str | None = None
     skin_image_s3_encryption: str = "AES256"
     skin_image_s3_kms_key_id: str | None = None
+    skin_research_checkpoint_path: str | None = None
+    text_research_artifact_path: str | None = None
     database_url: str = (
         "postgresql+psycopg://medipredict:change-me@localhost:5432/medipredict"
     )
