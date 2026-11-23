@@ -565,3 +565,24 @@ def test_skin_image_retrieval_requires_authentication(client: TestClient) -> Non
         "/api/v1/skin-images/00000000-0000-0000-0000-000000000001"
     )
     assert response.status_code == 401
+
+
+def test_image_retrieval_fails_closed_when_storage_initialization_errors(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-read-storage-init@example.com")
+    item, _, _ = _stored_image_for_user(user.id)
+
+    def unavailable_storage():
+        raise OSError("simulated SDK configuration failure")
+
+    monkeypatch.setattr(
+        skin_images, "build_skin_image_storage", unavailable_storage
+    )
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 503
+    assert "storage is unavailable" in response.json()["detail"].lower()
