@@ -132,6 +132,28 @@ def test_history_rejects_invalid_pagination(client: TestClient) -> None:
     )
     assert response.status_code == 422
 
+def test_history_paginates_with_total_limit_and_offset(client: TestClient) -> None:
+    token, user = _register(client, "history-pagination@example.com")
+    first = _prediction(user.id, input_text="private first narrative")
+    second = _prediction(user.id, input_text="private second narrative")
+    third = _prediction(user.id, input_text="private third narrative")
+
+    response = client.get(
+        "/api/v1/predictions/history?limit=2&offset=1",
+        headers=_headers(token),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert payload["limit"] == 2
+    assert payload["offset"] == 1
+    assert len(payload["items"]) == 2
+    assert {entry["id"] for entry in payload["items"]} <= {
+        str(first.id), str(second.id), str(third.id)
+    }
+    assert all("input_text" not in entry for entry in payload["items"])
+    assert "private " not in response.text
+
 
 def test_user_can_revoke_text_history_consent(client: TestClient) -> None:
     token, user = _register(client, "revoke@example.com")
