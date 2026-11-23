@@ -1,0 +1,111 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { API_BASE_URL, getSessionUser, SESSION_COOKIE } from "@/lib/auth-proxy";
+
+type AuditEvent = {
+  event_id: string;
+  prediction_id: string;
+  event_type: "assigned" | "reassigned" | "image_accessed" | "reviewed";
+  actor_id: string;
+  actor_identity: string;
+  actor_role: string;
+  assigned_reviewer_id: string | null;
+  outcome: string | null;
+  reason: string;
+  created_at: string;
+};
+
+const EVENT_LABELS: Record<AuditEvent["event_type"], string> = {
+  assigned: "Image assigned",
+  reassigned: "Image reassigned",
+  image_accessed: "Private image accessed",
+  reviewed: "Technical review submitted",
+};
+
+export default async function SkinImageAuditPage() {
+  const session = await getSessionUser();
+  if (!session.user) redirect("/login");
+  const user = session.user as { role?: string };
+  if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
+
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) redirect("/login");
+
+  let events: AuditEvent[] = [];
+  let error = "";
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/skin-images/review/audit?limit=200&offset=0`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (response.ok) {
+      const payload = await response.json();
+      if (Array.isArray(payload)) events = payload as AuditEvent[];
+      else error = "The audit service returned an unexpected response.";
+    } else {
+      error = response.status === 403
+        ? "Your account does not have image-review audit access."
+        : "The image-review audit history could not be loaded.";
+    }
+  } catch {
+    error = "The MediPredict server is unavailable.";
+  }
+
+  return (
+    <main id="main-content" className="review-page skin-audit-page">
+      <section className="review-hero">
+        <div className="container">
+          <Link className="back-link" href="/review/skin-images">← Back to skin-image queue</Link>
+          <div className="eyebrow"><span className="eyebrow-dot" /> SKIN IMAGE GOVERNANCE</div>
+          <h1>Access and review <em>audit trail.</em></h1>
+          <p>Every recorded assignment, reassignment, private image retrieval and technical review is shown with the actor identity and timestamp. This page contains audit metadata only, never image content or storage keys.</p>
+          <div className="review-summary">
+            <div><strong>{events.length.toString().padStart(2, "0")}</strong><span>EVENTS IN THIS VIEW</span></div>
+            <div><strong>{user.role === "admin" ? "All image reviews" : "Your review activity"}</strong><span>AUTHORIZED AUDIT SCOPE</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="container review-content">
+        {error && <div className="review-alert" role="alert">{error}</div>}
+        <div className="review-section-heading">
+          <div><span className="eyebrow">IMMUTABLE EVENT RECORDS</span><h2>Recent activity</h2></div>
+          <span className="review-count">{events.length} EVENTS</span>
+        </div>
+        {!error && events.length === 0 ? (
+          <div className="review-empty"><h3>No audit events are available</h3><p>Assignment, private image access and technical review events will appear here when recorded.</p></div>
+        ) : (
+          <div className="review-list">
+            {events.map((event) => (
+              <article className="review-card skin-audit-card" key={event.event_id}>
+                <div className="review-card-heading">
+                  <div>
+                    <span className="review-type">{event.event_type.replaceAll("_", " ")}</span>
+                    <h3>{EVENT_LABELS[event.event_type] ?? "Image review event"}</h3>
+                    <p className="review-key">Submission reference: {event.prediction_id}</p>
+                  </div>
+                  <span className="review-status review-status-assigned">{event.actor_role}</span>
+                </div>
+                <div className="skin-audit-grid">
+                  <div><span>Actor</span><strong>{event.actor_identity}</strong></div>
+                  <div><span>Recorded at</span><strong>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(event.created_at))} IST</strong></div>
+                  <div><span>Assigned reviewer</span><strong>{event.assigned_reviewer_id ?? "Not applicable"}</strong></div>
+                  {event.outcome && <div><span>Outcome</span><strong>{event.outcome.replaceAll("_", " ")}</strong></div>}
+                </div>
+                <div className="skin-audit-reason"><span>Recorded reason</span><p>{event.reason}</p></div>
+              </article>
+            ))}
+          </div>
+        )}
+        <div className="review-safety-note">
+          <strong>Audit interpretation</strong>
+          <p>An image-access event is recorded after the backend successfully retrieves and validates the private image. It records a server-side retrieval, not proof that a person viewed every pixel. Browser caching is disabled for these responses. Audit records are operational evidence and do not establish clinical validity.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
