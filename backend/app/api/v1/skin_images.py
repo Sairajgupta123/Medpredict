@@ -13,8 +13,8 @@ from sqlalchemy import select
 from app.api.dependencies import CurrentUser, DbSession
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
 from app.services.skin_image_storage import (
+    DisabledSkinImageStorage,
     SkinImageStorage,
-    SkinImageStorageUnavailable,
     build_skin_image_object_key,
 )
 from app.services.skin_image_storage_factory import build_skin_image_storage
@@ -67,6 +67,7 @@ def intake_skin_image(
 
     raw_content = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(raw_content) > MAX_IMAGE_BYTES:
+        image.file.close()
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Image exceeds the 8 MiB upload limit.",
@@ -85,7 +86,7 @@ def intake_skin_image(
         image.file.close()
 
     storage: SkinImageStorage = build_skin_image_storage()
-    if isinstance(storage, type(None)) or storage.__class__.__name__ == "DisabledSkinImageStorage":
+    if isinstance(storage, DisabledSkinImageStorage):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Private image storage is not configured; the image was not retained.",
@@ -96,7 +97,7 @@ def intake_skin_image(
         modality="skin_image",
         status="review_required",
         input_storage_consent=False,
-        disclaimer_version=processing_policy_version.strip(),
+        disclaimer_version=None,
     )
     image_id = uuid4()
     object_key = build_skin_image_object_key(image_id, validated.format)
