@@ -324,7 +324,6 @@ def list_expired_skin_image_records(
             )
             .order_by(SkinImageAnalysis.retention_expires_at, SkinImageAnalysis.id)
             .limit(limit)
-            .with_for_update(skip_locked=True)
         ).all()
     )
 
@@ -421,16 +420,33 @@ def purge_expired_skin_image_records(
     candidates = list_expired_skin_image_records(db, as_of=as_of, limit=limit)
     deleted = 0
     failed = 0
-    for image_record in candidates:
+    processed = 0
+    for candidate in candidates:
+        # Claim each row independently and keep its lock through object deletion.
+        # This prevents two workers from deleting the same object concurrently.
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.id == candidate.id,
+                SkinImageAnalysis.storage_status.in_({"stored", "deletion_pending"}),
+                SkinImageAnalysis.retention_expires_at.is_not(None),
+                SkinImageAnalysis.retention_expires_at <= as_of,
+            )
+            .with_for_update(skip_locked=True)
+        )
+        if image_record is None:
+            continue
+
+        processed += 1
         image_record.storage_status = "deletion_pending"
         image_record.deletion_requested_at = (
             image_record.deletion_requested_at or datetime.now(timezone.utc)
         )
-        db.commit()
         try:
             image_storage.delete_private(image_record.object_key)
         except Exception:
             failed += 1
+            db.commit()
             continue
 
         image_record.storage_status = "deleted"
@@ -462,4 +478,4 @@ def purge_expired_skin_image_records(
             )
         db.commit()
         deleted += 1
-    return {"processed": len(candidates), "deleted": deleted, "failed": failed}
+    return {"processed": processed, "deleted": deleted, "failed": failed}
