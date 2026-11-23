@@ -7,8 +7,12 @@ deserialization and cannot prevent code execution from a malicious pickle.
 from __future__ import annotations
 
 from collections.abc import Mapping
+import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 
 
@@ -103,6 +107,55 @@ def validate_text_model_bundle(bundle: Any) -> dict[str, Any]:
         "class_labels": list(class_labels),
         "purpose": RESEARCH_PURPOSE,
     }
+
+
+def load_text_model_bundle(artifact_path: str | Path) -> dict[str, Any]:
+    """Load a research bundle only after checking its adjacent integrity manifest.
+
+    The path must point to an artifact in trusted, access-controlled storage. SHA-256
+    verifies byte consistency with the manifest; it is not a signature. Never load
+    user-supplied or otherwise untrusted joblib/pickle files: deserialization can execute
+    code before structural validation runs.
+    """
+    path = Path(artifact_path)
+    if not path.is_absolute():
+        raise ValueError("Text model artifact path must be absolute")
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Text model artifact must be an existing regular file")
+    manifest_path = path.with_name("artifact_manifest.json")
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("Text model artifact manifest is missing or not a regular file")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Text model artifact manifest is unreadable") from exc
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Text model artifact manifest must be a JSON object")
+    if manifest.get("purpose") != RESEARCH_PURPOSE:
+        raise ValueError("Text model artifact manifest must be research-only")
+    if manifest.get("artifact_file") != path.name:
+        raise ValueError("Text model artifact filename does not match its manifest")
+    expected_hash = manifest.get("artifact_sha256")
+    if (
+        not isinstance(expected_hash, str)
+        or len(expected_hash) != 64
+        or any(char not in "0123456789abcdef" for char in expected_hash)
+    ):
+        raise ValueError("Text model artifact manifest has an invalid SHA-256")
+    actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual_hash != expected_hash:
+        raise ValueError("Text model artifact SHA-256 does not match its manifest")
+
+    # Only after the trusted-storage and integrity checks do we deserialize.
+    try:
+        bundle = joblib.load(path)
+    except Exception as exc:
+        raise ValueError("Text model artifact could not be deserialized") from exc
+    validated = validate_text_model_bundle(bundle)
+    if manifest.get("model_name") != validated["model_name"]:
+        raise ValueError("Text model name does not match its artifact manifest")
+    return validated
+
 
 def predict_text_research(bundle: Any, text: str) -> dict[str, Any]:
     """Run one bounded research-only inference and abstain below the stored threshold.
