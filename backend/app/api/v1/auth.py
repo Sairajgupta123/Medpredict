@@ -168,6 +168,18 @@ def confirm_password_reset(
     return {"message": "Your password has been reset successfully."}
 
 
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Log out and revoke the account's access tokens",
+)
+def logout(user: CurrentUser, db: DbSession) -> dict[str, str]:
+    """Revoke all access tokens issued for the authenticated account."""
+    user.token_version += 1
+    db.commit()
+    return {"message": "You have been logged out successfully."}
+
+
 @router.get(
     "/me",
     response_model=UserRead,
