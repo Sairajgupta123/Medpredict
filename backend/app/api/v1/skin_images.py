@@ -321,7 +321,9 @@ def list_skin_image_review_queue(
         .join(Prediction, Prediction.id == SkinImageAnalysis.prediction_id)
         .where(
             SkinImageAnalysis.storage_status == "stored",
-            SkinImageAnalysis.review_status == "assigned",
+            SkinImageAnalysis.review_status.in_(
+                ["pending", "assigned"] if user.role == "admin" else ["assigned"]
+            ),
         )
         .order_by(SkinImageAnalysis.assigned_at.asc(), SkinImageAnalysis.id.asc())
     )
