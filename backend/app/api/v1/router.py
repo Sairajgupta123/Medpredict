@@ -9,6 +9,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.api.v1.predictions import router as predictions_router
 from app.api.v1.symptoms import router as symptoms_router
+from app.api.v1.skin_images import router as skin_images_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -17,4 +18,5 @@ api_router.include_router(auth_router)
 api_router.include_router(catalog_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(symptoms_router)
+api_router.include_router(skin_images_router)
 api_router.include_router(predictions_router)
