@@ -84,6 +84,26 @@ async function revokeReviewConsent(formData: FormData) {
 
   if (response.status === 409) redirect("/history/skin-images?error=already-revoked");
   if (!response.ok) redirect("/history/skin-images?error=save");
+
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch {
+    redirect("/history/skin-images?error=save");
+  }
+  if (
+    !result
+    || typeof result !== "object"
+    || !("prediction_id" in result)
+    || result.prediction_id !== predictionId
+    || !("consent_status" in result)
+    || result.consent_status !== "revoked"
+    || !("reviewer_access_revoked" in result)
+    || result.reviewer_access_revoked !== true
+  ) {
+    redirect("/history/skin-images?error=save");
+  }
+
   revalidatePath("/history/skin-images");
   redirect("/history/skin-images?updated=revoked");
 }
