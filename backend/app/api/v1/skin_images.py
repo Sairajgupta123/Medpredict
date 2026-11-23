@@ -846,6 +846,8 @@ def get_owner_skin_image_review_status(
             "prediction_id": str(prediction.id),
             "status": "review_access_withdrawn",
             "status_label": "Human review permission withdrawn",
+            "status_detail": "The image is no longer available to reviewers under your current consent settings.",
+            "next_step": "No further review will take place unless you choose to submit a new image with the required permissions.",
             "status_at": None,
             "clinical_interpretation_performed": False,
             "disease_prediction_performed": False,
@@ -854,28 +856,40 @@ def get_owner_skin_image_review_status(
     if image_record.storage_status != "stored":
         status_value = "submission_unavailable"
         status_label = "Image is not currently available for technical review"
+        status_detail = "The stored image is unavailable, so a technical review could not proceed."
+        next_step = "Please contact the MediPredict support team if you need help with this submission."
         status_at = image_record.created_at
     elif image_record.review_status == "pending":
         status_value = "awaiting_review"
         status_label = "Awaiting technical image review"
+        status_detail = "Your image has been received. A technical capture-quality review has not started yet."
+        next_step = "You do not need to take any action while the review is pending. Seek medical care independently if you have symptoms or concerns."
         status_at = image_record.created_at
     elif image_record.review_status == "assigned":
         status_value = "assigned"
         status_label = "Assigned for technical image review"
+        status_detail = "The submission has been assigned for a technical capture-quality check."
+        next_step = "No action is required for the review itself. Do not delay medical care for symptoms or concerns."
         status_at = image_record.assigned_at or image_record.created_at
     elif image_record.review_status == "reviewed" and image_record.review_outcome == "capture_adequate":
         status_value = "reviewed"
-        status_label = "Technical image review completed"
+        status_label = "Technical image capture review completed"
+        status_detail = "The reviewer marked the image capture as technically adequate for this limited review. This does not establish whether a skin condition is present or what it may be."
+        next_step = "If you have a skin concern, consult a qualified healthcare professional; this technical review is not a medical assessment."
         status_at = image_record.reviewed_at
     else:
         status_value = "unable_to_assess"
         status_label = "Image quality could not be assessed"
+        status_detail = "The reviewer could not complete the technical capture-quality check from this image."
+        next_step = "If you choose to submit another image, use clear focus, even lighting and no filters. Seek medical care independently if you have symptoms or concerns."
         status_at = image_record.reviewed_at
 
     return {
         "prediction_id": str(prediction.id),
         "status": status_value,
         "status_label": status_label,
+        "status_detail": status_detail,
+        "next_step": next_step,
         "status_at": status_at,
         "clinical_interpretation_performed": False,
         "disease_prediction_performed": False,
