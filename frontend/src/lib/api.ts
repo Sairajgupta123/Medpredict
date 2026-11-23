@@ -52,3 +52,17 @@ export type CatalogListResponse = {
   limit: number;
   offset: number;
 };
+
+export type ResearchModelCapability = {
+  status: "not_configured" | "invalid_configuration" | "configured_not_loaded";
+  configured: boolean;
+  loaded: false;
+  inference_enabled: false;
+};
+
+export type ResearchModelStatusResponse = {
+  skin_image: ResearchModelCapability;
+  symptom_text: ResearchModelCapability;
+  research_only: true;
+  clinical_diagnosis_enabled: false;
+};
