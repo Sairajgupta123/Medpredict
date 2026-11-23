@@ -398,3 +398,7 @@ The scope grant is an application authorization control, not proof of clinical c
 
 
 Successful image delivery is also recorded as an `image_accessed` audit event with the authenticated actor, assigned reviewer, submission references, reason and timestamp. Failed or unauthorized requests are not represented as successful image views. The audit event contains no image bytes, public URL or clinical interpretation.
+
+### Separate consent for human image review
+
+Separate `skin_image_processing`, `skin_image_history`, and `skin_image_review` consent purposes are recorded with independent policy versions. The intake endpoint requires all three explicit choices. Human-review queue access, assignment, decisions and private reviewer image retrieval require active processing and human-review consent. The owner can revoke human-review consent at `POST /api/v1/skin-images/{prediction_id}/revoke-review-consent`; this immediately revokes exact-image reviewer scopes while retaining the minimal audit trail. Image-history consent remains a separate control for owner retrieval and retention.
