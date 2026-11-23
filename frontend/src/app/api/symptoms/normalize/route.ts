@@ -14,14 +14,20 @@ const allowedValues = {
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) {
-    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+    return NextResponse.json(
+      { detail: "Invalid request origin." },
+      { status: 403, headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   }
 
   let payload: unknown;
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ detail: "Please provide valid JSON." }, { status: 400 });
+    return NextResponse.json(
+      { detail: "Please provide valid JSON." },
+      { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   }
 
   if (
@@ -37,7 +43,7 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       { detail: "Enter symptom text and select valid symptom context." },
-      { status: 422 },
+      { status: 422, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }
 
@@ -68,12 +74,12 @@ export async function POST(request: Request) {
     const result = await upstream.json().catch(() => null);
     return NextResponse.json(
       result ?? { detail: "The symptom service returned an invalid response." },
-      { status: upstream.status },
+      { status: upstream.status, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   } catch {
     return NextResponse.json(
       { detail: "The MediPredict API is unavailable. Please try again later." },
-      { status: 503 },
+      { status: 503, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }
 }
