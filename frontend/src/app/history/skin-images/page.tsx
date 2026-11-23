@@ -54,7 +54,7 @@ async function deleteSkinImageHistory(formData: FormData) {
   }
   if (response.status === 204) {
     revalidatePath("/history/skin-images");
-    redirect(`/history/skin-images?deleted=${encodeURIComponent(predictionId)}&receipt=${encodeURIComponent(new Date().toISOString())}`);
+    redirect("/history/skin-images");
   }
   if (response.status === 404) redirect("/history/skin-images?error=delete-not-found");
   if (response.status === 503) redirect("/history/skin-images?error=delete-pending");
@@ -110,7 +110,7 @@ async function revokeReviewConsent(formData: FormData) {
   redirect("/history/skin-images?updated=revoked");
 }
 
-type PageProps = { searchParams: Promise<{ updated?: string; deleted?: string; receipt?: string; error?: string; offset?: string }> };
+type PageProps = { searchParams: Promise<{ updated?: string; error?: string; offset?: string }> };
 
 export default async function SkinImageHistoryPage({ searchParams }: PageProps) {
   const session = await getSessionUser();
@@ -246,7 +246,6 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
       </section>
       <section className="container review-content">
         {params.updated === "revoked" && <div className="review-alert review-alert-success" role="status">Human-review consent was revoked. Reviewer access for that image has been disabled.</div>}
-        {params.deleted && /^[0-9a-f-]{36}$/i.test(params.deleted) && <div className="review-alert review-alert-success" role="status"><strong>Deletion confirmed.</strong> Private image deletion and history-record removal were confirmed for reference {params.deleted.slice(0, 8)}.{params.receipt && !Number.isNaN(Date.parse(params.receipt)) ? ` Receipt time: ${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(params.receipt))}.` : ""} The minimal independent review audit trail may remain.</div>}
         {params.error === "invalid" && <div className="review-alert" role="alert">The selected image reference is invalid.</div>}
         {params.error === "already-revoked" && <div className="review-alert" role="status">No active human-review consent was found for that image.</div>}
         {params.error === "unavailable" && <div className="review-alert" role="alert">The consent service is unavailable. Revocation was not confirmed.</div>}
