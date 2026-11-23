@@ -153,7 +153,7 @@ export async function getCatalogReviewQueue(
       `${API_BASE_URL}/catalog/review/queue?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(8_000),
       },
     );
     if (!response.ok) {
@@ -210,7 +210,7 @@ export async function getCatalogReviewHistory(
       `${API_BASE_URL}/catalog/review/history?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(8_000),
       },
     );
     if (!response.ok) {
@@ -255,7 +255,7 @@ export async function getReviewedCatalogEntry(eventId: string): Promise<{
       `${API_BASE_URL}/catalog/review/history/${encodeURIComponent(eventId)}/entry`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(8_000),
       },
     );
     if (!response.ok) {
@@ -300,7 +300,7 @@ export async function getGovernanceOverview(): Promise<{
   try {
     const response = await fetch(`${API_BASE_URL}/admin/governance?history_limit=20`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      cache: "no-store",
+      cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) {
       return {
@@ -433,7 +433,7 @@ export async function getReviewerWorkload(): Promise<{
   try {
     const response = await fetch(`${API_BASE_URL}/catalog/review/workload`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      cache: "no-store",
+      cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) {
       return {
@@ -539,7 +539,7 @@ export async function attachCatalogReference(
       body: JSON.stringify({
         target_type: targetType, target_key: targetKey, reference_id: referenceId, reason,
       }),
-      cache: "no-store",
+      cache: "no-store", signal: AbortSignal.timeout(8_000),
     });
     if (response.ok) return { error: null };
     if (response.status === 409) return { error: "This source is already attached." };
@@ -566,7 +566,7 @@ export async function removeCatalogReference(
           Accept: "application/json",
         },
         body: JSON.stringify({ reason }),
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(8_000),
       },
     );
     if (response.ok) return { error: null };
@@ -597,7 +597,7 @@ export async function getPendingCatalogEntry(
       `${API_BASE_URL}/catalog/review/queue/entry?${params.toString()}`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        cache: "no-store",
+        cache: "no-store", signal: AbortSignal.timeout(8_000),
       },
     );
     if (!response.ok) {
