@@ -692,6 +692,12 @@ def test_admin_assigns_image_to_verified_reviewer_and_review_is_audited(
         assert [event.event_type for event in events] == ["assigned", "reviewed"]
         assert events[0].actor_id == admin.id
         assert events[1].actor_id == reviewer.id
+        reviewed_image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        assert reviewed_image is not None and reviewed_image.review_required is True
     finally:
         db.close()
 
