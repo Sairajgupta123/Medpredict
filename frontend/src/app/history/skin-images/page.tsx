@@ -88,26 +88,31 @@ async function revokeReviewConsent(formData: FormData) {
   redirect("/history/skin-images?updated=revoked");
 }
 
-type PageProps = { searchParams: Promise<{ updated?: string; deleted?: string; receipt?: string; error?: string }> };
+type PageProps = { searchParams: Promise<{ updated?: string; deleted?: string; receipt?: string; error?: string; offset?: string }> };
 
 export default async function SkinImageHistoryPage({ searchParams }: PageProps) {
   const session = await getSessionUser();
   if (!session.user) redirect("/login");
   const token = await getSessionToken();
   const params = await searchParams;
+  const pageSize = 100;
+  const requestedOffset = Number(params.offset ?? "0");
+  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
 
+  let historyTotal = 0;
   let items: HistoryItem[] = [];
   const reviewStatuses: Record<string, OwnerReviewStatus> = {};
   let loadError = "";
   if (token) {
     try {
-      const response = await fetch(`${API_BASE_URL}/predictions/history?limit=100&offset=0`, {
+      const response = await fetch(`${API_BASE_URL}/predictions/history?limit=${pageSize}&offset=${offset}`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
       });
       if (response.ok) {
         const payload = await response.json() as HistoryPage;
-        if (Array.isArray(payload.items)) {
+        if (Array.isArray(payload.items) && Number.isSafeInteger(payload.total) && payload.total >= 0) {
+          historyTotal = payload.total;
           items = payload.items.filter((item) => item.modality === "skin_image" || item.modality === "combined");
           await Promise.all(items.map(async (item) => {
             try {
@@ -146,7 +151,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
           <h1>Your submissions, <em>your control.</em></h1>
           <p>Only metadata for your own image submissions is listed here. Image bytes, storage keys and reviewer notes are not exposed in this history view.</p>
           <div className="review-summary">
-            <div><strong>{items.length.toString().padStart(2, "0")}</strong><span>IMAGE SUBMISSIONS SHOWN</span></div>
+            <div><strong>{items.length.toString().padStart(2, "0")}</strong><span>IMAGE SUBMISSIONS ON THIS PAGE</span></div>
             <div><strong>Owner only</strong><span>AUTHENTICATED ACCOUNT</span></div>
           </div>
         </div>
@@ -209,6 +214,13 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
               </article>
             ))}
           </div>
+        )}
+        {!loadError && historyTotal > pageSize && (
+          <nav className="review-pagination" aria-label="History pagination">
+            {offset > 0 && <Link className="button button-secondary" href={`/history/skin-images?offset=${Math.max(0, offset - pageSize)}`}>← Newer records</Link>}
+            <span>Showing history records {offset + 1}–{Math.min(offset + pageSize, historyTotal)} of {historyTotal}. Other record types may also appear in these pages.</span>
+            {offset + pageSize < historyTotal && <Link className="button button-secondary" href={`/history/skin-images?offset=${offset + pageSize}`}>Older records →</Link>}
+          </nav>
         )}
         <div className="review-safety-note">
           <strong>Technical review only</strong>
