@@ -37,6 +37,7 @@ export async function proxyCredentials(
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
   } catch {
     return NextResponse.json(
@@ -88,6 +89,7 @@ export async function getSessionUser(): Promise<{
     backendResponse = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
   } catch {
     return {
