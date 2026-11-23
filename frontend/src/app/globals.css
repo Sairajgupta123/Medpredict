@@ -549,3 +549,10 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .review-page-link, .review-page-disabled { font-size: 10px; }
 }
 
+
+/* Human skin-image capture review */
+.skin-review-image-wrap { margin: 18px 0; padding: 14px; border: 1px solid #e5ece5; border-radius: 10px; background: #f9fbf8; }
+.skin-review-image { display: block; width: 100%; max-width: 560px; max-height: 520px; margin: 0 auto; object-fit: contain; border-radius: 7px; background: #edf1ed; }
+.skin-review-image-wrap p { max-width: 560px; margin: 10px auto 0; color: #718075; font-size: 11px; line-height: 1.6; }
+.review-status-pending { color: #8a6a35; background: #f7f0e3; }
+.review-status-assigned { color: #416a4c; background: #eaf2e9; }
