@@ -240,7 +240,10 @@ def test_password_reset_delivery_failure_does_not_leak_account_existence(
     )
     assert registration.status_code == 201
 
-    def fail_delivery(*args, **kwargs):
+    delivered = {}
+
+    def fail_delivery(recipient: str, raw_token: str) -> None:
+        delivered["token"] = raw_token
         raise RuntimeError("SMTP unavailable")
 
     monkeypatch.setattr(auth, "send_password_reset_email", fail_delivery)
@@ -251,6 +254,16 @@ def test_password_reset_delivery_failure_does_not_leak_account_existence(
 
     assert response.status_code == 202
     assert "token" not in response.text.lower()
+    assert "token" in delivered
+
+    unusable_token = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": delivered["token"],
+            "new_password": "NewPassword456!",
+        },
+    )
+    assert unusable_token.status_code == 400
 
 
 def test_register_login_and_read_profile(client: TestClient) -> None:
