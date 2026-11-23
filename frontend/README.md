@@ -102,3 +102,12 @@ The intake page reports success only when the backend confirms `storage_status=s
 The owner history page is `/history/skin-images`. It lists only the signed-in user's image/combined history metadata and provides a separate action to revoke human-review consent for an individual submission. Revocation is confirmed only after the backend acknowledges it; reviewer access for that exact image is disabled. The page does not display image bytes, object keys or reviewer notes. Image-history deletion remains a separate operation and is not represented as part of review-consent revocation.
 
 Private image storage must be configured on the backend before intake can succeed. See `backend/README.md` and `docs/architecture/prediction-pipeline.md` for the private S3 adapter, encryption, retention worker and operational prerequisites.
+
+
+## Skin-image reviewer console and audit trail
+
+Eligible reviewer and administrator accounts can open `/review/skin-images`. Administrators can assign a pending image to a verified reviewer only after granting an exact-prediction `skin_image` scope. Reviewers see only their assigned queue entries. The technical review form accepts only capture outcomes (`capture_adequate` or `unable_to_assess`) and a bounded operational reason; it does not accept diagnosis or disease labels.
+
+The queue links to `/review/skin-images/audit`. The audit page requests `GET /skin-images/review/audit` server-side using the HttpOnly session cookie. Administrators see the complete bounded feed; reviewers see events where they were the actor or assigned reviewer. Each row identifies the actor, role, event, opaque submission reference, reason and timestamp. The page does not retrieve image bytes or expose storage keys.
+
+A successful private image retrieval creates an `image_accessed` event only after object integrity and decoded format checks succeed. This confirms a server-side retrieval, not that a person viewed the complete image. Failed or unauthorized requests are not recorded as successful accesses. Audit events are retained as operational records, not a tamper-proof external compliance archive.
