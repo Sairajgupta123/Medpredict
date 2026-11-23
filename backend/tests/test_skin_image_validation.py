@@ -52,7 +52,7 @@ def test_rejects_mismatched_content_type() -> None:
 
 def test_rejects_unsupported_and_non_image_bytes() -> None:
     with pytest.raises(ValueError, match="Only JPEG"):
-        validate_and_sanitize_skin_image(b"<svg></svg>", "image/png")
+        validate_and_sanitize_skin_image(_image_bytes("GIF"), "image/png")
     with pytest.raises(ValueError, match="invalid or cannot be decoded"):
         validate_and_sanitize_skin_image(b"not an image", "image/png")
 
