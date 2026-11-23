@@ -40,7 +40,7 @@ def _token_response(user: User) -> TokenResponse:
     """Build a token response without exposing internal account fields."""
     settings = get_settings()
     return TokenResponse(
-        access_token=create_access_token(user.id),
+        access_token=create_access_token(user.id, user.token_version),
         expires_in=settings.access_token_expire_minutes * 60,
         user=UserRead.model_validate(user),
     )
@@ -163,6 +163,7 @@ def confirm_password_reset(
         )
 
     user.password_hash = hash_password(payload.new_password)
+    user.token_version += 1
     db.commit()
     return {"message": "Your password has been reset successfully."}
 
