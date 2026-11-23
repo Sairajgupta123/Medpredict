@@ -34,7 +34,7 @@ export async function proxyCredentials(
   const declaredLength = request.headers.get("content-length");
   if (
     declaredLength !== null &&
-    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxCredentialBodyBytes)
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxCredentialBodyBytes)
   ) {
     return privateJson({ detail: "Authentication request is too large." }, { status: 413 });
   }
