@@ -103,3 +103,61 @@ def validate_text_model_bundle(bundle: Any) -> dict[str, Any]:
         "class_labels": list(class_labels),
         "purpose": RESEARCH_PURPOSE,
     }
+
+def predict_text_research(bundle: Any, text: str) -> dict[str, Any]:
+    """Run one bounded research-only inference and abstain below the stored threshold.
+
+    The artifact must come from trusted storage before this function is called. This helper
+    deliberately does not expose a clinical prediction or disease-probability interpretation.
+    """
+    if not isinstance(text, str):
+        raise TypeError("Symptom text must be a string")
+    if not text.strip():
+        raise ValueError("Symptom text must not be empty")
+    if len(text) > 4_000:
+        raise ValueError("Symptom text exceeds 4000 characters")
+
+    validated = validate_text_model_bundle(bundle)
+    features = validated["vectorizer"].transform([text.strip()])
+    probabilities = np.asarray(
+        validated["estimator"].predict_proba(features), dtype=np.float64
+    )
+    expected_shape = (1, len(validated["class_labels"]))
+    if probabilities.shape != expected_shape:
+        raise ValueError("Model probability output shape does not match class labels")
+    if (
+        not np.isfinite(probabilities).all()
+        or (probabilities < 0).any()
+        or (probabilities > 1).any()
+    ):
+        raise ValueError("Model probabilities must be finite values between zero and one")
+    row_sums = probabilities.sum(axis=1)
+    if not np.allclose(row_sums, 1.0, rtol=1e-5, atol=1e-7):
+        raise ValueError("Model probability output must sum to one")
+
+    # Temperature scaling is applied to log probabilities for numerical stability.
+    log_scores = np.log(np.clip(probabilities[0], 1e-12, 1.0))
+    scaled = log_scores / validated["temperature"]
+    scaled -= np.max(scaled)
+    calibrated = np.exp(scaled)
+    calibrated /= calibrated.sum()
+    best_index = int(np.argmax(calibrated))
+    confidence = float(calibrated[best_index])
+    accepted = confidence >= validated["minimum_confidence"]
+
+    return {
+        "status": "research_prediction" if accepted else "uncertain_abstained",
+        "prediction": validated["class_labels"][best_index] if accepted else None,
+        "confidence_score": confidence,
+        "confidence_semantics": (
+            "Maximum temperature-scaled model score; not a disease probability "
+            "or medical certainty."
+        ),
+        "purpose": RESEARCH_PURPOSE,
+        "clinical_interpretation_performed": False,
+        "message": (
+            "Research output for documented model classes only; not a diagnosis."
+            if accepted
+            else "The model abstained because its score was below the stored research threshold."
+        ),
+    }
