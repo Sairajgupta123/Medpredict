@@ -20,6 +20,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
   }
 
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES + 64 * 1024) {
+    return NextResponse.json({ detail: "Image upload exceeds the permitted request size." }, { status: 413 });
+  }
+
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) {
     return NextResponse.json({ detail: "Authentication required." }, { status: 401 });
@@ -32,8 +37,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "Please provide a valid image upload." }, { status: 400 });
   }
 
-  const keys = [...new Set(Array.from(incoming.keys()))].sort();
-  if (keys.join(",") !== EXPECTED_FIELDS.join(",")) {
+  const incomingKeys = Array.from(incoming.keys());
+  const keys = [...new Set(incomingKeys)].sort();
+  if (incomingKeys.length !== EXPECTED_FIELDS.length || keys.join(",") !== EXPECTED_FIELDS.join(",")) {
     return NextResponse.json({ detail: "The upload form is incomplete or contains unexpected fields." }, { status: 422 });
   }
 
