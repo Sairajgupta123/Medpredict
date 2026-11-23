@@ -16,7 +16,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.user import User
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
-from app.models.reviewer_scope import CatalogReviewerScope
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
 
 test_engine = create_engine(
@@ -212,3 +212,95 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
     assert "consent" in image.json()["detail"].lower()
     assert events.status_code == 403
     assert "consent" in events.json()["detail"].lower()
+
+
+
+def test_owner_revocation_atomically_disables_reviewer_scope(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-image-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        reviewer = User(
+            email=f"skin-image-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([owner, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/revocation-test",
+                content_type="image/png",
+                image_sha256="1" * 64,
+                storage_status="stored",
+                review_status="assigned",
+                assigned_reviewer_id=reviewer.id,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=datetime.now(timezone.utc),
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=owner.id,
+                grant_reason="Owner approved this exact image review.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        owner_token = create_access_token(owner.id)
+        reviewer_id = reviewer.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/api/v1/skin-images/{prediction_id}/revoke-review-consent",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reviewer_access_revoked"] is True
+
+    db = TestingSessionLocal()
+    try:
+        scope = db.query(CatalogReviewerScope).filter_by(
+            reviewer_id=reviewer_id,
+            scope_type="skin_image",
+            scope_key=prediction_id,
+        ).one()
+        scope_event = db.query(CatalogReviewerScopeEvent).filter_by(
+            scope_id=scope.id,
+            event_type="revoked",
+        ).one()
+        revoked_consent = db.query(PredictionConsentEvent).filter_by(
+            prediction_id=prediction_id,
+            purpose="skin_image_review",
+            action="revoked",
+        ).one()
+        assert revoked_consent is not None
+        assert scope.revoked_at is not None
+        assert scope.revoked_by is not None
+        assert scope.revoke_reason
+        assert scope_event.reason
+    finally:
+        db.close()
