@@ -136,7 +136,7 @@ class SkinImageAnalysis(Base):
             name="ck_skin_image_review_status",
         ),
         CheckConstraint(
-            "review_outcome IS NULL OR review_outcome IN ('image_adequate', 'unable_to_assess')",
+            "review_outcome IS NULL OR review_outcome IN ('capture_adequate', 'unable_to_assess')",
             name="ck_skin_image_review_outcome",
         ),
     )
@@ -205,12 +205,9 @@ class SkinImageReviewEvent(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    prediction_id: Mapped[UUID] = mapped_column(
-        ForeignKey("predictions.id", ondelete="RESTRICT"), index=True
-    )
-    image_analysis_id: Mapped[UUID] = mapped_column(
-        ForeignKey("skin_image_analyses.id", ondelete="RESTRICT"), index=True
-    )
+    # Plain UUID references intentionally survive deletion of user history.
+    prediction_id: Mapped[UUID] = mapped_column(index=True)
+    image_analysis_id: Mapped[UUID] = mapped_column(index=True)
     event_type: Mapped[str] = mapped_column(String(24))
     actor_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
