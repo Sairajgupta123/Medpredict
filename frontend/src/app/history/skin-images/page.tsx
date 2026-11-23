@@ -146,7 +146,11 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
               try {
                 const statusResponse = await fetch(
                   `${API_BASE_URL}/skin-images/${encodeURIComponent(item.id)}/review-status`,
-                  { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
+                  {
+                    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+                    cache: "no-store",
+                    signal: AbortSignal.timeout(5000),
+                  },
                 );
                 if (statusResponse.ok) {
                   const statusPayload = await statusResponse.json() as OwnerReviewStatus;
