@@ -12,10 +12,10 @@ from app.schemas.prediction_history import (
     PredictionHistoryItem,
     PredictionHistoryPage,
 )
-from app.services.prediction_history import (
+from app.services.skin_image_storage import DisabledSkinImageStorage\nfrom app.services.skin_image_storage_factory import build_skin_image_storage\nfrom app.services.prediction_history import (
     delete_user_history_item,
     list_user_history,
-    revoke_text_history_consent,
+    revoke_text_history_consent,\n    revoke_skin_image_history_consent,
 )
 
 router = APIRouter(prefix="/predictions/history", tags=["Prediction history"])
@@ -50,6 +50,34 @@ def revoke_prediction_history_consent(
     db: DbSession,
 ) -> ConsentRevocationResponse:
     """Revoke text-history consent and erase retained free text and results."""
+    existing = db.get(Prediction, prediction_id)
+    if existing is None or existing.user_id != user.id:
+        # Preserve the same not-found behavior as all other history operations.
+        from app.services.prediction_history import get_owned_prediction
+        existing = get_owned_prediction(db, user.id, prediction_id)
+
+    if existing.modality in {"skin_image", "combined"}:
+        storage = build_skin_image_storage()
+        if isinstance(storage, DisabledSkinImageStorage):
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Private image storage is not configured; image consent cannot be revoked safely.",
+            )
+        prediction = revoke_skin_image_history_consent(
+            db,
+            user.id,
+            prediction_id,
+            image_storage=storage,
+            policy_version="image-history-v1",
+        )
+        return ConsentRevocationResponse(
+            prediction_id=prediction.id,
+            consent_revoked=True,
+            retained_input_removed=True,
+            message="Private image deletion was confirmed and image-history consent was revoked. Audit metadata is retained.",
+        )
+
     prediction: Prediction = revoke_text_history_consent(
         db, user.id, prediction_id
     )
@@ -74,4 +102,10 @@ def delete_prediction_history_item(
     db: DbSession,
 ) -> None:
     """Delete one owned history item when no external image cleanup is needed."""
-    delete_user_history_item(db, user.id, prediction_id)
+    storage = build_skin_image_storage()
+    image_storage = (
+        None if isinstance(storage, DisabledSkinImageStorage) else storage
+    )
+    delete_user_history_item(
+        db, user.id, prediction_id, image_storage=image_storage
+    )
