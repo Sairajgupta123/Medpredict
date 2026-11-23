@@ -107,6 +107,20 @@ def test_token_from_untrusted_issuer_is_rejected() -> None:
     assert decode_access_token(token) is None
 
 
+def test_access_token_without_version_claim_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(ver=None)
+    assert decode_access_token(token) is None
+
+
+def test_access_token_with_invalid_version_type_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(ver=True)
+    assert decode_access_token(token) is None
+
+
 def test_password_reset_request_uses_generic_response_for_unknown_email(
     client: TestClient, monkeypatch
 ) -> None:
