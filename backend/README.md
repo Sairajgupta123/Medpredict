@@ -429,3 +429,24 @@ Optional environment variables (leave unset until trusted artifacts and an appro
 - `TEXT_RESEARCH_ARTIFACT_PATH` — absolute path to a symptom-text research artifact.
 
 The endpoint reports `not_configured`, `invalid_configuration` (non-absolute path), or `configured_not_loaded`. A configured path is not proof that the file exists, is authentic, or is safe to load. Both modalities always report `loaded=false` and `inference_enabled=false`; the response explicitly marks the system as research-only and clinical diagnosis as disabled. Do not connect these artifacts to patient-facing prediction routes until artifact provenance, trusted storage, dependencies, evaluation, consent, and the applicable review gates have been completed.
+
+### Retention worker deployment checklist
+
+Before enabling the scheduled command in a non-development environment:
+
+1. Approve and publish the image-retention duration and policy version; configure an expiry only for records with explicit `skin_image_history` consent.
+2. Configure `SKIN_IMAGE_S3_BUCKET` and `SKIN_IMAGE_S3_REGION`. Keep the bucket private with Block Public Access enabled, bucket-owner-enforced object ownership, TLS-only access, and server-side encryption. If using KMS, set `SKIN_IMAGE_S3_ENCRYPTION=aws:kms` and `SKIN_IMAGE_S3_KMS_KEY_ID`.
+3. Give the worker identity only the required bucket-scoped `s3:DeleteObject` permission for the `skin-images/` prefix and the minimum database connectivity needed by the backend. Do not place long-lived AWS credentials in source control; prefer the platform's workload/instance role.
+4. Run a controlled staging batch against a dedicated test bucket first. Verify a successful deletion, an idempotent retry after a simulated failure, the database state, and the consent audit events before scheduling production cleanup.
+5. Schedule `python -m app.workers.skin_image_retention` from `backend/` with the same environment and dependency set as the API. Run one instance at a time; use the scheduler/platform's single-instance or distributed-lock feature to prevent overlapping batches.
+6. Alert on non-zero exit status and inspect aggregate worker/database/storage telemetry. Do not log object keys, image content, credentials, patient identifiers, or signed/public URLs.
+
+Example Linux cron entry (adjust the virtual-environment path and deployment directory):
+
+```cron
+*/15 * * * * cd /srv/medipredict/backend && /srv/medipredict/backend/.venv/bin/python -m app.workers.skin_image_retention
+```
+
+The cron example is illustrative only: configure the scheduler to prevent overlapping executions and capture the process exit status for alerting. A failed object deletion remains `deletion_pending` with its expiry and active history consent intact so a later run can retry. A successful expiry purge marks the object deleted, clears the expiry, revokes history consent, and preserves the minimal consent/prediction audit records. The worker's default batch size is 100; it can be changed by calling `run_retention_batch(limit=...)` from a controlled deployment entry point (1–500).
+
+Do not enable this job against production data until bucket permissions, retention policy, monitoring, backup/restore expectations, and legal/privacy requirements have been reviewed by the deploying organization.
