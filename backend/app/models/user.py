@@ -30,6 +30,9 @@ class User(Base):
         String(20), default="patient", server_default="patient", nullable=False
     )
     password_hash: Mapped[str] = mapped_column(String(255))
+    token_version: Mapped[int] = mapped_column(
+        default=0, server_default="0", nullable=False
+    )
     display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     email_verified: Mapped[bool] = mapped_column(
