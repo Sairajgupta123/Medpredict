@@ -99,7 +99,7 @@ Stored skin images can be assigned by an administrator to an active, email-verif
 
 The workflow is strictly a technical capture-quality review. capture_adequate does not mean a lesion is benign, malignant, or clinically assessable. No diagnosis, disease label, probability, treatment advice, or clinical interpretation is accepted or produced. Processing consent is checked before queue inclusion, image retrieval, assignment, and review decisions. Reviewers must be explicitly provisioned and verified operationally; the role and email-verification flags alone do not establish clinical qualifications. Administrators are responsible for verifying reviewer credentials and scope before assignment.
 
-Review audit events preserve opaque prediction/image UUID references without foreign keys to the user-history rows, so deleting an image history item does not erase the assignment/review audit trail. The audit stores actor, assignee, event, limited outcome, reason, and timestamp; it does not store image bytes or a public image URL. The image review UI and production reviewer qualification process are not yet implemented.
+Review audit events preserve opaque prediction/image UUID references without foreign keys to the user-history rows, so deleting an image history item does not erase the assignment/review audit trail. The audit stores actor, assignee, event, limited outcome, reason, and timestamp; it does not store image bytes or a public image URL. The reviewer console provides assignment and technical review controls. The access and review audit page lists actor identity, role, event type, reason and timestamp without exposing image bytes or object keys. Production reviewer qualification and operational governance still require organization-level verification.
 
 
 ### Dedicated skin-image reviewer permissions
@@ -119,3 +119,12 @@ Separate `skin_image_processing`, `skin_image_history`, and `skin_image_review` 
 
 
 The multipart intake request includes `processing_consent`, `history_consent`, `review_consent` and the matching `processing_policy_version`, `history_policy_version`, and `review_policy_version` fields. Submissions created before this separate review-consent requirement do not become reviewable automatically; they need a fresh, explicit owner consent event before any human reviewer can access them. A missing review-consent event is treated as no consent.
+
+
+### Skin-image review audit feed
+
+- `GET /api/v1/skin-images/review/audit?limit=100&offset=0` returns a bounded audit feed. Administrators can inspect all skin-image review events. Reviewers can inspect only events where they were the actor or the assigned reviewer, including their own historical assignment events after reassignment.
+- The feed identifies the actor using the account display name or email and includes actor role, event, opaque submission reference, assigned reviewer reference, outcome, recorded reason and timestamp.
+- The frontend page is `/review/skin-images/audit`, linked from the skin-image reviewer queue. It displays metadata only; it never retrieves or embeds image bytes.
+- Pagination is bounded to 1–200 rows and offset 0–10,000. The feed is newest-first. It is an operational view, not a tamper-proof external compliance archive.
+- `image_accessed` is recorded only after private object retrieval and integrity/format checks succeed. It proves successful server-side retrieval, not that a human visually inspected the entire image.
