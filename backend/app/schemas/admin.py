@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-ReviewerScopeType = Literal["disease", "symptom", "disease_symptom"]
+ReviewerScopeType = Literal["disease", "symptom", "disease_symptom", "skin_image"]
 
 
 class ReviewerScopeCreate(BaseModel):
