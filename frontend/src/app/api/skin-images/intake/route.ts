@@ -20,9 +20,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
   }
 
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES + 64 * 1024) {
-    return NextResponse.json({ detail: "Image upload exceeds the permitted request size." }, { status: 413 });
+  const maxRequestBytes = MAX_IMAGE_BYTES + 64 * 1024;
+  const declaredLengthHeader = request.headers.get("content-length");
+  if (declaredLengthHeader !== null) {
+    if (!/^\\d+$/.test(declaredLengthHeader)) {
+      return NextResponse.json({ detail: "Invalid upload request size." }, { status: 400 });
+    }
+    if (Number(declaredLengthHeader) > maxRequestBytes) {
+      return NextResponse.json({ detail: "Image upload exceeds the permitted request size." }, { status: 413 });
+    }
   }
 
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -32,7 +38,38 @@ export async function POST(request: Request) {
 
   let incoming: FormData;
   try {
-    incoming = await request.formData();
+    // Do not trust Content-Length: chunked or proxied requests may omit it.
+    // Bound the actual stream before parsing multipart data into memory.
+    if (!request.body) {
+      return NextResponse.json({ detail: "Please provide a valid image upload." }, { status: 400 });
+    }
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let receivedBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        receivedBytes += value.byteLength;
+        if (receivedBytes > maxRequestBytes) {
+          await reader.cancel();
+          return NextResponse.json(
+            { detail: "Image upload exceeds the permitted request size." },
+            { status: 413 },
+          );
+        }
+        chunks.push(new Uint8Array(value));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const contentType = request.headers.get("content-type");
+    if (!contentType?.toLowerCase().startsWith("multipart/form-data;")) {
+      return NextResponse.json({ detail: "Please provide a valid image upload." }, { status: 400 });
+    }
+    incoming = await new Response(new Blob(chunks), {
+      headers: { "Content-Type": contentType },
+    }).formData();
   } catch {
     return NextResponse.json({ detail: "Please provide a valid image upload." }, { status: 400 });
   }
