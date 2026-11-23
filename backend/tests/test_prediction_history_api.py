@@ -1295,3 +1295,99 @@ def test_owner_skin_image_review_status_reflects_assignment_and_revocation(
     assert after_revoke.status_code == 200
     assert after_revoke.json()["status"] == "review_access_withdrawn"
     assert after_revoke.json()["status_at"] is None
+
+
+
+def test_skin_image_history_delete_removes_private_object_and_preserves_review_audit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.v1 import predictions
+    token, user = _register(client, "image-delete-success@example.com")
+    item, key, _ = _stored_image_for_user(user.id)
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None
+        db.add(SkinImageReviewEvent(
+            prediction_id=item.id, image_analysis_id=image.id,
+            event_type="assigned", actor_id=user.id,
+            reason="Assignment recorded for audit.",
+        ))
+        db.commit()
+    finally:
+        db.close()
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+    response = client.delete(f"/api/v1/predictions/history/{item.id}", headers=_headers(token))
+    assert response.status_code == 204
+    assert key not in storage.objects
+    db = TestingSessionLocal()
+    try:
+        assert db.get(Prediction, item.id) is None
+        events = list(db.scalars(select(SkinImageReviewEvent).where(SkinImageReviewEvent.prediction_id == item.id)).all())
+        assert len(events) == 1 and events[0].event_type == "assigned"
+    finally:
+        db.close()
+
+
+def test_skin_image_history_delete_failure_keeps_retry_marker_and_can_retry(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.v1 import predictions
+    token, user = _register(client, "image-delete-retry@example.com")
+    item, key, _ = _stored_image_for_user(user.id)
+    class FlakyStorage(_FakeIntakeStorage):
+        def __init__(self):
+            super().__init__()
+            self.fail = True
+            self.calls = 0
+        def delete_private(self, object_key: str) -> None:
+            self.calls += 1
+            if self.fail:
+                raise OSError("temporary object-storage outage")
+            super().delete_private(object_key)
+    storage = FlakyStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+    first = client.delete(f"/api/v1/predictions/history/{item.id}", headers=_headers(token))
+    assert first.status_code == 503 and "pending" in first.json()["detail"].lower()
+    db = TestingSessionLocal()
+    try:
+        retained = db.get(Prediction, item.id)
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert retained is not None and image is not None
+        assert image.storage_status == "deletion_pending" and image.deletion_requested_at is not None
+    finally:
+        db.close()
+    storage.fail = False
+    second = client.delete(f"/api/v1/predictions/history/{item.id}", headers=_headers(token))
+    assert second.status_code == 204 and storage.calls == 2
+    assert key not in storage.objects
+    db = TestingSessionLocal()
+    try:
+        assert db.get(Prediction, item.id) is None
+    finally:
+        db.close()
+
+
+def test_skin_image_history_delete_is_blocked_for_unknown_storage_state(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.v1 import predictions
+    token, user = _register(client, "image-delete-unknown@example.com")
+    item = _prediction(user.id, modality="skin_image")
+    db = TestingSessionLocal()
+    try:
+        db.add(SkinImageAnalysis(
+            prediction_id=item.id,
+            object_key="skin-images/22222222222222222222222222222222.png",
+            content_type="image/png", image_sha256="b" * 64,
+            storage_status="unknown",
+        ))
+        db.commit()
+    finally:
+        db.close()
+    storage = _FakeIntakeStorage()
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+    response = client.delete(f"/api/v1/predictions/history/{item.id}", headers=_headers(token))
+    assert response.status_code == 409 and storage.objects == {}
+    db = TestingSessionLocal()
+    try:
+        assert db.get(Prediction, item.id) is not None
+    finally:
+        db.close()
