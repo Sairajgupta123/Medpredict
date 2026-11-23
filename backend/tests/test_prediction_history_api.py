@@ -280,8 +280,10 @@ def _intake_form() -> dict[str, str]:
     return {
         "processing_consent": "true",
         "history_consent": "true",
+        "review_consent": "true",
         "processing_policy_version": "image-processing-v1",
         "history_policy_version": "image-history-v1",
+        "review_policy_version": "image-review-v1",
     }
 
 
@@ -344,6 +346,7 @@ def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
         assert {event.purpose for event in events} == {
             "skin_image_processing",
             "skin_image_history",
+            "skin_image_review",
         }
     finally:
         db.close()
@@ -606,14 +609,20 @@ def _prepare_skin_review_item(owner_id):
             storage_status="stored",
         )
         db.add(image)
-        db.add(
+        db.add_all([
             PredictionConsentEvent(
                 prediction_id=prediction.id,
                 purpose="skin_image_processing",
                 action="granted",
                 policy_version="image-processing-v1",
-            )
-        )
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="image-review-v1",
+            ),
+        ])
         db.commit()
     finally:
         db.close()
