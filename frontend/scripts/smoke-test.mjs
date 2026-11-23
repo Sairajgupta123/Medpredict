@@ -26,12 +26,12 @@ await check(
 );
 await check(
   "reject malformed JSON",
-  { path, init: { method: "POST", headers: { Origin: baseUrl, "Content-Type": "application/json" }, body: "{" } },
+  { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
   400,
 );
 await check(
   "reject invalid symptom payload",
-  { path, init: { method: "POST", headers: { Origin: baseUrl, "Content-Type": "application/json" }, body: JSON.stringify({ text: " ", reported_context: {} }) } },
+  { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ text: " ", reported_context: {} }) } },
   422,
 );
 
@@ -50,7 +50,7 @@ await check(
 );
 await check(
   "require authentication before skin-image upload parsing",
-  { path: skinIntakePath, init: { method: "POST", headers: { Origin: baseUrl } } },
+  { path: skinIntakePath, init: { method: "POST", headers: { Origin: requestOrigin } } },
   401,
 );
 
@@ -58,7 +58,7 @@ await check(
 const testPredictionId = "00000000-0000-4000-8000-000000000001";
 await check(
   "require authentication to revoke skin-image review consent",
-  { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST", headers: { Origin: baseUrl } } },
+  { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST", headers: { Origin: requestOrigin } } },
   401,
 );
 await check(
