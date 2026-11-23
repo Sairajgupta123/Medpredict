@@ -1164,3 +1164,62 @@ def test_other_user_cannot_revoke_skin_image_review_consent(
         assert latest is not None and latest.action == "granted"
     finally:
         db.close()
+
+
+def test_skin_image_audit_feed_is_scoped_and_identifies_event_actor(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-audit-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-audit-reviewer@example.com")
+    other_token, other = _register(client, "skin-audit-other@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    _set_account_role(other.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    assigned = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={
+            "reviewer_id": str(reviewer.id),
+            "reason": "Assign image for technical capture review.",
+        },
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    reviewer_audit = client.get(
+        "/api/v1/skin-images/review/audit?limit=20&offset=0",
+        headers=_headers(reviewer_token),
+    )
+    assert reviewer_audit.status_code == 200, reviewer_audit.text
+    reviewer_events = reviewer_audit.json()
+    assert len(reviewer_events) == 1
+    assert reviewer_events[0]["prediction_id"] == str(prediction.id)
+    assert reviewer_events[0]["event_type"] == "assigned"
+    assert reviewer_events[0]["actor_identity"] == admin.email
+    assert reviewer_events[0]["actor_role"] == "admin"
+
+    other_audit = client.get(
+        "/api/v1/skin-images/review/audit",
+        headers=_headers(other_token),
+    )
+    assert other_audit.status_code == 200
+    assert other_audit.json() == []
+
+    admin_audit = client.get(
+        "/api/v1/skin-images/review/audit",
+        headers=_headers(admin_token),
+    )
+    assert admin_audit.status_code == 200
+    assert any(
+        event["prediction_id"] == str(prediction.id)
+        and event["event_type"] == "assigned"
+        for event in admin_audit.json()
+    )
+
+    invalid_pagination = client.get(
+        "/api/v1/skin-images/review/audit?limit=201",
+        headers=_headers(admin_token),
+    )
+    assert invalid_pagination.status_code == 422
