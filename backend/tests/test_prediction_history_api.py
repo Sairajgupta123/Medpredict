@@ -1241,10 +1241,12 @@ def test_owner_skin_image_review_status_exposes_only_safe_status_fields(
     payload = own.json()
     assert payload["status"] == "awaiting_review"
     assert payload["status_label"] == "Awaiting technical image review"
+    assert "not started yet" in payload["status_detail"]
+    assert "Seek medical care independently" in payload["next_step"]
     assert payload["clinical_interpretation_performed"] is False
     assert payload["disease_prediction_performed"] is False
     assert set(payload) == {
-        "prediction_id", "status", "status_label", "status_at",
+        "prediction_id", "status", "status_label", "status_detail", "next_step", "status_at",
         "clinical_interpretation_performed", "disease_prediction_performed",
     }
 
