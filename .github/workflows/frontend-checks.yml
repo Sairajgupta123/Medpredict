@@ -40,3 +40,20 @@ jobs:
         run: npm run typecheck
       - name: Production build
         run: npm run build
+      - name: Start production server
+        run: |
+          npm run start -- --hostname 127.0.0.1 > /tmp/medipredict-next.log 2>&1 &
+          echo $! > /tmp/medipredict-next.pid
+      - name: Wait for production server
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/medipredict-next.log
+          exit 1
+      - name: Production API smoke tests
+        run: npm run smoke-test
+      - name: Stop production server
+        if: always()
+        run: if [ -f /tmp/medipredict-next.pid ]; then kill $(cat /tmp/medipredict-next.pid) || true; fi
