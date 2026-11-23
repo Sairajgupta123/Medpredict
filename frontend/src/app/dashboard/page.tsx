@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
 import { getSessionUser } from "@/lib/auth-proxy";
+import { apiRequest, type ResearchModelStatusResponse } from "@/lib/api";
 
 const modules = [
   {
@@ -35,6 +36,7 @@ type SessionUser = {
 export default async function DashboardPage() {
   const session = await getSessionUser();
   const user = session.user as SessionUser | null;
+  const modelStatus = await apiRequest<ResearchModelStatusResponse>("/models/status").catch(() => null);
 
   return (
     <main id="main-content" className="dashboard-page">
@@ -77,6 +79,31 @@ export default async function DashboardPage() {
             </article>
           ))}
         </div>
+      </section>
+      <section className="container dashboard-modules" aria-labelledby="model-status-heading">
+        <div className="dashboard-section-heading">
+          <div><div className="eyebrow">MODEL OPERATIONS</div><h2 id="model-status-heading">Research model configuration</h2></div>
+          <span className="module-count">INFERENCE DISABLED</span>
+        </div>
+        <div className="dashboard-grid">
+          {(["symptom_text", "skin_image"] as const).map((key) => {
+            const model = modelStatus?.[key];
+            const label = key === "symptom_text" ? "Symptom text model" : "Skin image model";
+            const status = !modelStatus ? "Status service unavailable" :
+              model?.status === "not_configured" ? "Artifact path not configured" :
+              model?.status === "invalid_configuration" ? "Path configuration is invalid" :
+              "Path configured; artifact not loaded";
+            return (
+              <article className="dashboard-card" key={key}>
+                <div className="dashboard-card-top"><span>{key === "symptom_text" ? "TEXT" : "IMAGE"}</span><span className="workflow-icon">◌</span></div>
+                <h3>{label}</h3>
+                <p>{status}. This status does not verify artifact existence, trust or model quality.</p>
+                <div className="dashboard-card-status"><span />Research-only · inference disabled</div>
+              </article>
+            );
+          })}
+        </div>
+        <p role="note">These indicators report configuration only. MediPredict does not load these models or provide disease predictions or clinical diagnoses.</p>
       </section>
       <section className="container dashboard-bottom">
         <div><span className="eyebrow">A NOTE ON SAFETY</span><h2>Not a diagnosis.<br /><em>Always a reason to seek clarity.</em></h2></div>
