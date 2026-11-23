@@ -23,7 +23,7 @@ class CatalogReviewerScope(Base):
     __tablename__ = "catalog_reviewer_scopes"
     __table_args__ = (
         CheckConstraint(
-            "scope_type IN ('disease', 'symptom', 'disease_symptom')",
+            "scope_type IN ('disease', 'symptom', 'disease_symptom', 'skin_image')",
             name="ck_catalog_reviewer_scopes_type",
         ),
         CheckConstraint(
@@ -51,7 +51,7 @@ class CatalogReviewerScope(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
     scope_type: Mapped[str] = mapped_column(String(32), index=True)
-    # NULL means all entries of this type; otherwise an exact catalog key.
+    # NULL means all entries of a type; otherwise an exact catalog key or prediction UUID.
     scope_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     granted_by: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT")
@@ -79,7 +79,7 @@ class CatalogReviewerScopeEvent(Base):
             name="ck_catalog_reviewer_scope_events_type",
         ),
         CheckConstraint(
-            "scope_type IN ('disease', 'symptom', 'disease_symptom')",
+            "scope_type IN ('disease', 'symptom', 'disease_symptom', 'skin_image')",
             name="ck_catalog_reviewer_scope_events_scope_type",
         ),
         CheckConstraint(
