@@ -38,7 +38,7 @@ async function deleteSkinImageHistory(formData: FormData) {
   "use server";
   const predictionId = String(formData.get("prediction_id") ?? "");
   const confirmation = String(formData.get("confirmation") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(predictionId) || confirmation !== "DELETE") redirect("/history/skin-images?error=delete-confirmation");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(predictionId) || confirmation !== "DELETE") redirect("/history/skin-images?error=delete-confirmation");
   const token = await getSessionToken();
   if (!token) redirect("/login");
   let response: Response;
@@ -65,7 +65,7 @@ async function deleteSkinImageHistory(formData: FormData) {
 async function revokeReviewConsent(formData: FormData) {
   "use server";
   const predictionId = String(formData.get("prediction_id") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(predictionId)) redirect("/history/skin-images?error=invalid");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(predictionId)) redirect("/history/skin-images?error=invalid");
   const token = await getSessionToken();
   if (!token) redirect("/login");
 
@@ -147,7 +147,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
           return candidate.items.every((entry) => {
             if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
             const item = entry as Record<string, unknown>;
-            if (typeof item.id !== "string" || !/^[0-9a-f-]{36}$/i.test(item.id) || ids.has(item.id)) return false;
+            if (typeof item.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) || ids.has(item.id)) return false;
             if (typeof item.modality !== "string" || !["text", "skin_image", "combined"].includes(item.modality)) return false;
             if (typeof item.status !== "string" || item.status.length > 80) return false;
             if (!(item.model_version === null || typeof item.model_version === "string")) return false;
