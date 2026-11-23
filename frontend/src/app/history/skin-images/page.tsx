@@ -47,6 +47,7 @@ async function deleteSkinImageHistory(formData: FormData) {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
   } catch {
     redirect("/history/skin-images?error=delete-unavailable");
@@ -76,6 +77,7 @@ async function revokeReviewConsent(formData: FormData) {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       },
     );
   } catch {
@@ -128,6 +130,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
       const response = await fetch(`${API_BASE_URL}/predictions/history?limit=${pageSize}&offset=${offset}`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
       });
       if (response.ok) {
         const payload = await response.json() as HistoryPage;
