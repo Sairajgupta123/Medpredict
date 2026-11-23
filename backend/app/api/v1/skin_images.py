@@ -271,10 +271,10 @@ def retrieve_skin_image(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Stored image failed format validation.",
         ) from exc
-    if validated.content != content:
+    if validated.content_type != image_record.content_type:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Stored image is not in the expected sanitized format.",
+            detail="Stored image format does not match its recorded content type.",
         )
 
     return Response(
