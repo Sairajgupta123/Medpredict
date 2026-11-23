@@ -585,6 +585,15 @@ def retrieve_assigned_review_image(
         raise HTTPException(status_code=503, detail="Review image failed format validation.") from exc
     if validated.content_type != image_record.content_type:
         raise HTTPException(status_code=503, detail="Review image format metadata is inconsistent.")
+    db.add(SkinImageReviewEvent(
+        prediction_id=prediction.id,
+        image_analysis_id=image_record.id,
+        event_type="image_accessed",
+        actor_id=user.id,
+        assigned_reviewer_id=image_record.assigned_reviewer_id,
+        reason="Authorized private image retrieval completed.",
+    ))
+    db.commit()
     return Response(
         content=content,
         media_type=image_record.content_type,
