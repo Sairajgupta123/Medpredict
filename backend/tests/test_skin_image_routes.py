@@ -702,3 +702,106 @@ def test_review_decision_rejects_invalid_outcome_and_short_reason(
         assert review_events == []
     finally:
         db.close()
+
+def test_review_audit_is_scoped_and_pagination_is_bounded(
+    client: TestClient,
+) -> None:
+    """Reviewers see only related events; admins can page through all events."""
+    db = TestingSessionLocal()
+    try:
+        reviewer = User(
+            email=f"skin-audit-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        other_reviewer = User(
+            email=f"skin-audit-other-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        administrator = User(
+            email=f"skin-audit-admin-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="admin",
+        )
+        db.add_all([reviewer, other_reviewer, administrator])
+        db.flush()
+
+        prediction_ids = [uuid4(), uuid4(), uuid4()]
+        image_ids = [uuid4(), uuid4(), uuid4()]
+        db.add_all([
+            SkinImageReviewEvent(
+                prediction_id=prediction_ids[0],
+                image_analysis_id=image_ids[0],
+                event_type="assigned",
+                actor_id=administrator.id,
+                assigned_reviewer_id=reviewer.id,
+                reason="Assigned to the requesting reviewer.",
+            ),
+            SkinImageReviewEvent(
+                prediction_id=prediction_ids[1],
+                image_analysis_id=image_ids[1],
+                event_type="reviewed",
+                actor_id=reviewer.id,
+                assigned_reviewer_id=other_reviewer.id,
+                outcome="capture_adequate",
+                reason="Reviewer acted on an assigned review.",
+            ),
+            SkinImageReviewEvent(
+                prediction_id=prediction_ids[2],
+                image_analysis_id=image_ids[2],
+                event_type="assigned",
+                actor_id=administrator.id,
+                assigned_reviewer_id=other_reviewer.id,
+                reason="Assigned only to another reviewer.",
+            ),
+        ])
+        db.commit()
+        reviewer_token = create_access_token(reviewer.id)
+        admin_token = create_access_token(administrator.id)
+    finally:
+        db.close()
+
+    reviewer_headers = {"Authorization": f"Bearer {reviewer_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    reviewer_audit = client.get(
+        "/api/v1/skin-images/review/audit?limit=10&offset=0",
+        headers=reviewer_headers,
+    )
+    admin_first_page = client.get(
+        "/api/v1/skin-images/review/audit?limit=2&offset=0",
+        headers=admin_headers,
+    )
+    admin_second_page = client.get(
+        "/api/v1/skin-images/review/audit?limit=2&offset=2",
+        headers=admin_headers,
+    )
+    invalid_limit = client.get(
+        "/api/v1/skin-images/review/audit?limit=201",
+        headers=admin_headers,
+    )
+    invalid_offset = client.get(
+        "/api/v1/skin-images/review/audit?offset=-1",
+        headers=admin_headers,
+    )
+
+    assert reviewer_audit.status_code == 200
+    assert {item["prediction_id"] for item in reviewer_audit.json()} == {
+        str(prediction_ids[0]),
+        str(prediction_ids[1]),
+    }
+    assert len(reviewer_audit.json()) == 2
+    assert admin_first_page.status_code == 200
+    assert len(admin_first_page.json()) == 2
+    assert admin_second_page.status_code == 200
+    assert len(admin_second_page.json()) == 1
+    assert invalid_limit.status_code == 422
+    assert invalid_offset.status_code == 422
+    for item in reviewer_audit.json():
+        assert "object_key" not in item
+        assert "patient_email" not in item
+        assert "image_bytes" not in item
