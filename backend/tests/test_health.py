@@ -89,3 +89,43 @@ def test_readiness_endpoint_returns_503_when_database_query_fails() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Database is not ready."}
+
+
+
+def test_research_model_status_reports_models_not_configured(monkeypatch) -> None:
+    from app.api.v1 import health
+    from app.core.config import Settings
+
+    monkeypatch.setattr(health, "get_settings", lambda: Settings())
+    response = client.get("/api/v1/models/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["skin_image"] == {
+        "status": "not_configured",
+        "configured": False,
+        "loaded": False,
+        "inference_enabled": False,
+    }
+    assert body["symptom_text"]["status"] == "not_configured"
+    assert body["research_only"] is True
+    assert body["clinical_diagnosis_enabled"] is False
+
+
+def test_research_model_status_never_claims_configured_path_is_loaded(monkeypatch) -> None:
+    from app.api.v1 import health
+    from app.core.config import Settings
+
+    settings = Settings(
+        skin_research_checkpoint_path="/srv/private/skin/model.pt",
+        text_research_artifact_path="relative/model.joblib",
+    )
+    monkeypatch.setattr(health, "get_settings", lambda: settings)
+    response = client.get("/api/v1/models/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["skin_image"]["status"] == "configured_not_loaded"
+    assert body["skin_image"]["loaded"] is False
+    assert body["skin_image"]["inference_enabled"] is False
+    assert body["symptom_text"]["status"] == "invalid_configuration"
