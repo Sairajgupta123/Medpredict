@@ -359,3 +359,12 @@ cannot be used to retrieve public guidance.
 
 The endpoint is a source-backed education layer, not a diagnosis or treatment plan. Emergency
 information must be carefully reviewed and localized before any production use.
+
+
+## Skin image intake (research-only)
+
+The authenticated multipart endpoint is `POST /api/v1/skin-images/intake`. It accepts one JPEG, PNG or WebP file (maximum 8 MiB), plus separate required form fields for image-processing consent and image-history consent, each with its own policy version. The server decodes and re-encodes the image to remove metadata before sending it to private object storage.
+
+The endpoint is fail-closed unless `SKIN_IMAGE_S3_BUCKET` and `SKIN_IMAGE_S3_REGION` are configured. AWS credentials are resolved through the standard boto3 credential chain (for example, an IAM role); do not put credentials in source control. A custom S3-compatible endpoint must use HTTPS. Encryption defaults to AES256; KMS requires `SKIN_IMAGE_S3_ENCRYPTION=aws:kms` and `SKIN_IMAGE_S3_KMS_KEY_ID`.
+
+Before configuration, provision a private bucket with Block Public Access, restrictive bucket policy, least-privilege IAM permissions, and encryption controls. CI uses a fake storage client and does not verify your cloud account or bucket policy. The endpoint performs image intake only: it does not classify skin lesions, predict disease, or provide a diagnosis. The public image-history deletion route and automatic retention worker are not yet connected to the configured adapter.
