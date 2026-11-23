@@ -401,3 +401,111 @@ def test_skin_image_intake_fails_closed_when_storage_is_not_configured(
     )
     assert response.status_code == 503
     assert "not configured" in response.json()["detail"]
+
+
+def _stored_image_for_user(user_id, *, grant_history: bool = True):
+    import hashlib
+
+    from app.services.skin_image_validation import validate_and_sanitize_skin_image
+
+    item = _prediction(user_id, modality="skin_image")
+    sanitized = validate_and_sanitize_skin_image(_small_png(), "image/png")
+    key = "skin-images/11111111111111111111111111111111.png"
+    db = TestingSessionLocal()
+    try:
+        record = SkinImageAnalysis(
+            prediction_id=item.id,
+            object_key=key,
+            content_type=sanitized.content_type,
+            image_sha256=hashlib.sha256(sanitized.content).hexdigest(),
+            storage_status="stored",
+        )
+        db.add(record)
+        if grant_history:
+            db.add(
+                PredictionConsentEvent(
+                    prediction_id=item.id,
+                    purpose="skin_image_history",
+                    action="granted",
+                    policy_version="image-history-v1",
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+    return item, key, sanitized.content
+
+
+def test_owner_can_retrieve_image_with_active_history_consent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-read-owner@example.com")
+    item, key, content = _stored_image_for_user(user.id)
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (content, "image/png")
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 200
+    assert response.content == content
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "private, no-store, max-age=0"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "object_key" not in response.headers
+
+
+def test_other_user_cannot_retrieve_skin_image(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, _ = _register(client, "image-read-stranger@example.com")
+    _, owner = _register(client, "image-read-actual-owner@example.com")
+    item, _, _ = _stored_image_for_user(owner.id)
+    storage = _FakeIntakeStorage()
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 404
+    assert storage.objects == {}
+
+
+def test_image_retrieval_requires_active_history_consent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-read-no-consent@example.com")
+    item, _, _ = _stored_image_for_user(user.id, grant_history=False)
+    monkeypatch.setattr(
+        skin_images, "build_skin_image_storage", lambda: _FakeIntakeStorage()
+    )
+
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 403
+
+
+def test_image_retrieval_rejects_corrupted_private_object(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-read-corrupt@example.com")
+    item, key, content = _stored_image_for_user(user.id)
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (content + b"tampered", "image/png")
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 503
+    assert "integrity" in response.json()["detail"].lower()
