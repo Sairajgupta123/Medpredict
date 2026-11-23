@@ -9,6 +9,7 @@ project foundation, not a production security certification.
 |---|---|---|---|
 | POST | `/api/v1/auth/register` | Public | Create an account and issue an access token |
 | POST | `/api/v1/auth/login` | Public | Verify credentials and issue an access token |
+| POST | `/api/v1/auth/logout` | Bearer token | Revoke all access tokens for the account |
 | GET | `/api/v1/auth/me` | Bearer token | Return the authenticated account profile |
 | PATCH | `/api/v1/auth/me` | Bearer token | Update or clear the account display name |
 
@@ -91,14 +92,14 @@ The current implementation does not yet include:
 
 - Email verification or verified-email enforcement
 - Refresh tokens and refresh-token rotation
-- A dedicated logout endpoint and per-device session management
+- Per-device session management; logout currently revokes all account access tokens
 - Login/registration rate limiting and abuse detection
 - Multi-factor authentication
 - Admin roles and role-based access control
 - Account export/deletion workflow and associated prediction-data retention handling
 - Security event audit logging
 
-Password-reset-driven access-token revocation is implemented through per-user token versions.
+Password-reset-driven access-token revocation and account-wide logout are implemented through per-user token versions. Logout revokes every access token for the account, not only the token used to call the endpoint.
 A dedicated logout endpoint and per-device session management are still deferred. Tokens issued
 before the token-version rollout do not contain the required `ver` claim and will be rejected
 after deployment, requiring users to sign in again. Keep the lifetime short and always use HTTPS
