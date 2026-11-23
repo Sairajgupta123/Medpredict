@@ -15,7 +15,12 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User
-from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
+from app.models.prediction import (
+    Prediction,
+    PredictionConsentEvent,
+    SkinImageAnalysis,
+    SkinImageReviewEvent,
+)
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
 
@@ -476,5 +481,118 @@ def test_reassignment_revokes_previous_reviewers_access(
         assert old_scope.revoke_reason
         assert old_scope_event.reason
         assert current_image.assigned_reviewer_id == new_id
+    finally:
+        db.close()
+
+def test_review_decision_is_terminal_and_audited_once(
+    client: TestClient,
+) -> None:
+    """A completed technical review cannot be overwritten by a second decision."""
+    db = TestingSessionLocal()
+    try:
+        administrator = User(
+            email=f"skin-decision-admin-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="admin",
+        )
+        reviewer = User(
+            email=f"skin-decision-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([administrator, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=administrator.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/decision-test",
+                content_type="image/png",
+                image_sha256="3" * 64,
+                storage_status="stored",
+                review_status="assigned",
+                assigned_reviewer_id=reviewer.id,
+                assigned_by=administrator.id,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Reviewer approved for technical assessment.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
+        reviewer_token = create_access_token(reviewer.id)
+        reviewer_uuid = reviewer.id
+    finally:
+        db.close()
+
+    headers = {"Authorization": f"Bearer {reviewer_token}"}
+    endpoint = f"/api/v1/skin-images/review/{prediction_id}/decision"
+    first = client.post(
+        endpoint,
+        headers=headers,
+        json={
+            "outcome": "capture_adequate",
+            "reason": "Image capture quality is adequate.",
+        },
+    )
+    second = client.post(
+        endpoint,
+        headers=headers,
+        json={
+            "outcome": "unable_to_assess",
+            "reason": "Attempt to overwrite completed review.",
+        },
+    )
+
+    assert first.status_code == 200
+    assert first.json()["review_status"] == "reviewed"
+    assert first.json()["review_outcome"] == "capture_adequate"
+    assert first.json()["clinical_interpretation_performed"] is False
+    assert first.json()["disease_prediction_performed"] is False
+    assert second.status_code == 409
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_uuid,
+        ).one()
+        review_events = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_uuid,
+            event_type="reviewed",
+        ).all()
+        assert image_record.assigned_reviewer_id == reviewer_uuid
+        assert image_record.review_status == "reviewed"
+        assert image_record.review_outcome == "capture_adequate"
+        assert len(review_events) == 1
+        assert review_events[0].actor_id == reviewer_uuid
+        assert review_events[0].reason == "Image capture quality is adequate."
     finally:
         db.close()
