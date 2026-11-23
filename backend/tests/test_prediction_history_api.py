@@ -1626,3 +1626,55 @@ def test_retention_deleted_image_blocks_reviewer_even_with_active_scope_and_cons
         assert access_events == []
     finally:
         db.close()
+
+
+def test_revoked_review_consent_blocks_reviewer_image_storage_access(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+    from app.models.prediction import SkinImageReviewEvent
+
+    owner_token, owner = _register(client, "skin-review-consent-owner@example.com")
+    reviewer_token, reviewer = _register(client, "skin-review-consent-reviewer@example.com")
+    admin_token, admin = _register(client, "skin-review-consent-admin@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    _set_account_role(admin.id, "admin")
+    prediction, key, _ = _prepare_skin_review_item(owner.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id))
+        assert image is not None
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        db.add(PredictionConsentEvent(
+            prediction_id=prediction.id,
+            purpose="skin_image_review",
+            action="revoked",
+            policy_version="image-review-v1",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    def storage_must_not_be_opened():
+        raise AssertionError("Revoked review consent must block private storage access.")
+
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", storage_must_not_be_opened)
+    response = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert response.status_code == 403
+    assert "consent" in response.json()["detail"].lower()
+
+    db = TestingSessionLocal()
+    try:
+        access_events = db.scalars(select(SkinImageReviewEvent).where(
+            SkinImageReviewEvent.prediction_id == prediction.id,
+            SkinImageReviewEvent.event_type == "image_accessed",
+        )).all()
+        assert access_events == []
+    finally:
+        db.close()
