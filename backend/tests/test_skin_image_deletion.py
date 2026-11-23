@@ -507,3 +507,49 @@ def test_expired_image_query_rejects_naive_cutoff_before_query(
         list_expired_skin_image_records(
             db_session, as_of=datetime.now(timezone.utc).replace(tzinfo=None)
         )
+
+def test_retention_purge_does_not_duplicate_prior_history_consent_revocation(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        purge_expired_skin_image_records,
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session, user.id, prediction.id,
+        purpose="skin_image_history", action="granted",
+        policy_version="image-history-v1",
+    )
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=1)
+    image = set_skin_image_retention_expiry(
+        db_session, user.id, prediction.id,
+        expires_at=expiry, policy_version="retention-policy-v2",
+    )
+    record_skin_image_consent_decision(
+        db_session, user.id, prediction.id,
+        purpose="skin_image_history", action="revoked",
+        policy_version="owner-revocation-v1",
+    )
+
+    storage = FakePrivateStorage()
+    summary = purge_expired_skin_image_records(
+        db_session, image_storage=storage, as_of=expiry + timedelta(seconds=1),
+    )
+
+    assert summary == {"processed": 1, "deleted": 1, "failed": 0}
+    db_session.refresh(image)
+    assert image.storage_status == "deleted"
+    events = list(db_session.scalars(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        )
+        .order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+    ).all())
+    assert [event.action for event in events] == ["granted", "revoked"]
+    assert events[-1].policy_version == "owner-revocation-v1"
+    assert storage.deleted == ["skin-images/opaque-key.jpg"]
