@@ -36,10 +36,11 @@ export function AuthForm({ mode }: AuthFormProps) {
           password,
           ...(isRegister ? { display_name: displayName.trim() || null } : {}),
         }),
+        signal: AbortSignal.timeout(15_000),
       });
-      const result = await response.json() as AuthResult;
+      const result = await response.json().catch(() => null) as AuthResult | null;
       if (!response.ok) {
-        setError(result.detail ?? "We could not complete your request. Please try again.");
+        setError(result?.detail ?? "We could not complete your request. Please try again.");
         return;
       }
       window.location.assign("/dashboard");
