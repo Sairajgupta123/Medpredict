@@ -104,7 +104,7 @@ Review audit events preserve opaque prediction/image UUID references without for
 
 ### Dedicated skin-image reviewer permissions
 
-A general reviewer role or a catalog-review scope does not grant access to patient images. Administrators must grant a separate `skin_image` reviewer scope through `POST /api/v1/admin/reviewer-scopes`. Use the exact prediction UUID as `scope_key` for one submission; a null scope key grants broad access to all skin-image submissions and should be reserved for an explicitly approved operational need.
+A general reviewer role or a catalog-review scope does not grant access to patient images. Administrators must grant a separate `skin_image` reviewer scope through `POST /api/v1/admin/reviewer-scopes`. A skin-image scope must use the exact prediction UUID as `scope_key`; broad or null-key image scopes are rejected. This enforces least-privilege access per submission.
 
 The image-review assignment endpoint requires that scope in addition to an active, verified reviewer account. Queue inclusion, private image retrieval, review decisions and audit-history access re-check the active scope. Revoking the scope immediately blocks further reviewer access. When an image is reassigned, the previous reviewer's exact image scope is automatically revoked and an immutable scope event is recorded. The admin review screen grants an exact-image scope before assignment; it does not grant blanket image access.
 
