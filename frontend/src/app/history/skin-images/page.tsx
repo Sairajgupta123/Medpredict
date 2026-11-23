@@ -113,6 +113,9 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
         const payload = await response.json() as HistoryPage;
         if (Array.isArray(payload.items) && Number.isSafeInteger(payload.total) && payload.total >= 0) {
           historyTotal = payload.total;
+          if (historyTotal > 0 && offset >= historyTotal) {
+            redirect(`/history/skin-images?offset=${Math.floor((historyTotal - 1) / pageSize) * pageSize}`);
+          }
           items = payload.items.filter((item) => item.modality === "skin_image" || item.modality === "combined");
           await Promise.all(items.map(async (item) => {
             try {
@@ -175,7 +178,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
           <Link className="review-page-link" href="/skin-image">Upload another image →</Link>
         </div>
         {!loadError && items.length === 0 ? (
-          <div className="review-empty"><h3>No skin-image submissions yet</h3><p>When you submit an image with all required consents, its private history metadata will appear here.</p><Link className="button button-primary" href="/skin-image">Start a private upload →</Link></div>
+          <div className="review-empty"><h3>{historyTotal > 0 ? "No skin-image submissions on this page" : "No skin-image submissions yet"}</h3><p>{historyTotal > 0 ? "This page contains other history types. Use the history navigation below to check older or newer records." : "When you submit an image with all required consents, its private history metadata will appear here."}</p>{historyTotal === 0 && <Link className="button button-primary" href="/skin-image">Start a private upload →</Link>}</div>
         ) : (
           <div className="review-list">
             {items.map((item) => (
