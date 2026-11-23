@@ -180,7 +180,10 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                   },
                 );
                 if (statusResponse.ok) {
-                  const statusPayload = await statusResponse.json() as OwnerReviewStatus;
+                  const rawStatusPayload: unknown = await statusResponse.json();
+                  const isRecord = (value: unknown): value is Record<string, unknown> =>
+                    Boolean(value) && typeof value === "object" && !Array.isArray(value);
+                  const statusPayload = isRecord(rawStatusPayload) ? rawStatusPayload : null;
                   const allowedStatuses = new Set([
                     "review_access_withdrawn",
                     "submission_unavailable",
@@ -189,10 +192,11 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                     "reviewed",
                     "unable_to_assess",
                   ]);
-                  const validStatusAt = statusPayload.status_at === null
-                    || (typeof statusPayload.status_at === "string"
+                  const validStatusAt = statusPayload?.status_at === null
+                    || (typeof statusPayload?.status_at === "string"
                       && Number.isFinite(Date.parse(statusPayload.status_at)));
-                  if (statusPayload.prediction_id === item.id
+                  if (statusPayload
+                    && statusPayload.prediction_id === item.id
                     && typeof statusPayload.status === "string"
                     && allowedStatuses.has(statusPayload.status)
                     && typeof statusPayload.status_label === "string"
@@ -207,7 +211,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                     && validStatusAt
                     && statusPayload.clinical_interpretation_performed === false
                     && statusPayload.disease_prediction_performed === false) {
-                    reviewStatuses[item.id] = statusPayload;
+                    reviewStatuses[item.id] = statusPayload as unknown as OwnerReviewStatus;
                   }
                 }
               } catch {
