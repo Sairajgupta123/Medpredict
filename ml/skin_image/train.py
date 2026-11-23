@@ -489,8 +489,18 @@ def train_skin_model(
         "abstention_threshold": abstention_threshold,
         "threshold_selection_partition": "validation_only",
     }
-    (output_dir / "model_metadata.json").write_text(
-        json.dumps(metadata, indent=2), encoding="utf-8"
+    metadata_path = output_dir / "model_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    artifact_manifest = {
+        "purpose": "offline_research_only",
+        "checkpoint_file": checkpoint_path.name,
+        "checkpoint_sha256": hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
+        "metadata_file": metadata_path.name,
+        "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+        "note": "SHA-256 checks byte consistency only; it is not a digital signature or proof of artifact authenticity.",
+    }
+    (output_dir / "artifact_manifest.json").write_text(
+        json.dumps(artifact_manifest, indent=2), encoding="utf-8"
     )
     (output_dir / "experiment_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
