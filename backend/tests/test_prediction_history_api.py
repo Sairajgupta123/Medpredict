@@ -840,6 +840,22 @@ def test_admin_cannot_assign_skin_image_without_explicit_image_scope(
     _set_account_role(admin.id, "admin")
     _set_account_role(reviewer.id, "reviewer")
     prediction, _, _ = _prepare_skin_review_item(admin.id)
+    from app.models.reviewer_scope import CatalogReviewerScope
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="disease",
+                scope_key="CATALOG_ONLY",
+                granted_by=admin.id,
+                grant_reason="Catalog review access only.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
 
     response = client.post(
         f"/api/v1/skin-images/review/{prediction.id}/assign",
@@ -960,3 +976,65 @@ def test_skin_image_scope_rejects_broad_null_scope(
         },
     )
     assert response.status_code == 422
+
+
+def test_reassignment_revokes_previous_reviewers_exact_image_scope(
+    client: TestClient,
+) -> None:
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+
+    admin_token, admin = _register(client, "skin-reassign-admin@example.com")
+    first_token, first_reviewer = _register(client, "skin-reassign-first@example.com")
+    second_token, second_reviewer = _register(client, "skin-reassign-second@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(first_reviewer.id, "reviewer")
+    _set_account_role(second_reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+    _grant_skin_image_review_scope(first_reviewer.id, prediction.id, admin.id)
+    _grant_skin_image_review_scope(second_reviewer.id, prediction.id, admin.id)
+
+    first = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(first_reviewer.id), "reason": "First reviewer assignment."},
+    )
+    assert first.status_code == 200, first.text
+    second = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(second_reviewer.id), "reason": "Reassigned to another reviewer."},
+    )
+    assert second.status_code == 200, second.text
+
+    db = TestingSessionLocal()
+    try:
+        old_scope = db.scalar(
+            select(CatalogReviewerScope).where(
+                CatalogReviewerScope.reviewer_id == first_reviewer.id,
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+            )
+        )
+        assert old_scope is not None and old_scope.revoked_at is not None
+        revoke_event = db.scalar(
+            select(CatalogReviewerScopeEvent).where(
+                CatalogReviewerScopeEvent.reviewer_id == first_reviewer.id,
+                CatalogReviewerScopeEvent.scope_type == "skin_image",
+                CatalogReviewerScopeEvent.event_type == "revoked",
+            )
+        )
+        assert revoke_event is not None
+    finally:
+        db.close()
+
+    old_access = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/events",
+        headers=_headers(first_token),
+    )
+    assert old_access.status_code == 404
+    new_queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=_headers(second_token),
+    )
+    assert new_queue.status_code == 200
+    assert [item["prediction_id"] for item in new_queue.json()] == [str(prediction.id)]
