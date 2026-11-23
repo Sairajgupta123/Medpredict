@@ -183,7 +183,6 @@ class SkinImageAnalysis(Base):
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     review_outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    reviewer_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
