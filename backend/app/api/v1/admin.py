@@ -98,6 +98,11 @@ def _scope_key_filter(scope_type: str, scope_key: str | None):
 def _validate_scope_target(db: DbSession, scope_type: str, scope_key: str | None) -> None:
     """Ensure exact assignments refer to existing catalog keys."""
     if scope_key is None:
+        if scope_type == "skin_image":
+            raise HTTPException(
+                status_code=422,
+                detail="Skin-image reviewer scopes must identify one prediction UUID.",
+            )
         return
     if scope_type == "disease":
         exists = db.scalar(select(Disease.id).where(Disease.code == scope_key))
@@ -202,9 +207,14 @@ def grant_reviewer_scope(
             detail="An active reviewer account is required for scope assignment.",
         )
     _validate_scope_target(db, payload.scope_type, payload.scope_key)
+    scope_key = (
+        str(UUID(payload.scope_key))
+        if payload.scope_type == "skin_image" and payload.scope_key is not None
+        else payload.scope_key
+    )
 
     existing = db.scalar(
-        _scope_key_filter(payload.scope_type, payload.scope_key).where(
+        _scope_key_filter(payload.scope_type, scope_key).where(
             CatalogReviewerScope.reviewer_id == target.id
         )
     )
@@ -215,7 +225,7 @@ def grant_reviewer_scope(
         scope = CatalogReviewerScope(
             reviewer_id=target.id,
             scope_type=payload.scope_type,
-            scope_key=payload.scope_key,
+            scope_key=scope_key,
             granted_by=administrator.id,
             grant_reason=payload.reason,
         )
@@ -236,7 +246,7 @@ def grant_reviewer_scope(
             reviewer_id=target.id,
             event_type="granted",
             scope_type=payload.scope_type,
-            scope_key=payload.scope_key,
+            scope_key=scope_key,
             operator_id=administrator.id,
             reason=payload.reason,
         )
