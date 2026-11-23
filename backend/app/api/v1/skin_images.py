@@ -85,7 +85,7 @@ def intake_skin_image(
     history_policy_version: Annotated[str, Form(min_length=1, max_length=40)],
     review_policy_version: Annotated[str, Form(min_length=1, max_length=40)],
 ) -> SkinImageIntakeResponse:
-    """Store a sanitized image only after separate processing and history consent.
+    """Store a sanitized image only after separate processing, history and human-review consent.
 
     This endpoint performs intake and private storage only. It does not classify
     lesions, infer disease, or provide medical advice.
