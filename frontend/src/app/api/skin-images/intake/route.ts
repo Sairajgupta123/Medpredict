@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
+import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -26,8 +27,7 @@ function privateJson(body: unknown, init: ResponseInit = {}) {
 
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) {
+  if (!hasSameRequestOrigin(request)) {
     return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
 
