@@ -1601,6 +1601,20 @@ def test_retention_deleted_image_blocks_reviewer_even_with_active_scope_and_cons
     )
     assert response.status_code == 404
 
+    owner_status = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(reviewer_token),
+    )
+    assert owner_status.status_code == 200, owner_status.text
+    status_payload = owner_status.json()
+    assert status_payload["status"] == "submission_unavailable"
+    assert status_payload["clinical_interpretation_performed"] is False
+    assert status_payload["disease_prediction_performed"] is False
+    assert set(status_payload) == {
+        "prediction_id", "status", "status_label", "status_detail", "next_step",
+        "status_at", "clinical_interpretation_performed", "disease_prediction_performed",
+    }
+
     db = TestingSessionLocal()
     try:
         access_events = db.scalars(
