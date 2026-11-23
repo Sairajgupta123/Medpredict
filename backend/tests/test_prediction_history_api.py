@@ -1355,7 +1355,7 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
 def test_image_history_consent_revocation_keeps_consent_active_until_delete_succeeds(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import prediction_history
+    from app.api.v1 import predictions
     token, user = _register(client, "image-revoke-retry@example.com")
     item, key, _ = _stored_image_for_user(user.id)
 
@@ -1372,7 +1372,7 @@ def test_image_history_consent_revocation_keeps_consent_active_until_delete_succ
 
     storage = FlakyStorage()
     storage.objects[key] = (b"private-image", "image/png")
-    monkeypatch.setattr(prediction_history, "build_skin_image_storage", lambda: storage)
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
 
     first = client.post(
         f"/api/v1/predictions/history/{item.id}/revoke-consent",
