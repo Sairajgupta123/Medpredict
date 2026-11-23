@@ -76,6 +76,8 @@ def intake_skin_image(
         validated = validate_and_sanitize_skin_image(
             raw_content, image.content_type or ""
         )
+        if validated.byte_size > MAX_IMAGE_BYTES:
+            raise ValueError("Sanitized image exceeds the 8 MiB storage limit.")
         quality = assess_skin_image_quality(validated.content)
     except ValueError as exc:
         raise HTTPException(
@@ -151,10 +153,25 @@ def intake_skin_image(
         # The object may have been written while its DB status failed to commit.
         # Best-effort cleanup prevents an untracked private object; durable
         # reconciliation remains necessary for an outage during this cleanup.
+        cleanup_succeeded = False
         try:
             storage.delete_private(object_key)
+            cleanup_succeeded = True
         except Exception:
-            pass
+            cleanup_succeeded = False
+        if not cleanup_succeeded:
+            # Best-effort durable marker for an object that may still exist.
+            try:
+                image_record = db.scalar(
+                    select(SkinImageAnalysis).where(
+                        SkinImageAnalysis.object_key == object_key
+                    )
+                )
+                if image_record is not None:
+                    image_record.storage_status = "failed"
+                    db.commit()
+            except Exception:
+                db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Image storage confirmation failed; the request needs operational reconciliation.",
