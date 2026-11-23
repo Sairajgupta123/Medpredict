@@ -72,6 +72,30 @@ class SkinImageIntakeResponse(BaseModel):
     message: str
 
 
+class SkinImageModelStatusResponse(BaseModel):
+    """Public capability metadata; never implies a model is clinically validated."""
+
+    model_config = {"extra": "forbid"}
+
+    inference_available: bool = False
+    model_configured: bool = False
+    disease_prediction_performed: bool = False
+    clinical_validation_status: str = "not_established"
+    human_review_required: bool = True
+    message: str
+
+
+@router.get("/model-status", response_model=SkinImageModelStatusResponse)
+def read_skin_image_model_status() -> SkinImageModelStatusResponse:
+    """Expose the current safe capability state without loading model artifacts."""
+    return SkinImageModelStatusResponse(
+        message=(
+            "Skin-image classification is not configured. Image intake and "
+            "technical quality checks do not produce a disease prediction."
+        )
+    )
+
+
 @router.post("/intake", response_model=SkinImageIntakeResponse, status_code=201)
 def intake_skin_image(
     user: CurrentUser,
