@@ -16,6 +16,7 @@ async function check(name, request, expectedStatus, expectedCacheControl = true)
 
 const home = await fetch(baseUrl);
 if (!home.ok) throw new Error(`Homepage returned HTTP ${home.status}`);
+const requestOrigin = new URL(home.url).origin;
 process.stdout.write(`PASS production homepage (HTTP ${home.status})\n`);
 
 const path = "/api/symptoms/normalize";
