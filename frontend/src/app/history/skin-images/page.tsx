@@ -137,25 +137,33 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
             redirect(`/history/skin-images?offset=${Math.floor((historyTotal - 1) / pageSize) * pageSize}`);
           }
           items = payload.items.filter((item) => item.modality === "skin_image" || item.modality === "combined");
-          await Promise.all(items.map(async (item) => {
-            try {
-              const statusResponse = await fetch(
-                `${API_BASE_URL}/skin-images/${encodeURIComponent(item.id)}/review-status`,
-                { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
-              );
-              if (statusResponse.ok) {
-                const statusPayload = await statusResponse.json() as OwnerReviewStatus;
-                if (statusPayload.prediction_id === item.id
-                  && typeof statusPayload.status_label === "string"
-                  && statusPayload.clinical_interpretation_performed === false
-                  && statusPayload.disease_prediction_performed === false) {
-                  reviewStatuses[item.id] = statusPayload;
+          // Keep per-image status lookups bounded so a full history page does
+          // not open 100 simultaneous backend requests.
+          let nextStatusIndex = 0;
+          const statusWorker = async () => {
+            while (nextStatusIndex < items.length) {
+              const item = items[nextStatusIndex++];
+              try {
+                const statusResponse = await fetch(
+                  `${API_BASE_URL}/skin-images/${encodeURIComponent(item.id)}/review-status`,
+                  { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
+                );
+                if (statusResponse.ok) {
+                  const statusPayload = await statusResponse.json() as OwnerReviewStatus;
+                  if (statusPayload.prediction_id === item.id
+                    && typeof statusPayload.status_label === "string"
+                    && statusPayload.clinical_interpretation_performed === false
+                    && statusPayload.disease_prediction_performed === false) {
+                    reviewStatuses[item.id] = statusPayload;
+                  }
                 }
+              } catch {
+                // Keep the history record visible if the separate status request fails.
               }
-            } catch {
-              // Keep the history record visible if the separate status request fails.
             }
-          }));
+          };
+          const workerCount = Math.min(8, items.length);
+          await Promise.all(Array.from({ length: workerCount }, () => statusWorker()));
         } else loadError = "The history service returned an unexpected response.";
       } else loadError = "Your image history could not be loaded.";
     } catch {
