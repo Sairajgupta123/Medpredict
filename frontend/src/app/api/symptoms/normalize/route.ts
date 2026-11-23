@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   if (!validContext || !exactContextKeys) {
     return NextResponse.json(
       { detail: "The duration, severity or onset selection is invalid." },
-      { status: 422 },
+      { status: 422, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }
 
