@@ -406,6 +406,7 @@ def test_reassignment_revokes_previous_reviewers_access(
         ])
         db.commit()
         prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
         previous_id = previous_reviewer.id
         new_id = new_reviewer.id
         admin_token = create_access_token(administrator.id)
@@ -469,7 +470,7 @@ def test_reassignment_revokes_previous_reviewers_access(
             event_type="revoked",
         ).one()
         current_image = db.query(SkinImageAnalysis).filter_by(
-            prediction_id=prediction_id,
+            prediction_id=prediction_uuid,
         ).one()
         assert old_scope.revoked_at is not None
         assert old_scope.revoke_reason
