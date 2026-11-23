@@ -197,3 +197,65 @@ def test_checkpoint_validation_rejects_invalid_model_weights(
     checkpoint["model_state_dict"] = state_dict
     with pytest.raises(ValueError, match=message):
         validate_skin_checkpoint(checkpoint, metadata)
+
+
+
+def test_skin_loader_rejects_modified_checkpoint_before_torch_load(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    import torch
+
+    from ml.skin_image.inference import load_skin_research_model
+
+    checkpoint = tmp_path / "skin_model.pt"
+    metadata_path = tmp_path / "model_metadata.json"
+    manifest_path = tmp_path / "artifact_manifest.json"
+    checkpoint.write_bytes(b"original")
+    metadata = {"intended_use": "offline_research_only", "clinical_validation": False}
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    manifest = {
+        "purpose": "offline_research_only",
+        "checkpoint_file": checkpoint.name,
+        "checkpoint_sha256": hashlib.sha256(b"not-original").hexdigest(),
+        "metadata_file": metadata_path.name,
+        "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    called = False
+
+    def forbidden_load(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("torch.load must not run on a digest mismatch")
+
+    monkeypatch.setattr(torch, "load", forbidden_load)
+    with pytest.raises(ValueError, match="checkpoint digest mismatch"):
+        load_skin_research_model(str(checkpoint.resolve()))
+    assert called is False
+
+
+def test_skin_loader_rejects_relative_checkpoint_path():
+    from ml.skin_image.inference import load_skin_research_model
+
+    with pytest.raises(ValueError, match="absolute"):
+        load_skin_research_model("model.pt")
+
+
+def test_skin_loader_rejects_manifest_symlink(tmp_path):
+    import json
+    from ml.skin_image.inference import load_skin_research_model
+
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    metadata = tmp_path / "model_metadata.json"
+    metadata.write_text(json.dumps({
+        "intended_use": "offline_research_only",
+        "clinical_validation": False,
+    }), encoding="utf-8")
+    target = tmp_path / "manifest-target.json"
+    target.write_text("{}", encoding="utf-8")
+    manifest = tmp_path / "artifact_manifest.json"
+    manifest.symlink_to(target)
+
+    with pytest.raises(ValueError, match="non-symlink"):
+        load_skin_research_model(str(checkpoint.resolve()))
