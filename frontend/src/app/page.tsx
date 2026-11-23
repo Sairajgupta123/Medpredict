@@ -5,15 +5,15 @@ const workflows = [
     number: "01",
     title: "Symptom understanding",
     description:
-      "A planned text-based workflow that will organize the symptoms you describe and, after evaluation, show carefully qualified model results.",
-    status: "In development",
+      "A limited English phrase recognizer organizes selected symptom mentions for your review. It does not predict diseases or assess medical urgency.",
+    status: "Limited phrase prototype available",
     icon: "✳",
   },
   {
     number: "02",
     title: "Skin image research",
     description:
-      "A separate image-analysis workflow designed for supported skin-image classes, image-quality checks and clear uncertainty.",
+      "A consent-first private image intake prototype is available. Disease classification remains disabled until a dataset and model pass independent review.",
     status: "Research stage",
     icon: "◈",
   },
@@ -21,8 +21,8 @@ const workflows = [
     number: "03",
     title: "Reviewed health guidance",
     description:
-      "A curated information layer intended to connect general education with traceable sources and human review.",
-    status: "Foundation ready",
+      "A source-approval and review foundation is being built. No health recommendations are currently published.",
+    status: "Review foundation in development",
     icon: "⌁",
   },
 ];
@@ -35,11 +35,11 @@ export default function HomePage() {
         <div className="hero-orb hero-orb-two" aria-hidden="true" />
         <div className="container hero-grid">
           <div className="hero-copy">
-            <div className="eyebrow"><span className="eyebrow-dot" /> AI-ASSISTED HEALTH INFORMATION</div>
+            <div className="eyebrow"><span className="eyebrow-dot" /> HEALTH INFORMATION RESEARCH PROTOTYPE</div>
             <h1>Understand health information. <em>Make informed next steps.</em></h1>
             <p className="hero-description">
-              MediPredict is an academic project exploring responsible AI-assisted symptom
-              and skin-image analysis, supported by clear limitations and reviewed health information.
+              MediPredict is an academic project building separate symptom-input and private skin-image
+              intake workflows. Disease prediction and personalized medical guidance are not currently available.
             </p>
             <div className="hero-actions">
               <Link className="button button-primary" href="/dashboard">Explore the workspace <span aria-hidden="true">→</span></Link>
@@ -83,9 +83,9 @@ export default function HomePage() {
           <div className="section-heading">
             <div>
               <div className="eyebrow">THE MEDIPREDICT APPROACH</div>
-              <h2>Three connected parts.<br /><em>One responsible experience.</em></h2>
+              <h2>Three distinct workstreams.<br /><em>One responsible approach.</em></h2>
             </div>
-            <p>Each analysis is treated as its own workflow. Information is presented with context, not as a substitute for professional care.</p>
+            <p>Each workstream has a separate implementation status. Current prototypes are clearly labeled and are not substitutes for professional care.</p>
           </div>
           <div className="workflow-grid">
             {workflows.map((item) => (
