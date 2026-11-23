@@ -1,5 +1,6 @@
 """Regression tests for static skin-image review routes."""
 
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -157,24 +158,28 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
             assigned_by=administrator.id,
         )
         db.add(image_record)
+        consent_time = datetime.now(timezone.utc)
         db.add_all([
             PredictionConsentEvent(
                 prediction_id=prediction.id,
                 purpose="skin_image_processing",
                 action="granted",
                 policy_version="v1",
+                captured_at=consent_time,
             ),
             PredictionConsentEvent(
                 prediction_id=prediction.id,
                 purpose="skin_image_review",
                 action="granted",
                 policy_version="v1",
+                captured_at=consent_time,
             ),
             PredictionConsentEvent(
                 prediction_id=prediction.id,
                 purpose="skin_image_review",
                 action="revoked",
                 policy_version="v1",
+                captured_at=consent_time + timedelta(seconds=1),
             ),
             CatalogReviewerScope(
                 reviewer_id=reviewer.id,
