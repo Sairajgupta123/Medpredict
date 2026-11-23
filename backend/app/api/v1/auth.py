@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.email import send_password_reset_email
 from app.core.password_reset import (
     consume_password_reset_token,
+    invalidate_password_reset_token,
     issue_password_reset_token,
 )
 from app.core.security import (
@@ -130,6 +131,14 @@ def request_password_reset(
     try:
         send_password_reset_email(user.email, raw_token)
     except Exception:
+        # A token that was not delivered must not remain usable. Invalidate only
+        # this token so a concurrent, successfully delivered request is preserved.
+        try:
+            invalidate_password_reset_token(db, raw_token)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Undelivered password reset token cleanup failed.")
         # Do not log the recipient, reset URL, or raw token.
         logger.warning("Password reset email delivery failed.")
     return generic_response
