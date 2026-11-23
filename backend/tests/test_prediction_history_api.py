@@ -1476,3 +1476,54 @@ def test_skin_image_history_delete_is_blocked_for_unknown_storage_state(client: 
         assert db.get(Prediction, item.id) is not None
     finally:
         db.close()
+
+
+def test_other_user_cannot_revoke_skin_image_history_consent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import predictions
+    owner_token, owner = _register(client, "image-history-owner@example.com")
+    other_token, _ = _register(client, "image-history-other@example.com")
+    item, key, _ = _stored_image_for_user(owner.id)
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+    response = client.post(f"/api/v1/predictions/history/{item.id}/revoke-consent", headers=_headers(other_token))
+    assert response.status_code == 404 and key in storage.objects
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None and image.storage_status == "stored"
+        latest = db.scalar(select(PredictionConsentEvent).where(PredictionConsentEvent.prediction_id == item.id, PredictionConsentEvent.purpose == "skin_image_history").order_by(PredictionConsentEvent.captured_at.desc(), PredictionConsentEvent.id.desc()))
+        assert latest is not None and latest.action == "granted"
+    finally:
+        db.close()
+
+
+def test_image_history_consent_revocation_blocks_unknown_storage_state(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import predictions
+    token, user = _register(client, "image-history-unknown@example.com")
+    item, key, _ = _stored_image_for_user(user.id)
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None
+        image.storage_status = "unknown"
+        db.commit()
+    finally:
+        db.close()
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+    response = client.post(f"/api/v1/predictions/history/{item.id}/revoke-consent", headers=_headers(token))
+    assert response.status_code == 409 and key in storage.objects
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None and image.storage_status == "unknown"
+        latest = db.scalar(select(PredictionConsentEvent).where(PredictionConsentEvent.prediction_id == item.id, PredictionConsentEvent.purpose == "skin_image_history").order_by(PredictionConsentEvent.captured_at.desc(), PredictionConsentEvent.id.desc()))
+        assert latest is not None and latest.action == "granted"
+    finally:
+        db.close()
