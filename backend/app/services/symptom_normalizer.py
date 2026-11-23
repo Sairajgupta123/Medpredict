@@ -219,7 +219,7 @@ def normalize_symptoms(
     for start, end in accepted_spans:
         for position in range(start, end):
             residual_characters[position] = " "
-    residual_tokens = set(" ".join(residual_characters).split())
+    residual_tokens = set("".join(residual_characters).split())
     filler_tokens = {
         "i", "me", "my", "we", "you", "he", "she", "they", "it",
         "have", "has", "had", "am", "is", "are", "was", "were",
