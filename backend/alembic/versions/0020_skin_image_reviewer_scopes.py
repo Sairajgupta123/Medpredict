@@ -40,7 +40,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Restore catalog-only scope constraints after image scopes are removed."""
+    """Remove image-specific grants and restore catalog-only scope constraints."""
+    # The downgraded schema cannot represent skin-image scopes. Remove their
+    # dependent audit rows first, then their current grants.
+    op.execute(
+        "DELETE FROM catalog_reviewer_scope_events WHERE scope_type = 'skin_image'"
+    )
+    op.execute(
+        "DELETE FROM catalog_reviewer_scopes WHERE scope_type = 'skin_image'"
+    )
     op.drop_constraint(
         "ck_catalog_reviewer_scope_events_scope_type",
         "catalog_reviewer_scope_events",
