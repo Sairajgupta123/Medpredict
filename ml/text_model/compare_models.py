@@ -273,13 +273,6 @@ def compare_text_models(
         "artifact_sha256": artifact_sha256,
         "model_name": winner_name,
         "dataset_sha256": dataset_hash,
-        "experiment_config_sha256": experiment_config_sha256({
-            "pipeline": "tfidf_word_char_candidate_comparison",
-            "candidate_models": list(fitted.keys()),
-            "random_state": random_state,
-            "test_size": test_size,
-            "validation_size": validation_size,
-        }),
         "integrity_note": "SHA-256 detects accidental or uncoordinated file changes; it is not a digital signature and does not establish artifact authenticity.",
     }
     (output_dir / "artifact_manifest.json").write_text(
