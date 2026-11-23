@@ -1352,6 +1352,68 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
         db.close()
 
 
+def test_image_history_consent_revocation_keeps_consent_active_until_delete_succeeds(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import prediction_history
+    token, user = _register(client, "image-revoke-retry@example.com")
+    item, key, _ = _stored_image_for_user(user.id)
+
+    class FlakyStorage(_FakeIntakeStorage):
+        def __init__(self):
+            super().__init__()
+            self.fail = True
+            self.calls = 0
+        def delete_private(self, object_key: str) -> None:
+            self.calls += 1
+            if self.fail:
+                raise OSError("temporary private-storage outage")
+            super().delete_private(object_key)
+
+    storage = FlakyStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(prediction_history, "build_skin_image_storage", lambda: storage)
+
+    first = client.post(
+        f"/api/v1/predictions/history/{item.id}/revoke-consent",
+        headers=_headers(token),
+    )
+    assert first.status_code == 503
+    assert "remains active" in first.json()["detail"]
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None and image.storage_status == "deletion_pending"
+        assert image.deletion_requested_at is not None
+        latest = db.scalar(
+            select(PredictionConsentEvent)
+            .where(PredictionConsentEvent.prediction_id == item.id, PredictionConsentEvent.purpose == "skin_image_history")
+            .order_by(PredictionConsentEvent.captured_at.desc(), PredictionConsentEvent.id.desc())
+        )
+        assert latest is not None and latest.action == "granted"
+    finally:
+        db.close()
+
+    storage.fail = False
+    second = client.post(
+        f"/api/v1/predictions/history/{item.id}/revoke-consent",
+        headers=_headers(token),
+    )
+    assert second.status_code == 200 and second.json()["consent_revoked"] is True
+    assert storage.calls == 2 and key not in storage.objects
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id))
+        assert image is not None and image.storage_status == "deleted"
+        latest = db.scalar(
+            select(PredictionConsentEvent)
+            .where(PredictionConsentEvent.prediction_id == item.id, PredictionConsentEvent.purpose == "skin_image_history")
+            .order_by(PredictionConsentEvent.captured_at.desc(), PredictionConsentEvent.id.desc())
+        )
+        assert latest is not None and latest.action == "revoked"
+    finally:
+        db.close()
+
 def test_skin_image_history_delete_failure_keeps_retry_marker_and_can_retry(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api.v1 import predictions
     token, user = _register(client, "image-delete-retry@example.com")
