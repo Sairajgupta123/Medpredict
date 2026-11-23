@@ -46,6 +46,14 @@ The backend now contains a standalone validation utility at `backend/app/service
 
 An additional advisory quality helper reports basic capture indicators (small dimensions, very dark or overexposed pixels, and near-uniform/low-contrast images). These are technical warnings only; they are not a clinical quality score, do not establish that a lesion is visible, and must not be used to diagnose or deny care.\n\nThis utility is not an HTTP upload endpoint and does not store files. It is not yet connected to prediction history or model inference. Upload routes remain intentionally disabled until private object storage, authenticated upload controls, explicit image-processing consent, retention rules, deletion verification, request-size enforcement and operational rate limits are implemented. The utility does not establish that an image is clinically suitable or support a diagnosis.
 
+
+
+### Private storage adapter boundary
+
+`backend/app/services/skin_image_storage.py` defines a narrow private-storage protocol and a default adapter that fails closed. No cloud bucket, local disk fallback, public URL, or upload route is configured. Object keys are generated from server-side image UUIDs and safe extensions; they do not contain account identifiers or original filenames. A production adapter must provide private-only access, encryption at rest, TLS, least-privilege credentials, no public object URLs, and idempotent deletion. Retrieval must only be called after application-level ownership checks. The protocol is an integration contract, not proof that a storage provider has been configured or audited.
+
+Before enabling image upload, the next implementation stages must add a separate image-processing consent purpose and immutable consent events, persist only metadata after successful private object creation, handle partial failures with compensating deletion, implement verified deletion before acknowledging revocation, and test cross-user access isolation. Retention expiry and operational deletion reconciliation are also required.
+
 ## Not implemented yet
 
 - A clinically validated disease-risk model and its external validation evidence.
