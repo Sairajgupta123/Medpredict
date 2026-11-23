@@ -711,9 +711,15 @@ def test_admin_assigns_image_to_verified_reviewer_and_review_is_audited(
                 SkinImageReviewEvent.prediction_id == prediction.id
             )
         ).all()
-        assert [event.event_type for event in events] == ["assigned", "reviewed"]
+        assert [event.event_type for event in events] == [
+            "assigned",
+            "image_accessed",
+            "reviewed",
+        ]
         assert events[0].actor_id == admin.id
         assert events[1].actor_id == reviewer.id
+        assert events[2].actor_id == reviewer.id
+        assert events[1].reason == "Authorized private image retrieval completed."
         reviewed_image = db.scalar(
             select(SkinImageAnalysis).where(
                 SkinImageAnalysis.prediction_id == prediction.id
