@@ -1139,6 +1139,8 @@ def test_owner_revoking_review_consent_revokes_assigned_reviewer_scope(
 def test_other_user_cannot_revoke_skin_image_review_consent(
     client: TestClient,
 ) -> None:
+    from app.models.prediction import PredictionConsentEvent
+
     owner_token, owner = _register(client, "skin-review-consent-owner-2@example.com")
     other_token, other = _register(client, "skin-review-consent-other@example.com")
     prediction, _, _ = _prepare_skin_review_item(owner.id)
