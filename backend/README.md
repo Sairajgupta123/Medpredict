@@ -372,3 +372,17 @@ Before configuration, provision a private bucket with Block Public Access, restr
 The owner-only retrieval endpoint is `GET /api/v1/skin-images/{prediction_id}`. It requires a valid bearer token, ownership of the prediction, an image/combined modality, an image row in `stored` state, and currently active `skin_image_history` consent. The service retrieves bytes through the private adapter, enforces the 8 MiB bound, verifies the database SHA-256 digest and decoded image format, and returns `private, no-store` with `nosniff`; it never returns the object key or a public URL. Deleted, pending, failed, unowned, or non-consented records are not retrievable. Retrieval does not invoke a classifier or make a medical assessment.
 
 A bounded retention job is available as `python -m app.workers.skin_image_retention` (run from the `backend/` directory). Configure it through your deployment scheduler only after approving an explicit retention policy and testing the real bucket. It processes at most 100 due objects per run, retries `deletion_pending` objects on later runs, preserves minimal prediction/consent audit metadata, and prints only aggregate counts. Prevent overlapping scheduled runs and alert when the reported failure count is non-zero. CI uses fake storage; it does not prove real AWS permissions, bucket privacy, or provider configuration.
+
+## Human skin-image review workflow
+
+Stored skin images can be assigned by an administrator to an active, email-verified account with the reviewer role:
+
+- POST /api/v1/skin-images/review/{prediction_id}/assign — administrator assigns or reassigns a stored image with an 8–1,000 character operational reason.
+- GET /api/v1/skin-images/review/queue — reviewers see only their assigned items; administrators can inspect all assigned items.
+- GET /api/v1/skin-images/review/{prediction_id}/image — only the assigned reviewer or an administrator can retrieve the private image while processing consent remains active.
+- POST /api/v1/skin-images/review/{prediction_id}/decision — assigned reviewer or administrator records capture_adequate or unable_to_assess, with an audit reason.
+- GET /api/v1/skin-images/review/{prediction_id}/events — assigned reviewer and administrators can inspect the append-only assignment/review event history.
+
+The workflow is strictly a technical capture-quality review. capture_adequate does not mean a lesion is benign, malignant, or clinically assessable. No diagnosis, disease label, probability, treatment advice, or clinical interpretation is accepted or produced. Processing consent is checked before queue inclusion, image retrieval, assignment, and review decisions. Reviewers must be explicitly provisioned and verified operationally; the role and email-verification flags alone do not establish clinical qualifications. Administrators are responsible for verifying reviewer credentials and scope before assignment.
+
+Review audit events preserve opaque prediction/image UUID references without foreign keys to the user-history rows, so deleting an image history item does not erase the assignment/review audit trail. The audit stores actor, assignee, event, limited outcome, reason, and timestamp; it does not store image bytes or a public image URL. The image review UI and production reviewer qualification process are not yet implemented.
