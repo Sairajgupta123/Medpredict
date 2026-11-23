@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.api.dependencies import Administrator, CurrentUser, DbSession
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
@@ -752,4 +752,60 @@ def list_skin_image_review_events(
             "created_at": event.created_at,
         }
         for event in events
+    ]
+
+
+@router.get("/review/audit")
+def list_skin_image_review_audit(
+    user: CurrentUser,
+    db: DbSession,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    """List image-review audit events for admins or the reviewer's own assignments.
+
+    Reviewer access is restricted to events where they were the actor or the
+    assigned reviewer. Administrators can inspect the complete image-review
+    audit trail. No image bytes, object keys, or patient identity are returned.
+    """
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    if limit < 1 or limit > 200 or offset < 0 or offset > 10000:
+        raise HTTPException(status_code=422, detail="Audit pagination is outside the allowed range.")
+
+    statement = (
+        select(SkinImageReviewEvent, User)
+        .join(User, User.id == SkinImageReviewEvent.actor_id)
+        .order_by(
+            SkinImageReviewEvent.created_at.desc(),
+            SkinImageReviewEvent.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    if user.role != "admin":
+        statement = statement.where(
+            or_(
+                SkinImageReviewEvent.actor_id == user.id,
+                SkinImageReviewEvent.assigned_reviewer_id == user.id,
+            )
+        )
+    rows = db.execute(statement).all()
+    return [
+        {
+            "event_id": str(event.id),
+            "prediction_id": str(event.prediction_id),
+            "event_type": event.event_type,
+            "actor_id": str(event.actor_id),
+            "actor_identity": actor.display_name or actor.email,
+            "actor_role": actor.role,
+            "assigned_reviewer_id": (
+                str(event.assigned_reviewer_id)
+                if event.assigned_reviewer_id else None
+            ),
+            "outcome": event.outcome,
+            "reason": event.reason,
+            "created_at": event.created_at,
+        }
+        for event, actor in rows
     ]
