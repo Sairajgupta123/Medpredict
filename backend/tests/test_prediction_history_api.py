@@ -1321,6 +1321,41 @@ def test_owner_skin_image_review_status_reflects_assignment_and_revocation(
 
 
 
+def test_owner_review_status_is_minimal_and_never_exposes_reviewer_or_storage_data(
+    client: TestClient,
+) -> None:
+    owner_token, owner = _register(client, "skin-status-minimal-owner@example.com")
+    other_token, _ = _register(client, "skin-status-minimal-other@example.com")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+
+    response = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(owner_token),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["prediction_id"] == str(prediction.id)
+    assert payload["status"] == "awaiting_review"
+    assert isinstance(payload["status_label"], str)
+    assert isinstance(payload["status_detail"], str)
+    assert isinstance(payload["next_step"], str)
+    assert payload["status_at"] is not None
+    assert payload["clinical_interpretation_performed"] is False
+    assert payload["disease_prediction_performed"] is False
+    forbidden_fields = {
+        "object_key", "image_sha256", "assigned_reviewer_id",
+        "reviewer_identity", "actor_identity", "reason", "audit_events",
+        "image_url", "image_bytes",
+    }
+    assert forbidden_fields.isdisjoint(payload)
+    assert response.status_code == 200
+
+    not_owner = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(other_token),
+    )
+    assert not_owner.status_code == 404
+
 def test_skin_image_history_delete_removes_private_object_and_preserves_review_audit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api.v1 import predictions
     token, user = _register(client, "image-delete-success@example.com")
