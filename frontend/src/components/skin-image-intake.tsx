@@ -204,7 +204,7 @@ export function SkinImageIntake() {
             </label>
             <label className="skin-intake-consent-item">
               <input type="checkbox" checked={historyConsent} onChange={(event) => setHistoryConsent(event.target.checked)} />
-              <span><strong>2. Image history and retention</strong><small>I agree that a private image-history record may be retained under the project's applicable retention policy. I understand that no default expiry is assumed by this prototype.</small></span>
+              <span><strong>2. Image history and retention</strong><small>I agree that a private image-history record may be retained under the project&apos;s applicable retention policy. I understand that no default expiry is assumed by this prototype.</small></span>
             </label>
             <label className="skin-intake-consent-item">
               <input type="checkbox" checked={reviewConsent} onChange={(event) => setReviewConsent(event.target.checked)} />
