@@ -479,7 +479,8 @@ def test_retention_purge_does_not_revoke_consent_when_object_delete_fails(
     ).all())
     assert summary == {"processed": 1, "deleted": 0, "failed": 1}
     assert image.storage_status == "deletion_pending"
-    assert image.retention_expires_at == expiry
+    # PostgreSQL returns this TIMESTAMP WITHOUT TIME ZONE value as naive UTC.
+    assert image.retention_expires_at == expiry.replace(tzinfo=None)
     assert [event.action for event in events] == ["granted"]
     assert has_active_skin_image_consent(
         db_session, prediction.id, purpose="skin_image_history"
