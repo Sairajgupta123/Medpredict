@@ -324,3 +324,138 @@ def list_expired_skin_image_records(
             .limit(limit)
         ).all()
     )
+
+
+def revoke_skin_image_history_consent(
+    db: Session,
+    user_id: UUID,
+    prediction_id: UUID,
+    *,
+    image_storage: SkinImageStorage,
+    policy_version: str,
+) -> Prediction:
+    """Revoke image-history consent only after private object deletion succeeds.
+
+    The image row is retained as a minimal audit/reconciliation record with a
+    deleted state; its private object key is never returned by API schemas.
+    """
+    prediction = get_owned_prediction(db, user_id, prediction_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Image-history consent applies only to image or combined predictions.",
+        )
+    if not policy_version.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A consent policy version is required.",
+        )
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_history"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active image-history consent exists for this item.",
+        )
+
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == prediction.id
+        )
+    )
+    if image_record is None or image_record.storage_status not in {
+        "stored", "deletion_pending", "deleted"
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The image storage state cannot be safely reconciled; manual review is required.",
+        )
+
+    if image_record.storage_status != "deleted":
+        image_record.storage_status = "deletion_pending"
+        image_record.deletion_requested_at = (
+            image_record.deletion_requested_at or datetime.now(timezone.utc)
+        )
+        db.commit()
+        try:
+            image_storage.delete_private(image_record.object_key)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Image deletion is pending. Consent remains active until deletion is confirmed.",
+            ) from exc
+        image_record.storage_status = "deleted"
+        image_record.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+
+    db.add(
+        PredictionConsentEvent(
+            prediction_id=prediction.id,
+            purpose="skin_image_history",
+            action="revoked",
+            policy_version=policy_version.strip(),
+            captured_at=datetime.now(timezone.utc),
+        )
+    )
+    db.commit()
+    db.refresh(prediction)
+    return prediction
+
+
+def purge_expired_skin_image_records(
+    db: Session,
+    *,
+    image_storage: SkinImageStorage,
+    as_of: datetime,
+    limit: int = 100,
+) -> dict[str, int]:
+    """Delete expired private image objects in a bounded, retry-safe batch.
+
+    Prediction and consent audit rows are retained. Failed objects remain in
+    deletion_pending state for a later retry and are never reported as deleted.
+    """
+    candidates = list_expired_skin_image_records(db, as_of=as_of, limit=limit)
+    deleted = 0
+    failed = 0
+    for image_record in candidates:
+        image_record.storage_status = "deletion_pending"
+        image_record.deletion_requested_at = (
+            image_record.deletion_requested_at or datetime.now(timezone.utc)
+        )
+        db.commit()
+        try:
+            image_storage.delete_private(image_record.object_key)
+        except Exception:
+            failed += 1
+            continue
+
+        image_record.storage_status = "deleted"
+        image_record.deleted_at = datetime.now(timezone.utc)
+        image_record.retention_expires_at = None
+        latest_consent = db.scalar(
+            select(PredictionConsentEvent)
+            .where(
+                PredictionConsentEvent.prediction_id == image_record.prediction_id,
+                PredictionConsentEvent.purpose == "skin_image_history",
+            )
+            .order_by(
+                PredictionConsentEvent.captured_at.desc(),
+                PredictionConsentEvent.id.desc(),
+            )
+            .limit(1)
+        )
+        if latest_consent is not None and latest_consent.action == "granted":
+            db.add(
+                PredictionConsentEvent(
+                    prediction_id=image_record.prediction_id,
+                    purpose="skin_image_history",
+                    action="revoked",
+                    policy_version=(
+                        image_record.retention_policy_version or "retention-expiry"
+                    ),
+                    captured_at=datetime.now(timezone.utc),
+                )
+            )
+        db.commit()
+        deleted += 1
+    return {"processed": len(candidates), "deleted": deleted, "failed": failed}
