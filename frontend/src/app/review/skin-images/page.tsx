@@ -143,7 +143,10 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
     <main id="main-content" className="review-page">
       <section className="review-hero">
         <div className="container">
-          <Link className="back-link" href="/review">← Back to review console</Link>
+          <div className="skin-review-top-links">
+            <Link className="back-link" href="/review">← Back to review console</Link>
+            <Link className="review-page-link" href="/review/skin-images/audit">View access and review audit →</Link>
+          </div>
           <div className="eyebrow"><span className="eyebrow-dot" /> SKIN IMAGE REVIEW</div>
           <h1>Review image <em>capture quality.</em></h1>
           <p>Assigned reviewers can inspect retained images and record a technical capture-quality outcome. This workflow does not assess lesions or diagnose disease.</p>
