@@ -664,8 +664,13 @@ def retrieve_assigned_review_image(
     prediction = db.get(Prediction, parsed_id)
     if prediction is None or prediction.modality not in {"skin_image", "combined"}:
         raise HTTPException(status_code=404, detail="Review image not found.")
+    # Hold the same image-row lock used by assignment and consent revocation
+    # until the access audit event commits. This prevents bytes being served
+    # after a concurrent consent withdrawal has committed.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
     )
     if (
         image_record is None
