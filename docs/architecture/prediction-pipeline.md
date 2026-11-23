@@ -136,3 +136,10 @@ Authenticated owners can request `GET /api/v1/skin-images/{prediction_id}/review
 
 
 The owner-facing review-status response also includes plain-language `status_detail` and `next_step` fields. These explain only the limited technical capture-quality workflow, explicitly distinguish capture adequacy from clinical assessment, and remind users not to delay medical care. The frontend renders these separately from the submission's general processing status. No reviewer identity, internal reason or diagnosis is disclosed.
+
+
+### Owner-controlled skin-image history deletion
+
+The owner image-history page now offers a distinct permanent-delete action. The owner must type `DELETE` before the server action submits the authenticated request. The existing `DELETE /api/v1/predictions/history/{prediction_id}` endpoint remains the single deletion implementation: it verifies ownership, requires a verified storage state, commits `deletion_pending` before object deletion, and removes the prediction/history row only after private object deletion succeeds. A storage failure returns an error while retaining the row and durable retry marker; a subsequent request safely retries the idempotent object deletion. Unknown or incomplete storage states fail closed for manual reconciliation.
+
+The UI distinguishes confirmed deletion (HTTP 204) from pending, blocked, unavailable and not-found outcomes. It never displays object keys or image bytes. The deletion receipt contains only the opaque submission reference and confirmation time. Independent skin-image review audit events intentionally survive because they are stored without foreign keys to the deleted prediction/image rows; the receipt explains that this limited audit metadata may remain. Revoking human-review consent remains a separate action and is not presented as deletion.
