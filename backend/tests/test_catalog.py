@@ -1570,6 +1570,14 @@ def test_catalog_match_returns_only_approved_overlap_and_no_probability(
     db = TestingSessionLocal()
     try:
         disease = _approved_disease("DIS_MATCH", "Catalog Match Condition")
+        unreviewed_disease = Disease(
+            code="DIS_MATCH_UNREVIEWED",
+            name="Unreviewed Match Condition",
+            is_active=True,
+            review_status="in_review",
+        )
+        inactive_disease = _approved_disease("DIS_MATCH_INACTIVE", "Inactive Match Condition")
+        inactive_disease.is_active = False
         fever = _approved_symptom("SYM_MATCH_FEVER", "Fever")
         cough = _approved_symptom("SYM_MATCH_COUGH", "Cough")
         draft = Symptom(
@@ -1578,11 +1586,18 @@ def test_catalog_match_returns_only_approved_overlap_and_no_probability(
             is_active=True,
             review_status="draft",
         )
-        db.add_all([disease, fever, cough, draft])
+        db.add_all([disease, unreviewed_disease, inactive_disease, fever, cough, draft])
         db.flush()
         db.add_all([
             _approved_link(disease, fever),
             _approved_link(disease, cough),
+            _approved_link(inactive_disease, fever),
+            DiseaseSymptom(
+                disease_id=unreviewed_disease.id,
+                symptom_id=fever.id,
+                relevance_weight=1.0,
+                review_status="in_review",
+            ),
             DiseaseSymptom(
                 disease_id=disease.id,
                 symptom_id=draft.id,
