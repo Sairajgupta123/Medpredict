@@ -805,3 +805,25 @@ def test_review_audit_is_scoped_and_pagination_is_bounded(
         assert "object_key" not in item
         assert "patient_email" not in item
         assert "image_bytes" not in item
+
+def test_skin_image_intake_requires_each_separate_consent(
+    client: TestClient,
+) -> None:
+    """No image bytes are accepted unless all three purpose-specific grants exist."""
+    headers = _user_headers("patient")
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=headers,
+        files={"image": ("lesion.png", b"not-a-real-image", "image/png")},
+        data={
+            "processing_consent": "true",
+            "history_consent": "true",
+            "review_consent": "false",
+            "processing_policy_version": "processing-v1",
+            "history_policy_version": "history-v1",
+            "review_policy_version": "review-v1",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Separate image-processing" in response.json()["detail"]
