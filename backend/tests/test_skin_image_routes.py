@@ -596,3 +596,109 @@ def test_review_decision_is_terminal_and_audited_once(
         assert review_events[0].reason == "Image capture quality is adequate."
     finally:
         db.close()
+
+def test_review_decision_rejects_invalid_outcome_and_short_reason(
+    client: TestClient,
+) -> None:
+    """Invalid review payloads must not mutate the review record or audit trail."""
+    db = TestingSessionLocal()
+    try:
+        administrator = User(
+            email=f"skin-invalid-admin-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="admin",
+        )
+        reviewer = User(
+            email=f"skin-invalid-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([administrator, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=administrator.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/invalid-decision-test",
+                content_type="image/png",
+                image_sha256="4" * 64,
+                storage_status="stored",
+                review_status="assigned",
+                assigned_reviewer_id=reviewer.id,
+                assigned_by=administrator.id,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Reviewer approved for technical assessment.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
+        reviewer_token = create_access_token(reviewer.id)
+    finally:
+        db.close()
+
+    headers = {"Authorization": f"Bearer {reviewer_token}"}
+    endpoint = f"/api/v1/skin-images/review/{prediction_id}/decision"
+    invalid_outcome = client.post(
+        endpoint,
+        headers=headers,
+        json={
+            "outcome": "diagnose_melanoma",
+            "reason": "This outcome is not a supported technical review.",
+        },
+    )
+    short_reason = client.post(
+        endpoint,
+        headers=headers,
+        json={
+            "outcome": "capture_adequate",
+            "reason": "bad",
+        },
+    )
+
+    assert invalid_outcome.status_code == 422
+    assert short_reason.status_code == 422
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_uuid,
+        ).one()
+        review_events = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_uuid,
+            event_type="reviewed",
+        ).all()
+        assert image_record.review_status == "assigned"
+        assert image_record.review_outcome is None
+        assert image_record.reviewed_at is None
+        assert review_events == []
+    finally:
+        db.close()
