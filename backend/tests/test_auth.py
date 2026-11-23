@@ -787,3 +787,22 @@ def test_reviewer_cannot_be_demoted_while_active_catalog_scopes_remain(
     finally:
         db.close()
 
+def test_access_token_with_malformed_subject_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(sub="not-a-uuid")
+    assert decode_access_token(token) is None
+
+
+def test_access_token_with_negative_version_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(ver=-1)
+    assert decode_access_token(token) is None
+
+
+def test_access_token_with_future_issued_at_is_rejected() -> None:
+    from app.core.security import decode_access_token
+
+    token = _signed_test_token(iat=datetime.now(timezone.utc) + timedelta(minutes=10))
+    assert decode_access_token(token) is None
