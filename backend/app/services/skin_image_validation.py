@@ -80,6 +80,11 @@ def validate_and_sanitize_skin_image(
             else:
                 mode = "RGBA" if "A" in oriented.getbands() else "RGB"
 
+            width, height = oriented.size
+            if width > MAX_IMAGE_WIDTH or height > MAX_IMAGE_HEIGHT:
+                raise ValueError("Oriented image dimensions exceed the 6000 pixel limit.")
+            if width * height > MAX_IMAGE_PIXELS:
+                raise ValueError("Oriented image exceeds the 20 megapixel processing limit.")
             pixels = oriented.convert(mode)
             # Rebuild from raw pixels so EXIF, ICC, textual and other metadata
             # cannot be copied into the sanitized output.
@@ -98,7 +103,7 @@ def validate_and_sanitize_skin_image(
             pixels.close()
             oriented.close()
 
-    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ValueError("Image bytes are invalid or cannot be decoded.") from exc
 
     return ValidatedSkinImage(
