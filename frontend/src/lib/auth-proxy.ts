@@ -58,8 +58,26 @@ export async function proxyCredentials(
     );
   }
 
-  if (!result || !("access_token" in result) || !("user" in result)) {
-    return NextResponse.json({ detail: "The server returned an invalid session response." }, { status: 502 });
+  if (
+    !result ||
+    !("access_token" in result) ||
+    typeof result.access_token !== "string" ||
+    result.access_token.length < 20 ||
+    result.access_token.length > 8192 ||
+    !("expires_in" in result) ||
+    typeof result.expires_in !== "number" ||
+    !Number.isSafeInteger(result.expires_in) ||
+    result.expires_in < 1 ||
+    result.expires_in > 60 * 60 * 24 * 30 ||
+    !("user" in result) ||
+    !result.user ||
+    typeof result.user !== "object" ||
+    Array.isArray(result.user)
+  ) {
+    return NextResponse.json(
+      { detail: "The server returned an invalid session response." },
+      { status: 502 },
+    );
   }
 
   const response = NextResponse.json({
