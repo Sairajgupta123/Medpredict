@@ -149,6 +149,12 @@ class SkinImageAnalysis(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    retention_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    retention_policy_version: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
     predicted_class: Mapped[str | None] = mapped_column(String(160), nullable=True)
     confidence: Mapped[Decimal | None] = mapped_column(
         Numeric(7, 6), nullable=True
