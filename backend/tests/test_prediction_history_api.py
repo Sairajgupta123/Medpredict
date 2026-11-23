@@ -287,7 +287,7 @@ def _intake_form() -> dict[str, str]:
     }
 
 
-def test_skin_image_intake_requires_both_separate_consents(
+def test_skin_image_intake_requires_all_separate_consents(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token, _ = _register(client, "image-consent-required@example.com")
@@ -348,6 +348,8 @@ def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
             "skin_image_history",
             "skin_image_review",
         }
+        review_event = next(event for event in events if event.purpose == "skin_image_review")
+        assert review_event.policy_version == "image-review-v1"
     finally:
         db.close()
 
