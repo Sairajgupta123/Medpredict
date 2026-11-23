@@ -11,9 +11,13 @@ from app.services.skin_image_validation import (
 )
 
 
-def _image_bytes(image_format: str = "PNG", size: tuple[int, int] = (32, 24)) -> bytes:
+def _image_bytes(
+    image_format: str = "PNG",
+    size: tuple[int, int] = (32, 24),
+    color: tuple[int, int, int] = (120, 80, 40),
+) -> bytes:
     buffer = BytesIO()
-    Image.new("RGB", size, (120, 80, 40)).save(buffer, format=image_format)
+    Image.new("RGB", size, color).save(buffer, format=image_format)
     return buffer.getvalue()
 
 
@@ -95,7 +99,9 @@ def test_rejects_animated_webp() -> None:
 def test_quality_assessment_flags_small_dark_uniform_image() -> None:
     from app.services.skin_image_validation import assess_skin_image_quality
 
-    result = assess_skin_image_quality(_image_bytes(size=(64, 64)))
+    result = assess_skin_image_quality(
+        _image_bytes(size=(64, 64), color=(10, 10, 10))
+    )
     assert result.width == 64
     assert result.height == 64
     assert "low_resolution" in result.warnings
