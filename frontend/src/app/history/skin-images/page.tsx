@@ -133,8 +133,32 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
         signal: AbortSignal.timeout(10_000),
       });
       if (response.ok) {
-        const payload = await response.json() as HistoryPage;
-        if (Array.isArray(payload.items) && Number.isSafeInteger(payload.total) && payload.total >= 0) {
+        const payload: unknown = await response.json();
+        const validHistoryPage = (value: unknown): value is HistoryPage => {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+          const candidate = value as Record<string, unknown>;
+          if (!Array.isArray(candidate.items)
+            || !Number.isSafeInteger(candidate.total)
+            || (candidate.total as number) < 0
+            || candidate.limit !== pageSize
+            || candidate.offset !== offset
+            || candidate.items.length > pageSize) return false;
+          const ids = new Set<string>();
+          return candidate.items.every((entry) => {
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+            const item = entry as Record<string, unknown>;
+            if (typeof item.id !== "string" || !/^[0-9a-f-]{36}$/i.test(item.id) || ids.has(item.id)) return false;
+            if (typeof item.modality !== "string" || !["text", "skin_image", "combined"].includes(item.modality)) return false;
+            if (typeof item.status !== "string" || item.status.length > 80) return false;
+            if (!(item.model_version === null || typeof item.model_version === "string")) return false;
+            if (!(item.disclaimer_version === null || typeof item.disclaimer_version === "string")) return false;
+            if (typeof item.created_at !== "string" || !Number.isFinite(Date.parse(item.created_at))) return false;
+            if (!(item.completed_at === null || (typeof item.completed_at === "string" && Number.isFinite(Date.parse(item.completed_at))))) return false;
+            ids.add(item.id);
+            return true;
+          });
+        };
+        if (validHistoryPage(payload)) {
           historyTotal = payload.total;
           if (historyTotal > 0 && offset >= historyTotal) {
             redirect(`/history/skin-images?offset=${Math.floor((historyTotal - 1) / pageSize) * pageSize}`);
