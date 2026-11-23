@@ -123,3 +123,20 @@ def test_quality_assessment_rejects_invalid_bytes() -> None:
 
     with pytest.raises(ValueError, match="invalid or cannot be decoded"):
         assess_skin_image_quality(b"not sanitized image bytes")
+
+def test_strips_jpeg_exif_metadata() -> None:
+    buffer = BytesIO()
+    exif = Image.Exif()
+    exif[0x010E] = "private location note"
+    Image.new("RGB", (32, 24), (40, 80, 120)).save(
+        buffer, format="JPEG", exif=exif
+    )
+
+    result = validate_and_sanitize_skin_image(buffer.getvalue(), "image/jpeg")
+
+    with Image.open(BytesIO(result.content)) as sanitized:
+        assert sanitized.format == "JPEG"
+        assert sanitized.size == (32, 24)
+        assert not sanitized.getexif()
+        assert "exif" not in sanitized.info
+
