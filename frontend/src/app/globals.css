@@ -615,3 +615,16 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .skin-intake-result-meta > div { grid-template-columns: 1fr; gap: 5px; }
   .skin-intake-revoke { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* Owner-scoped image history and consent controls */
+.skin-history-page { padding-bottom: 76px; }
+.skin-history-card { gap: 14px; }
+.skin-history-action { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #e8eee8; border-radius: 8px; background: #fbfcfa; }
+.skin-history-action > div { display: grid; gap: 5px; }
+.skin-history-action strong { color: #506a56; font-size: 10px; }
+.skin-history-action small { color: #8d9a90; font-size: 9px; line-height: 1.6; }
+.skin-history-action .button { flex: 0 0 auto; }
+@media (max-width: 560px) {
+  .skin-history-action { align-items: flex-start; flex-direction: column; }
+}
