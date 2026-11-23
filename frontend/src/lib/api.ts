@@ -23,6 +23,7 @@ export async function apiRequest<T>(
       ...init.headers,
     },
     cache: "no-store",
+    signal: init.signal ?? AbortSignal.timeout(15_000),
   });
 
   if (!response.ok) {
