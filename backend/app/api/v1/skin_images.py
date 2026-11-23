@@ -238,7 +238,13 @@ def retrieve_skin_image(
             detail="Stored image metadata failed validation.",
         )
 
-    storage: SkinImageStorage = build_skin_image_storage()
+    try:
+        storage: SkinImageStorage = build_skin_image_storage()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Private image storage is unavailable.",
+        ) from exc
     if isinstance(storage, DisabledSkinImageStorage):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
