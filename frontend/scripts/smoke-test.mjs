@@ -33,6 +33,11 @@ for (const endpoint of ["login", "register"]) {
     { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
     400,
   );
+  await check(
+    `reject oversized auth ${endpoint} payload`,
+    { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "x".repeat(32 * 1024 + 1) } },
+    413,
+  );
 }
 
 const logoutPath = "/api/auth/logout";
