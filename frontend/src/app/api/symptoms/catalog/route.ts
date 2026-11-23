@@ -11,6 +11,7 @@ export async function GET() {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
     const result = await upstream.json().catch(() => null);
     return NextResponse.json(
