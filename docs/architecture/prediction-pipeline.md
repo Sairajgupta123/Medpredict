@@ -109,3 +109,6 @@ A general reviewer role or a catalog-review scope does not grant access to patie
 The image-review assignment endpoint requires that scope in addition to an active, verified reviewer account. Queue inclusion, private image retrieval, review decisions and audit-history access re-check the active scope. Revoking the scope immediately blocks further reviewer access. When an image is reassigned, the previous reviewer's exact image scope is automatically revoked and an immutable scope event is recorded. The admin review screen grants an exact-image scope before assignment; it does not grant blanket image access.
 
 The scope grant is an application authorization control, not proof of clinical credentials. Administrators must separately verify reviewer qualifications, contractual authorization, training and permitted purpose before granting access. Access logging and audit retention should be monitored under the deployment's privacy policy.
+
+
+Successful image delivery is also recorded as an `image_accessed` audit event with the authenticated actor, assigned reviewer, submission references, reason and timestamp. Failed or unauthorized requests are not represented as successful image views. The audit event contains no image bytes, public URL or clinical interpretation.
