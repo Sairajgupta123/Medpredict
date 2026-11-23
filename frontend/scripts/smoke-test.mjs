@@ -29,6 +29,16 @@ for (const endpoint of ["login", "register"]) {
     403,
   );
   await check(
+    `reject missing auth ${endpoint} origin`,
+    { path: authPath, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject malformed auth ${endpoint} origin`,
+    { path: authPath, init: { method: "POST", headers: { Origin: "not-an-origin", "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
     `reject malformed auth ${endpoint} payload`,
     { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
     400,
