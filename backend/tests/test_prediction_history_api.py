@@ -891,3 +891,51 @@ def test_revoked_skin_image_scope_blocks_assigned_reviewer_access(
         headers=_headers(reviewer_token),
     )
     assert response.status_code == 403
+
+
+def test_admin_can_grant_a_prediction_specific_skin_image_scope(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-scope-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-scope-reviewer@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+
+    grant = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=_headers(admin_token),
+        json={
+            "reviewer_id": str(reviewer.id),
+            "scope_type": "skin_image",
+            "scope_key": str(prediction.id),
+            "reason": "Authorized for one image review.",
+        },
+    )
+    assert grant.status_code == 201, grant.text
+    assert grant.json()["scope_type"] == "skin_image"
+    assert grant.json()["scope_key"] == str(prediction.id)
+
+    scopes = client.get(
+        "/api/v1/admin/reviewer-scopes?include_revoked=false",
+        headers=_headers(admin_token),
+    )
+    assert scopes.status_code == 200
+    assert any(
+        row["reviewer_id"] == str(reviewer.id)
+        and row["scope_type"] == "skin_image"
+        and row["scope_key"] == str(prediction.id)
+        for row in scopes.json()
+    )
+
+    forbidden = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=_headers(reviewer_token),
+        json={
+            "reviewer_id": str(reviewer.id),
+            "scope_type": "skin_image",
+            "scope_key": str(prediction.id),
+            "reason": "Reviewer cannot grant self scope.",
+        },
+    )
+    assert forbidden.status_code == 403
