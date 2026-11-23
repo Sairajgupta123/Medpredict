@@ -23,6 +23,15 @@ type HistoryPage = {
   offset: number;
 };
 
+type OwnerReviewStatus = {
+  prediction_id: string;
+  status: string;
+  status_label: string;
+  status_at: string | null;
+  clinical_interpretation_performed: false;
+  disease_prediction_performed: false;
+};
+
 async function revokeReviewConsent(formData: FormData) {
   "use server";
   const predictionId = String(formData.get("prediction_id") ?? "");
@@ -59,6 +68,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
   const params = await searchParams;
 
   let items: HistoryItem[] = [];
+  const reviewStatuses: Record<string, OwnerReviewStatus> = {};
   let loadError = "";
   if (token) {
     try {
@@ -70,6 +80,25 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
         const payload = await response.json() as HistoryPage;
         if (Array.isArray(payload.items)) {
           items = payload.items.filter((item) => item.modality === "skin_image" || item.modality === "combined");
+          await Promise.all(items.map(async (item) => {
+            try {
+              const statusResponse = await fetch(
+                `${API_BASE_URL}/skin-images/${encodeURIComponent(item.id)}/review-status`,
+                { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" },
+              );
+              if (statusResponse.ok) {
+                const statusPayload = await statusResponse.json() as OwnerReviewStatus;
+                if (statusPayload.prediction_id === item.id
+                  && typeof statusPayload.status_label === "string"
+                  && statusPayload.clinical_interpretation_performed === false
+                  && statusPayload.disease_prediction_performed === false) {
+                  reviewStatuses[item.id] = statusPayload;
+                }
+              }
+            } catch {
+              // Keep the history record visible if the separate status request fails.
+            }
+          }));
         } else loadError = "The history service returned an unexpected response.";
       } else loadError = "Your image history could not be loaded.";
     } catch {
@@ -112,11 +141,12 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
               <article className="review-card skin-history-card" key={item.id}>
                 <div className="review-card-heading">
                   <div><span className="review-type">PRIVATE SKIN IMAGE</span><h3>Submission {item.id.slice(0, 8)}</h3><p className="review-key">Reference: {item.id}</p></div>
-                  <span className="review-status review-status-assigned">{item.status.replaceAll("_", " ")}</span>
+                  <span className="review-status review-status-assigned">{reviewStatuses[item.id]?.status_label ?? "Review status unavailable"}</span>
                 </div>
                 <div className="review-item-meta">
                   <span>Submitted {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</span>
                   <span>Image contents are not included in this list</span>
+                  {reviewStatuses[item.id]?.status_at && <span>Status updated {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(reviewStatuses[item.id].status_at as string))}</span>}
                 </div>
                 <form action={revokeReviewConsent} className="skin-history-action">
                   <input type="hidden" name="prediction_id" value={item.id} />
@@ -128,6 +158,8 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
           </div>
         )}
         <div className="review-safety-note">
+          <strong>Technical review only</strong>
+          <p>The status describes image handling and capture-quality review only. It is not a diagnosis, disease-risk estimate, or medical interpretation.</p>
           <strong>Separate controls</strong>
           <p>Revoking human-review consent does not delete your image-history record. Image-history deletion is a separate action and is not offered here until its retention and deletion consequences can be presented with clear confirmation.</p>
         </div>
