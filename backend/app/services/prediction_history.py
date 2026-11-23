@@ -283,10 +283,11 @@ def set_skin_image_retention_expiry(
             detail="Active image-history consent is required to schedule retention.",
         )
 
+    # Serialize retention updates with deletion and reviewer access.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(
-            SkinImageAnalysis.prediction_id == prediction.id
-        )
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
     )
     if image_record is None or image_record.storage_status != "stored":
         raise HTTPException(
@@ -323,6 +324,7 @@ def list_expired_skin_image_records(
             )
             .order_by(SkinImageAnalysis.retention_expires_at, SkinImageAnalysis.id)
             .limit(limit)
+            .with_for_update(skip_locked=True)
         ).all()
     )
 
