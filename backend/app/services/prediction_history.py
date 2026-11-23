@@ -160,3 +160,86 @@ def delete_user_history_item(
 
     db.delete(prediction)
     db.commit()
+
+
+def record_skin_image_consent_decision(
+    db: Session,
+    user_id: UUID,
+    prediction_id: UUID,
+    *,
+    purpose: str,
+    action: str,
+    policy_version: str,
+) -> PredictionConsentEvent:
+    """Append an owner-scoped, versioned image consent decision.
+
+    Processing consent and history-retention consent are intentionally
+    independent. Callers must invoke this only after a clear user action.
+    """
+    prediction = get_owned_prediction(db, user_id, prediction_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Image consent applies only to image or combined predictions.",
+        )
+    if purpose not in {"skin_image_processing", "skin_image_history"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unsupported image consent purpose.",
+        )
+    if action not in {"granted", "revoked"} or not policy_version.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A valid consent action and policy version are required.",
+        )
+
+    latest = db.scalar(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == purpose,
+        )
+        .order_by(
+            PredictionConsentEvent.captured_at.desc(),
+            PredictionConsentEvent.id.desc(),
+        )
+        .limit(1)
+    )
+    if action == "revoked" and (latest is None or latest.action != "granted"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active consent exists for this image purpose.",
+        )
+
+    event = PredictionConsentEvent(
+        prediction_id=prediction.id,
+        purpose=purpose,
+        action=action,
+        policy_version=policy_version.strip(),
+        captured_at=datetime.now(timezone.utc),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def has_active_skin_image_consent(
+    db: Session, prediction_id: UUID, *, purpose: str
+) -> bool:
+    """Return whether the latest event grants the requested image purpose."""
+    if purpose not in {"skin_image_processing", "skin_image_history"}:
+        raise ValueError("Unsupported image consent purpose.")
+    latest = db.scalar(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction_id,
+            PredictionConsentEvent.purpose == purpose,
+        )
+        .order_by(
+            PredictionConsentEvent.captured_at.desc(),
+            PredictionConsentEvent.id.desc(),
+        )
+        .limit(1)
+    )
+    return latest is not None and latest.action == "granted"
