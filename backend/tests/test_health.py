@@ -129,3 +129,28 @@ def test_research_model_status_never_claims_configured_path_is_loaded(monkeypatc
     assert body["skin_image"]["loaded"] is False
     assert body["skin_image"]["inference_enabled"] is False
     assert body["symptom_text"]["status"] == "invalid_configuration"
+
+
+def test_research_model_status_never_exposes_configured_paths(monkeypatch) -> None:
+    from app.api.v1 import health
+    from app.core.config import Settings
+
+    private_skin_path = "/srv/private/medipredict/skin-checkpoint.pt"
+    private_text_path = "/srv/private/medipredict/text-model.joblib"
+    settings = Settings(
+        skin_research_checkpoint_path=private_skin_path,
+        text_research_artifact_path=private_text_path,
+    )
+    monkeypatch.setattr(health, "get_settings", lambda: settings)
+
+    response = client.get("/api/v1/models/status")
+
+    assert response.status_code == 200
+    assert private_skin_path not in response.text
+    assert private_text_path not in response.text
+    body = response.json()
+    for capability in (body["skin_image"], body["symptom_text"]):
+        assert capability["configured"] is True
+        assert capability["loaded"] is False
+        assert capability["inference_enabled"] is False
+
