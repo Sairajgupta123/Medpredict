@@ -27,6 +27,7 @@ export async function POST(request: Request, context: RouteContext) {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       },
     );
     const body = await upstream.json().catch(() => null);
