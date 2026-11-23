@@ -3,14 +3,10 @@ import { NextResponse } from "next/server";
 import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
 
 function privateJson(body: unknown, init: ResponseInit = {}) {
-  return NextResponse.json(body, {
-    ...init,
-    headers: {
-      ...init.headers,
-      "Cache-Control": "private, no-store, max-age=0",
-      Pragma: "no-cache",
-    },
-  });
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "private, no-store, max-age=0");
+  headers.set("Pragma", "no-cache");
+  return NextResponse.json(body, { ...init, headers });
 }
 
 
