@@ -27,6 +27,8 @@ type NormalizeResult = {
 type SymptomCatalog = {
   taxonomy_version: string;
   status: string;
+  language: string;
+  clinical_interpretation_performed: false;
   symptoms: SymptomItem[];
   disclaimer: string;
 };
@@ -86,9 +88,11 @@ export function SymptomChecker() {
         const body = await response.json() as SymptomCatalog & { detail?: string };
         if (!response.ok) throw new Error(body.detail ?? "Could not load the symptom list.");
         if (
-          typeof body.taxonomy_version !== "string" ||
-          typeof body.status !== "string" ||
-          typeof body.disclaimer !== "string" ||
+          typeof body.taxonomy_version !== "string" || body.taxonomy_version.trim().length === 0 ||
+          typeof body.status !== "string" || body.status.trim().length === 0 ||
+          typeof body.language !== "string" || body.language.trim().length === 0 ||
+          body.clinical_interpretation_performed !== false ||
+          typeof body.disclaimer !== "string" || body.disclaimer.trim().length === 0 ||
           !Array.isArray(body.symptoms) ||
           !body.symptoms.every((item) =>
             item && typeof item.id === "string" && /^[A-Z0-9_]{2,80}$/.test(item.id) &&
@@ -159,7 +163,8 @@ export function SymptomChecker() {
             typeof symptom.symptom_code === "string" && symptom.symptom_code.trim().length > 0 &&
             typeof symptom.symptom_name === "string" && symptom.symptom_name.trim().length > 0) &&
           typeof item.catalog_overlap_ratio === "number" && Number.isFinite(item.catalog_overlap_ratio) &&
-          item.catalog_overlap_ratio >= 0 && item.catalog_overlap_ratio <= 1)
+          item.catalog_overlap_ratio >= 0 && item.catalog_overlap_ratio <= 1 &&
+          Math.abs(item.catalog_overlap_ratio - item.matched_symptom_count / item.catalog_symptom_count) <= 0.000051)
       ) {
         setMatchError("The catalog service returned an unexpected response. No result was displayed.");
         return;
