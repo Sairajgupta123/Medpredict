@@ -143,7 +143,7 @@ export function SymptomChecker() {
       });
       const body = await response.json() as CatalogMatchResult & { detail?: string };
       if (!response.ok) {
-        setMatchError(body.detail ?? "The approved catalog could not be compared.");
+        setMatchError(typeof body.detail === "string" && body.detail.trim() ? body.detail.slice(0, 240) : "The approved catalog could not be compared.");
         return;
       }
       if (
@@ -194,7 +194,7 @@ export function SymptomChecker() {
       });
       const body = await response.json() as NormalizeResult & { detail?: string };
       if (!response.ok) {
-        setError(body.detail ?? "We could not process this information. Please try again.");
+        setError(typeof body.detail === "string" && body.detail.trim() ? body.detail.slice(0, 240) : "We could not process this information. Please try again.");
         return;
       }
       if (
