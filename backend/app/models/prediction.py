@@ -73,7 +73,7 @@ class PredictionConsentEvent(Base):
     __tablename__ = "prediction_consent_events"
     __table_args__ = (
         CheckConstraint(
-            "purpose IN ('prediction_history')",
+            "purpose IN ('prediction_history', 'skin_image_processing', 'skin_image_history')",
             name="ck_prediction_consent_purpose",
         ),
         CheckConstraint(
@@ -127,6 +127,10 @@ class SkinImageAnalysis(Base):
     __tablename__ = "skin_image_analyses"
     __table_args__ = (
         UniqueConstraint("prediction_id", name="uq_skin_image_prediction"),
+        CheckConstraint(
+            "storage_status IN ('unknown', 'pending_upload', 'stored', 'deletion_pending', 'deleted', 'failed')",
+            name="ck_skin_image_storage_status",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -136,6 +140,15 @@ class SkinImageAnalysis(Base):
     object_key: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(100))
     image_sha256: Mapped[str] = mapped_column(String(64), index=True)
+    storage_status: Mapped[str] = mapped_column(
+        String(24), default="pending_upload", server_default="pending_upload"
+    )
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     predicted_class: Mapped[str | None] = mapped_column(String(160), nullable=True)
     confidence: Mapped[Decimal | None] = mapped_column(
         Numeric(7, 6), nullable=True
