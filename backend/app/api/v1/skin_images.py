@@ -37,7 +37,7 @@ def _has_active_skin_image_review_scope(
     reviewer: User,
     prediction_id,
 ) -> bool:
-    """Require an explicit global or prediction-specific skin-image scope."""
+    """Require an explicit grant for this exact skin-image submission."""
     if (
         reviewer.role != "reviewer"
         or not reviewer.is_active
