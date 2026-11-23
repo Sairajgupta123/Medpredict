@@ -61,7 +61,7 @@ class DisabledSkinImageStorage:
         )
 
 
-_OBJECT_KEY_PATTERN = re.compile(r"^skin-images/[0-9a-f]{32}\\.(?:jpg|png|webp)$")
+_OBJECT_KEY_PATTERN = re.compile(r"^skin-images/[0-9a-f]{32}\.(?:jpg|png|webp)$")
 _ALLOWED_CONTENT_TYPES = {item[0] for item in SUPPORTED_FORMATS.values()}
 
 
