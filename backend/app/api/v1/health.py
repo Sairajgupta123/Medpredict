@@ -36,7 +36,7 @@ def readiness_check(db: DbSession) -> dict[str, str]:
 
 
 @router.get("/models/status", summary="Check research model configuration")
-def research_model_status() -> dict[str, dict[str, str | bool]]:
+def research_model_status() -> dict[str, object]:
     """Report model-path configuration without loading or executing any artifact.
 
     A configured path does not mean that an artifact exists, is trusted, or is
