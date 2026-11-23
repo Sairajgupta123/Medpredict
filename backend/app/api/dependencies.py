@@ -29,12 +29,17 @@ def get_current_user(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise unauthorized
 
-    user_id = decode_access_token(credentials.credentials)
-    if user_id is None:
+    token_identity = decode_access_token(credentials.credentials)
+    if token_identity is None:
         raise unauthorized
 
+    user_id, token_version = token_identity
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if (
+        user is None
+        or not user.is_active
+        or user.token_version != token_version
+    ):
         raise unauthorized
     return user
 
