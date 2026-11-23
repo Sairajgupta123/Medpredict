@@ -620,6 +620,27 @@ def _prepare_skin_review_item(owner_id):
     return prediction, key, sanitized.content
 
 
+
+
+def _grant_skin_image_review_scope(reviewer_id, prediction_id, granted_by):
+    from app.models.reviewer_scope import CatalogReviewerScope
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            CatalogReviewerScope(
+                reviewer_id=reviewer_id,
+                scope_type="skin_image",
+                scope_key=str(prediction_id),
+                granted_by=granted_by,
+                grant_reason="Authorized for this specific skin image.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def _set_account_role(user_id, role):
     db = TestingSessionLocal()
     try:
@@ -643,6 +664,7 @@ def test_admin_assigns_image_to_verified_reviewer_and_review_is_audited(
     _set_account_role(admin.id, "admin")
     _set_account_role(reviewer.id, "reviewer")
     prediction, key, image_bytes = _prepare_skin_review_item(owner.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
     storage = _FakeIntakeStorage()
     storage.objects[key] = (image_bytes, "image/png")
     monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
@@ -756,6 +778,7 @@ def test_image_review_audit_is_visible_only_to_assignee_or_admin(
     _set_account_role(reviewer.id, "reviewer")
     _set_account_role(other.id, "reviewer")
     prediction, _, _ = _prepare_skin_review_item(reviewer.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, other.id)
     db = TestingSessionLocal()
     try:
         image = db.scalar(
