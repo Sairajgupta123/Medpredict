@@ -40,6 +40,12 @@ The overlap ratio is **not** a disease probability, clinical risk score, confide
 - This prototype must not claim diagnosis, disease probability, model accuracy, treatment guidance or clinical validation.
 - Severe, rapidly worsening or worrying symptoms require professional assessment; the prototype must never be used to decide whether care is necessary.
 
+### Skin-image intake security foundation
+
+The backend now contains a standalone validation utility at `backend/app/services/skin_image_validation.py`. It checks actual decoded image format rather than trusting filenames, enforces an 8 MiB payload limit, a 6,000-pixel edge limit and a 20-megapixel limit, rejects animated/multi-frame files, and re-encodes accepted JPEG, PNG and WebP images from raw pixels to remove EXIF, ICC and textual metadata. Pillow is a backend dependency for this processing.
+
+This utility is not an HTTP upload endpoint and does not store files. It is not yet connected to prediction history or model inference. Upload routes remain intentionally disabled until private object storage, authenticated upload controls, explicit image-processing consent, retention rules, deletion verification, request-size enforcement and operational rate limits are implemented. The utility does not establish that an image is clinically suitable or support a diagnosis.
+
 ## Not implemented yet
 
 - A clinically validated disease-risk model and its external validation evidence.
