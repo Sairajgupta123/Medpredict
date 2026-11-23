@@ -9,11 +9,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.api.dependencies import Administrator, CurrentUser, DbSession
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
 from app.models.user import User
+from app.models.reviewer_scope import CatalogReviewerScope
 from app.services.skin_image_storage import (
     DisabledSkinImageStorage,
     SkinImageStorage,
@@ -27,7 +28,36 @@ from app.services.skin_image_validation import (
     validate_and_sanitize_skin_image,
 )
 
+
 router = APIRouter(prefix="/skin-images", tags=["Skin image intake"])
+
+
+def _has_active_skin_image_review_scope(
+    db: DbSession,
+    reviewer: User,
+    prediction_id,
+) -> bool:
+    """Require an explicit global or prediction-specific skin-image scope."""
+    if (
+        reviewer.role != "reviewer"
+        or not reviewer.is_active
+        or not reviewer.email_verified
+    ):
+        return False
+    grant_id = db.scalar(
+        select(CatalogReviewerScope.id)
+        .where(
+            CatalogReviewerScope.reviewer_id == reviewer.id,
+            CatalogReviewerScope.scope_type == "skin_image",
+            CatalogReviewerScope.revoked_at.is_(None),
+            or_(
+                CatalogReviewerScope.scope_key.is_(None),
+                CatalogReviewerScope.scope_key == str(prediction_id),
+            ),
+        )
+        .limit(1)
+    )
+    return grant_id is not None
 
 
 class SkinImageIntakeResponse(BaseModel):
@@ -336,6 +366,10 @@ def list_skin_image_review_queue(
             db, prediction.id, purpose="skin_image_processing"
         ):
             continue
+        if user.role != "admin" and not _has_active_skin_image_review_scope(
+            db, user, prediction.id
+        ):
+            continue
         results.append({
             "prediction_id": str(prediction.id),
             "review_status": image_record.review_status,
@@ -387,6 +421,11 @@ def assign_skin_image_review(
     )
     if reviewer is None:
         raise HTTPException(status_code=404, detail="Active verified reviewer not found.")
+    if not _has_active_skin_image_review_scope(db, reviewer, prediction.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Reviewer does not have an active skin-image review scope.",
+        )
     previous_reviewer_id = image_record.assigned_reviewer_id
     image_record.assigned_reviewer_id = reviewer.id
     image_record.assigned_by = administrator.id
@@ -439,6 +478,10 @@ def submit_skin_image_review(
         raise HTTPException(status_code=409, detail="Stored image is not available for review.")
     if user.role != "admin" and image_record.assigned_reviewer_id != user.id:
         raise HTTPException(status_code=404, detail="Assigned review item not found.")
+    if user.role != "admin" and not _has_active_skin_image_review_scope(
+        db, user, prediction.id
+    ):
+        raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
     if image_record.review_status != "assigned":
         raise HTTPException(status_code=409, detail="Image is not awaiting review.")
     if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
@@ -494,6 +537,10 @@ def retrieve_assigned_review_image(
         or (user.role != "admin" and image_record.assigned_reviewer_id != user.id)
     ):
         raise HTTPException(status_code=404, detail="Assigned review image not found.")
+    if user.role != "admin" and not _has_active_skin_image_review_scope(
+        db, user, prediction.id
+    ):
+        raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
     if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
         raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
     try:
@@ -552,6 +599,10 @@ def list_skin_image_review_events(
         user.role != "admin" and image_record.assigned_reviewer_id != user.id
     ):
         raise HTTPException(status_code=404, detail="Assigned review history not found.")
+    if user.role != "admin" and not _has_active_skin_image_review_scope(
+        db, user, parsed_id
+    ):
+        raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
     events = db.scalars(
         select(SkinImageReviewEvent)
         .where(SkinImageReviewEvent.prediction_id == parsed_id)
