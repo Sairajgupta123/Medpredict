@@ -12,6 +12,15 @@ type IntakeResponse = {
 
 type ApiError = { detail?: string };
 
+type ModelStatus = {
+  inference_available: boolean;
+  model_configured: boolean;
+  disease_prediction_performed: boolean;
+  clinical_validation_status: string;
+  human_review_required: boolean;
+  message: string;
+};
+
 const POLICY_VERSIONS = {
   processing: "image-processing-v1",
   history: "image-history-v1",
@@ -32,6 +41,31 @@ export function SkinImageIntake() {
   const [result, setResult] = useState<IntakeResponse | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revocationMessage, setRevocationMessage] = useState("");
+
+  const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
+  const [modelStatusUnavailable, setModelStatusUnavailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/skin-images/model-status", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Status unavailable");
+        const payload = await response.json() as Partial<ModelStatus>;
+        if (
+          typeof payload.inference_available !== "boolean" ||
+          typeof payload.model_configured !== "boolean" ||
+          typeof payload.disease_prediction_performed !== "boolean" ||
+          typeof payload.clinical_validation_status !== "string" ||
+          typeof payload.human_review_required !== "boolean" ||
+          typeof payload.message !== "string"
+        ) throw new Error("Invalid status response");
+        if (active) setModelStatus(payload as ModelStatus);
+      })
+      .catch(() => {
+        if (active) setModelStatusUnavailable(true);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!image) {
@@ -168,6 +202,23 @@ export function SkinImageIntake() {
 
   return (
     <div className="skin-intake-workspace">
+      <section className="skin-intake-model-status" aria-live="polite" aria-label="Image model availability">
+        <strong>Image classification status</strong>
+        {modelStatus ? (
+          <>
+            <p>{modelStatus.message}</p>
+            <ul>
+              <li>{modelStatus.inference_available && modelStatus.model_configured ? "Model inference available" : "Disease classification is not currently available"}</li>
+              <li>{modelStatus.clinical_validation_status === "not_established" ? "Clinical validation has not been established" : `Clinical validation status: ${modelStatus.clinical_validation_status}`}</li>
+              <li>{modelStatus.human_review_required ? "Qualified human review remains necessary" : "Human review requirement not indicated"}</li>
+            </ul>
+          </>
+        ) : modelStatusUnavailable ? (
+          <p>Model availability could not be verified. Do not treat this workflow as a disease classifier.</p>
+        ) : (
+          <p>Checking model availability… Until confirmed, no disease classification is offered.</p>
+        )}
+      </section>
       <div className="skin-intake-intro">
         <div className="eyebrow"><span className="eyebrow-dot" /> PRIVATE IMAGE INTAKE · RESEARCH PROTOTYPE</div>
         <h1>Share a skin image <em>with control.</em></h1>
