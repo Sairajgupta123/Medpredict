@@ -22,6 +22,8 @@ After the user explicitly confirms one or more symptoms as present:
 4. Disease entries, symptom entries and disease-symptom associations are all filtered to active, approved records with reviewer audit metadata.
 5. Results show matched association counts and a catalog-overlap ratio. The ratio is only a description of catalog coverage for that disease entry.
 
+The static phrase taxonomy used by the text recognizer and the database-backed, reviewer-governed disease catalog are separate data sources. A phrase-taxonomy identifier is eligible for matching only after a corresponding database symptom record and its disease associations have been created and approved with the required audit metadata. Until then, the endpoint rejects that identifier as not present in the approved catalog; this is an expected governance boundary, not evidence that the symptom is medically irrelevant.
+
 The overlap ratio is **not** a disease probability, clinical risk score, confidence estimate, or measure of diagnostic accuracy. The matcher does not use the association relevance weight to imply calibrated risk. Diseases without an approved matched association are not returned. An empty result does not rule out disease.
 
 ### Privacy boundaries
