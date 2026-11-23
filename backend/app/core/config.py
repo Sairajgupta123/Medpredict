@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     smtp_sender_email: str | None = None
     smtp_use_tls: bool = True
     frontend_base_url: str = "http://localhost:3000"
+    skin_image_s3_bucket: str | None = None
+    skin_image_s3_region: str | None = None
+    skin_image_s3_endpoint_url: str | None = None
+    skin_image_s3_encryption: str = "AES256"
+    skin_image_s3_kms_key_id: str | None = None
     database_url: str = (
         "postgresql+psycopg://medipredict:change-me@localhost:5432/medipredict"
     )
