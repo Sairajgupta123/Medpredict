@@ -123,3 +123,56 @@ def test_image_history_without_storage_adapter_remains_blocked(db_session: Sessi
         delete_user_history_item(db_session, user.id, prediction.id)
     assert error.value.status_code == 409
     assert db_session.get(Prediction, prediction.id) is not None
+
+
+def test_processing_and_history_consents_are_independent_and_revocable(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        has_active_skin_image_consent,
+        record_skin_image_consent_decision,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    # Processing permission does not imply permission to retain an image.
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_processing",
+        action="granted",
+        policy_version="image-processing-v1",
+    )
+    assert has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_processing"
+    )
+    assert not has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
+
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_history",
+        action="granted",
+        policy_version="image-history-v1",
+    )
+    assert has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
+
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_history",
+        action="revoked",
+        policy_version="image-history-v1",
+    )
+    assert not has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
+    assert has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_processing"
+    )
