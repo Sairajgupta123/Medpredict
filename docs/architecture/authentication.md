@@ -44,7 +44,7 @@ timing differences between known and unknown accounts. This is not a substitute 
 - Subject: user UUID
 - Issuer: `medipredict-api`
 - Token type: `access`
-- Claims: `sub`, `iss`, `type`, `iat`, `exp`
+- Claims: `sub`, `iss`, `type`, `iat`, `exp`, `ver` (per-user token version)
 - Default lifetime: 30 minutes
 - Configurable through `ACCESS_TOKEN_EXPIRE_MINUTES`
 - Signing key: `APP_SECRET_KEY`
@@ -66,6 +66,8 @@ password hash are not writable through this endpoint.
 - `email_verified`: defaults to false. Email verification is not implemented yet; do not treat
   this field as proof that an address has been verified.
 - `last_login_at`: updated after successful login.
+- `token_version`: monotonically incremented when the password is reset; protected routes compare
+the JWT `ver` claim with this database value.
 
 ## Password reset foundation
 
@@ -88,17 +90,19 @@ still returns the generic response and does not log the token or recipient.
 The current implementation does not yet include:
 
 - Email verification or verified-email enforcement
-- Email verification or verified-email enforcement
-- Refresh tokens, rotation, or token revocation
-- Server-side logout/session invalidation
+- Refresh tokens and refresh-token rotation
+- A dedicated logout endpoint and per-device session management
 - Login/registration rate limiting and abuse detection
 - Multi-factor authentication
 - Admin roles and role-based access control
 - Account export/deletion workflow and associated prediction-data retention handling
 - Security event audit logging
 
-Until token revocation or refresh-token sessions are implemented, a stolen access token remains
-usable until it expires. Keep the lifetime short and always use HTTPS outside local development.
+Password-reset-driven access-token revocation is implemented through per-user token versions.
+A dedicated logout endpoint and per-device session management are still deferred. Tokens issued
+before the token-version rollout do not contain the required `ver` claim and will be rejected
+after deployment, requiring users to sign in again. Keep the lifetime short and always use HTTPS
+outside local development.
 
 ## Privacy notes
 
