@@ -165,8 +165,11 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                     && typeof statusPayload.status === "string"
                     && allowedStatuses.has(statusPayload.status)
                     && typeof statusPayload.status_label === "string"
+                    && statusPayload.status_label.trim().length > 0
                     && typeof statusPayload.status_detail === "string"
+                    && statusPayload.status_detail.trim().length > 0
                     && typeof statusPayload.next_step === "string"
+                    && statusPayload.next_step.trim().length > 0
                     && validStatusAt
                     && statusPayload.clinical_interpretation_performed === false
                     && statusPayload.disease_prediction_performed === false) {
