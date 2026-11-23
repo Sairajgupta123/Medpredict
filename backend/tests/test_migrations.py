@@ -35,6 +35,7 @@ def test_migration_files_exist() -> None:
         "0016_user_token_version.py",
         "0017_skin_image_lifecycle.py",
         "0018_skin_image_retention.py",
+        "0019_skin_image_review.py",
     ):
         assert (versions / name).is_file()
 
@@ -46,8 +47,8 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0018_skin_image_retention"
-    assert heads[0].down_revision == "0017_skin_image_lifecycle"
+    assert heads[0].revision == "0019_skin_image_review"
+    assert heads[0].down_revision == "0018_skin_image_retention"
 
     merge_head = script.get_revision("0015_merge_ref_reset_heads")
     assert merge_head is not None
@@ -104,6 +105,7 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0016_user_token_version",
         "0017_skin_image_lifecycle",
         "0018_skin_image_retention",
+        "0019_skin_image_review",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
