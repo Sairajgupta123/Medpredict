@@ -78,6 +78,13 @@ def test_rejects_missing_or_malformed_model_provenance() -> None:
             model_artifact_sha256=MODEL_DIGEST,
             abstention_reason="Model unavailable.",
         )
+    with pytest.raises(InvalidSkinImageModelOutput, match="model version"):
+        SkinImageInferenceResult(
+            abstained=True,
+            model_version=" skin-model-1.0.0 ",
+            model_artifact_sha256=MODEL_DIGEST,
+            abstention_reason="Model unavailable.",
+        )
     with pytest.raises(InvalidSkinImageModelOutput, match="SHA-256"):
         SkinImageInferenceResult(
             abstained=True,
