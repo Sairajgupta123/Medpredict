@@ -386,3 +386,12 @@ Stored skin images can be assigned by an administrator to an active, email-verif
 The workflow is strictly a technical capture-quality review. capture_adequate does not mean a lesion is benign, malignant, or clinically assessable. No diagnosis, disease label, probability, treatment advice, or clinical interpretation is accepted or produced. Processing consent is checked before queue inclusion, image retrieval, assignment, and review decisions. Reviewers must be explicitly provisioned and verified operationally; the role and email-verification flags alone do not establish clinical qualifications. Administrators are responsible for verifying reviewer credentials and scope before assignment.
 
 Review audit events preserve opaque prediction/image UUID references without foreign keys to the user-history rows, so deleting an image history item does not erase the assignment/review audit trail. The audit stores actor, assignee, event, limited outcome, reason, and timestamp; it does not store image bytes or a public image URL. The image review UI and production reviewer qualification process are not yet implemented.
+
+
+### Dedicated skin-image reviewer permissions
+
+A general reviewer role or a catalog-review scope does not grant access to patient images. Administrators must grant a separate `skin_image` reviewer scope through `POST /api/v1/admin/reviewer-scopes`. Use the exact prediction UUID as `scope_key` for one submission; a null scope key grants broad access to all skin-image submissions and should be reserved for an explicitly approved operational need.
+
+The image-review assignment endpoint requires that scope in addition to an active, verified reviewer account. Queue inclusion, private image retrieval, review decisions and audit-history access re-check the active scope. Revoking the scope immediately blocks further reviewer access. When an image is reassigned, the previous reviewer's exact image scope is automatically revoked and an immutable scope event is recorded. The admin review screen grants an exact-image scope before assignment; it does not grant blanket image access.
+
+The scope grant is an application authorization control, not proof of clinical credentials. Administrators must separately verify reviewer qualifications, contractual authorization, training and permitted purpose before granting access. Access logging and audit retention should be monitored under the deployment's privacy policy.
