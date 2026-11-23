@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import uuid4
 
@@ -10,8 +11,9 @@ from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, 
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.api.dependencies import CurrentUser, DbSession
-from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
+from app.api.dependencies import Administrator, CurrentUser, DbSession
+from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
+from app.models.user import User
 from app.services.skin_image_storage import (
     DisabledSkinImageStorage,
     SkinImageStorage,
@@ -294,3 +296,74 @@ def retrieve_skin_image(
             "Content-Length": str(len(content)),
         },
     )
+
+
+class SkinImageAssignmentRequest(BaseModel):
+    reviewer_id: str
+    reason: str
+
+
+class SkinImageReviewDecisionRequest(BaseModel):
+    outcome: str
+    reason: str
+    note: str | None = None
+
+
+@router.get("/review/queue")
+def list_skin_image_review_queue(
+    user: CurrentUser,
+    db: DbSession,
+) -> list[dict]:
+    """List only stored images assigned to this reviewer; admins can inspect all."""
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    statement = (
+        select(SkinImageAnalysis, Prediction)
+        .join(Prediction, Prediction.id == SkinImageAnalysis.prediction_id)
+        .where(
+            SkinImageAnalysis.storage_status == "stored",
+            SkinImageAnalysis.review_status == "assigned",
+        )
+        .order_by(SkinImageAnalysis.assigned_at.asc(), SkinImageAnalysis.id.asc())
+    )
+    if user.role != "admin":
+        statement = statement.where(SkinImageAnalysis.assigned_reviewer_id == user.id)
+    rows = db.execute(statement).all()
+    results = []
+    for image_record, prediction in rows:
+        if not has_active_skin_image_consent(
+            db, prediction.id, purpose="skin_image_processing"
+        ):
+            continue
+        results.append({
+            "prediction_id": str(prediction.id),
+            "review_status": image_record.review_status,
+            "quality_status": image_record.quality_status,
+            "created_at": image_record.created_at,
+            "assigned_at": image_record.assigned_at,
+            "image_endpoint": f"/api/v1/skin-images/review/{prediction.id}/image",
+        })
+    return results
+
+
+@router.post("/review/{prediction_id}/assign")
+def assign_skin_image_review(
+    prediction_id: str,
+    payload: SkinImageAssignmentRequest,
+    administrator: Administrator,
+    db: DbSession,
+) -> dict:
+    """Assign or reassign a stored image to an active, verified reviewer."""
+    from uuid import UUID
+
+    try:
+        parsed_id = UUID(prediction_id)
+        reviewer_id = UUID(payload.reviewer_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid prediction or reviewer ID.") from exc
+    reason = payload.reason.strip()
+    if len(reason) < 8 or len(reason) > 1000:
+        raise HTTPException(status_code=422, detail="Assignment reason must be 8–1,000 characters.")
+    prediction = get_owned_prediction(db, administrator.id, parsed_id)
+    # Admin assignment is cross-user by design; ownership helper is not applicable.
+    raise HTTPException(status_code=501, detail="Assignment service is not yet available.")
