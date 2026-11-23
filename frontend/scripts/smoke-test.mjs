@@ -1,4 +1,4 @@
-const baseUrl = process.env.SMOKE_BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3000";
 
 async function check(name, request, expectedStatus, expectedCacheControl = true) {
   const response = await fetch(new URL(request.path, baseUrl), request.init);
