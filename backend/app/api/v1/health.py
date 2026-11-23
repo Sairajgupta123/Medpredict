@@ -32,3 +32,46 @@ def readiness_check(db: DbSession) -> dict[str, str]:
             detail="Database is not ready.",
         ) from None
     return {"status": "ready", "database": "available"}
+
+
+
+@router.get("/models/status", summary="Check research model configuration")
+def research_model_status() -> dict[str, dict[str, str | bool]]:
+    """Report model-path configuration without loading or executing any artifact.
+
+    A configured path does not mean that an artifact exists, is trusted, or is
+    usable. Model loading and inference remain disabled in the API.
+    """
+    from pathlib import Path
+
+    settings = get_settings()
+
+    def capability(path_value: str | None) -> dict[str, str | bool]:
+        if path_value is None or not path_value.strip():
+            return {
+                "status": "not_configured",
+                "configured": False,
+                "loaded": False,
+                "inference_enabled": False,
+            }
+        candidate = Path(path_value)
+        if not candidate.is_absolute():
+            return {
+                "status": "invalid_configuration",
+                "configured": True,
+                "loaded": False,
+                "inference_enabled": False,
+            }
+        return {
+            "status": "configured_not_loaded",
+            "configured": True,
+            "loaded": False,
+            "inference_enabled": False,
+        }
+
+    return {
+        "skin_image": capability(settings.skin_research_checkpoint_path),
+        "symptom_text": capability(settings.text_research_artifact_path),
+        "research_only": True,
+        "clinical_diagnosis_enabled": False,
+    }
