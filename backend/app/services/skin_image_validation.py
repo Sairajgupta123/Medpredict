@@ -114,3 +114,57 @@ def validate_and_sanitize_skin_image(
         height=height,
         byte_size=len(sanitized),
     )
+
+
+@dataclass(frozen=True)
+class SkinImageQualityAssessment:
+    """Non-clinical technical image checks; never a diagnostic quality score."""
+
+    width: int
+    height: int
+    mean_luminance: float
+    luminance_spread: float
+    warnings: tuple[str, ...]
+
+
+def assess_skin_image_quality(content: bytes) -> SkinImageQualityAssessment:
+    """Return conservative capture warnings for an already sanitized image.
+
+    These simple pixel statistics cannot establish clinical suitability,
+    detect all blur/focus issues, or determine whether a lesion is visible.
+    Warnings are advisory and must not be used to diagnose or reject a patient.
+    """
+    if not isinstance(content, bytes) or not content:
+        raise ValueError("Sanitized image content must be non-empty bytes.")
+
+    try:
+        with Image.open(BytesIO(content)) as image:
+            if image.format not in SUPPORTED_FORMATS:
+                raise ValueError("Only sanitized JPEG, PNG and WebP images are supported.")
+            image.load()
+            grayscale = image.convert("L")
+            stats = Image.Stat.Stat(grayscale)
+            mean_luminance = float(stats.mean[0])
+            luminance_spread = float(stats.stddev[0])
+            width, height = image.size
+            grayscale.close()
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+        raise ValueError("Sanitized image bytes are invalid or cannot be decoded.") from exc
+
+    warnings: list[str] = []
+    if min(width, height) < 256:
+        warnings.append("low_resolution")
+    if mean_luminance < 45:
+        warnings.append("possibly_too_dark")
+    elif mean_luminance > 220:
+        warnings.append("possibly_overexposed")
+    if luminance_spread < 18:
+        warnings.append("low_contrast_or_uniform_image")
+
+    return SkinImageQualityAssessment(
+        width=width,
+        height=height,
+        mean_luminance=round(mean_luminance, 2),
+        luminance_spread=round(luminance_spread, 2),
+        warnings=tuple(warnings),
+    )
