@@ -35,14 +35,15 @@ Open http://localhost:3000.
 
 ## Current frontend scope
 
-- Responsive public landing page.
+- Responsive public landing page and authenticated project workspace.
 - Shared site header and accessible skip link.
-- Project workspace/dashboard overview.
-- Reusable typed API request helper and catalog response types.
-- White, forest-green and soft-mint design system.
-- Reduced-motion support and mobile layout.
+- HttpOnly-cookie login, registration and logout foundation.
+- Symptom phrase review prototype and approved-catalog overlap display.
+- Consent-first private skin-image intake and owner-scoped image-history controls.
+- Dedicated reviewer console for technical image capture review.
+- White, forest-green and soft-mint design system with mobile layouts.
 
-The dashboard intentionally describes symptom analysis, skin image analysis and reviewed guidance as in development. No fake prediction results, upload controls, medical advice, or authentication claims are presented.
+The application does not perform skin disease classification, diagnosis, triage or treatment recommendations. Image capture warnings and human review outcomes are technical workflow signals only.
 
 ## Symptom phrase review prototype
 
@@ -59,7 +60,7 @@ Set NEXT_PUBLIC_API_BASE_URL to the backend API root, for example:
 
     NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 
-The API helper is a foundation only. Authentication token storage, session refresh, prediction requests and file upload flows are not connected yet. Do not store bearer tokens in localStorage; a secure, reviewed session strategy is required before authentication UI is integrated.
+The API helper is a foundation for non-sensitive typed requests. Do not store bearer tokens in localStorage; authenticated API requests use server-side access to the HttpOnly session cookie.
 
 
 ## Authentication flow
@@ -84,3 +85,20 @@ The current session cookie contains the backend's short-lived bearer access toke
 deployment still needs HTTPS, secret rotation, rate limiting and abuse monitoring, email
 verification and account recovery, security review, and a deliberate refresh/revocation strategy.
 Do not treat the current authentication foundation as a completed production identity system.
+
+
+## Private skin-image intake and owner history
+
+Signed-in users can open `/skin-image` from the workspace. The page accepts JPEG, PNG and WebP images up to 8 MiB, shows a local-only preview, and requires three separately explained choices before submission:
+
+- `image-processing-v1`: receipt, validation, sanitization and private storage.
+- `image-history-v1`: private history and retention.
+- `image-review-v1`: image-specific technical capture-quality review by an authorized human reviewer.
+
+The browser posts multipart data to the same-origin `/api/skin-images/intake` route. The route validates the request origin, requires the HttpOnly session cookie, rejects unexpected or duplicate form fields, enforces the upload size and media-type allowlist, and forwards the request server-to-server with the bearer token. It does not expose the bearer token to client JavaScript. The backend remains responsible for decoding and sanitizing the image, checking metadata, and storing it in private object storage.
+
+The intake page reports success only when the backend confirms `storage_status=stored`. Basic capture warnings are advisory, not clinical quality scores. A successful upload is not a diagnosis or disease prediction.
+
+The owner history page is `/history/skin-images`. It lists only the signed-in user's image/combined history metadata and provides a separate action to revoke human-review consent for an individual submission. Revocation is confirmed only after the backend acknowledges it; reviewer access for that exact image is disabled. The page does not display image bytes, object keys or reviewer notes. Image-history deletion remains a separate operation and is not represented as part of review-consent revocation.
+
+Private image storage must be configured on the backend before intake can succeed. See `backend/README.md` and `docs/architecture/prediction-pipeline.md` for the private S3 adapter, encryption, retention worker and operational prerequisites.
