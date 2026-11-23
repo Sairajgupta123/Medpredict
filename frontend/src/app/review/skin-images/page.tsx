@@ -202,7 +202,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
                     <label>Assignment reason
                       <textarea name="reason" minLength={8} maxLength={1000} rows={2} required placeholder="Explain why this submission is being assigned." />
                     </label>
-                    <div className="review-form-footer"><small>Only active, verified reviewer accounts are assignable.</small><button className="button button-primary" type="submit" disabled={reviewers.length === 0}>Assign image →</button></div>
+                    <div className="review-form-footer"><small>Assignment grants an audited permission for this image only; no catalog or blanket image access is granted.</small><button className="button button-primary" type="submit" disabled={reviewers.length === 0}>Assign image →</button></div>
                   </form>
                 )}
                 {item.review_status === "assigned" && (
