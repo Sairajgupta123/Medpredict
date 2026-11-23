@@ -156,3 +156,72 @@ def test_predict_text_research_rejects_non_finite_probability_output() -> None:
     bundle["estimator"] = InvalidEstimator()
     with pytest.raises(ValueError, match="finite"):
         predict_text_research(bundle, "fever and cough")
+
+
+
+def _write_artifact_manifest(tmp_path, artifact_name, artifact_bytes, **overrides):
+    import hashlib
+    import json
+
+    artifact = tmp_path / artifact_name
+    artifact.write_bytes(artifact_bytes)
+    manifest = {
+        "purpose": "research_only_not_for_clinical_use",
+        "artifact_file": artifact_name,
+        "artifact_sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+        "model_name": "logistic_regression",
+    }
+    manifest.update(overrides)
+    (tmp_path / "artifact_manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    return artifact
+
+
+def test_loader_verifies_manifest_before_deserializing(tmp_path, monkeypatch) -> None:
+    from ml.text_model import inference
+
+    artifact = _write_artifact_manifest(tmp_path, "model.joblib", b"trusted-bytes")
+    called = []
+    monkeypatch.setattr(inference.joblib, "load", lambda path: called.append(path) or valid_bundle())
+
+    loaded = inference.load_text_model_bundle(artifact)
+
+    assert loaded["model_name"] == "logistic_regression"
+    assert called == [artifact]
+
+
+def test_loader_rejects_hash_mismatch_before_deserializing(tmp_path, monkeypatch) -> None:
+    from ml.text_model import inference
+
+    artifact = _write_artifact_manifest(tmp_path, "model.joblib", b"original")
+    artifact.write_bytes(b"tampered")
+    monkeypatch.setattr(
+        inference.joblib, "load",
+        lambda path: pytest.fail("deserialization must not run for a hash mismatch"),
+    )
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        inference.load_text_model_bundle(artifact)
+
+
+def test_loader_rejects_non_research_manifest_before_deserializing(tmp_path, monkeypatch) -> None:
+    from ml.text_model import inference
+
+    artifact = _write_artifact_manifest(
+        tmp_path, "model.joblib", b"bytes", purpose="clinical"
+    )
+    monkeypatch.setattr(
+        inference.joblib, "load",
+        lambda path: pytest.fail("deserialization must not run for wrong purpose"),
+    )
+
+    with pytest.raises(ValueError, match="research-only"):
+        inference.load_text_model_bundle(artifact)
+
+
+def test_loader_requires_absolute_artifact_path(tmp_path) -> None:
+    from ml.text_model.inference import load_text_model_bundle
+
+    with pytest.raises(ValueError, match="absolute"):
+        load_text_model_bundle("relative/model.joblib")
