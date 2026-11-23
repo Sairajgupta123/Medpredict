@@ -63,3 +63,12 @@ Before enabling image upload, the next implementation stages must add a separate
 - Clinician-facing review workflows for prediction outputs.
 
 These capabilities require suitable data, documented approvals, validation and privacy controls before any clinical-facing use.
+
+
+### Image consent and deletion lifecycle
+
+Image consent is separated into `skin_image_processing` (permission to process an uploaded image for the immediate request) and `skin_image_history` (permission to retain an image and its associated history). These are distinct from `prediction_history` for text. The consent event table accepts the separate purposes; this does not itself enable image processing or imply consent has been granted.
+
+Image metadata now tracks `unknown`, `pending_upload`, `stored`, `deletion_pending`, `deleted`, or `failed` storage states. Existing records migrate to `unknown` rather than being assumed to exist in configured private storage. The deletion service records `deletion_pending` and commits that marker before calling the storage adapter. It removes database history only after storage confirms deletion. If storage fails, the history record remains available for retry; if storage deletion succeeds but a later database operation fails, the retry repeats an idempotent object deletion. Unknown or incomplete storage states are blocked for manual reconciliation.
+
+The API continues to block image-history deletion because no production storage adapter is configured. The retry-safe service path is exercised with a fake adapter only; this is not a claim that production image deletion is active.
