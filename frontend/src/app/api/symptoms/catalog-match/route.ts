@@ -8,14 +8,20 @@ const API_BASE_URL =
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) {
-    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+    return NextResponse.json(
+      { detail: "Invalid request origin." },
+      { status: 403, headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   }
 
   let payload: unknown;
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ detail: "Please provide valid JSON." }, { status: 400 });
+    return NextResponse.json(
+      { detail: "Please provide valid JSON." },
+      { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   }
 
   if (
@@ -33,7 +39,7 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       { detail: "Select between 1 and 20 unique supported symptom identifiers." },
-      { status: 422 },
+      { status: 422, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }
 
