@@ -442,6 +442,15 @@ def test_retention_purge_revokes_history_consent_and_keeps_audit_rows(
     assert events[-1].policy_version == "retention-policy-v2"
     assert storage.deleted == ["skin-images/opaque-key.jpg"]
 
+    # A later scheduled run must ignore the completed record and keep its
+    # single revocation event rather than processing or deleting it again.
+    second_summary = purge_expired_skin_image_records(
+        db_session, image_storage=storage, as_of=expiry + timedelta(hours=1),
+    )
+    assert second_summary == {"processed": 0, "deleted": 0, "failed": 0}
+    assert storage.deleted == ["skin-images/opaque-key.jpg"]
+    assert len(events) == 2
+
 
 def test_retention_purge_does_not_revoke_consent_when_object_delete_fails(
     db_session: Session,
