@@ -485,3 +485,25 @@ def test_retention_purge_does_not_revoke_consent_when_object_delete_fails(
     assert has_active_skin_image_consent(
         db_session, prediction.id, purpose="skin_image_history"
     )
+
+@pytest.mark.parametrize("limit", [0, -1, 501])
+def test_expired_image_query_rejects_unbounded_limits_before_query(
+    db_session: Session, limit: int
+) -> None:
+    from app.services.prediction_history import list_expired_skin_image_records
+
+    with pytest.raises(ValueError, match="between 1 and 500"):
+        list_expired_skin_image_records(
+            db_session, as_of=datetime.now(timezone.utc), limit=limit
+        )
+
+
+def test_expired_image_query_rejects_naive_cutoff_before_query(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import list_expired_skin_image_records
+
+    with pytest.raises(ValueError, match="include a timezone"):
+        list_expired_skin_image_records(
+            db_session, as_of=datetime.now(timezone.utc).replace(tzinfo=None)
+        )
