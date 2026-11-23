@@ -76,23 +76,25 @@ def intake_skin_image(
     image: Annotated[UploadFile, File(description="JPEG, PNG or WebP image; maximum 8 MiB")],
     processing_consent: Annotated[bool, Form()],
     history_consent: Annotated[bool, Form()],
+    review_consent: Annotated[bool, Form()],
     processing_policy_version: Annotated[str, Form(min_length=1, max_length=40)],
     history_policy_version: Annotated[str, Form(min_length=1, max_length=40)],
+    review_policy_version: Annotated[str, Form(min_length=1, max_length=40)],
 ) -> SkinImageIntakeResponse:
     """Store a sanitized image only after separate processing and history consent.
 
     This endpoint performs intake and private storage only. It does not classify
     lesions, infer disease, or provide medical advice.
     """
-    if not processing_consent or not history_consent:
+    if not processing_consent or not history_consent or not review_consent:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Separate image-processing and image-history consent are required.",
+            detail="Separate image-processing, image-history and human-review consent are required.",
         )
-    if not processing_policy_version.strip() or not history_policy_version.strip():
+    if not processing_policy_version.strip() or not history_policy_version.strip() or not review_policy_version.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Both consent policy versions are required.",
+            detail="All three consent policy versions are required.",
         )
 
     raw_content = image.file.read(MAX_IMAGE_BYTES + 1)
@@ -161,6 +163,12 @@ def intake_skin_image(
                 purpose="skin_image_history",
                 action="granted",
                 policy_version=history_policy_version.strip(),
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version=review_policy_version.strip(),
             ),
         ]
     )
@@ -361,6 +369,8 @@ def list_skin_image_review_queue(
     for image_record, prediction in rows:
         if not has_active_skin_image_consent(
             db, prediction.id, purpose="skin_image_processing"
+        ) or not has_active_skin_image_consent(
+            db, prediction.id, purpose="skin_image_review"
         ):
             continue
         if user.role != "admin" and not _has_active_skin_image_review_scope(
@@ -406,8 +416,15 @@ def assign_skin_image_review(
         raise HTTPException(status_code=409, detail="Only stored images can be assigned for review.")
     if image_record.review_status in {"reviewed", "unable_to_assess"}:
         raise HTTPException(status_code=409, detail="This image review is already completed.")
-    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
-        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_processing"
+    ) or not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_review"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Active image-processing and human-review consent are required.",
+        )
     reviewer = db.scalar(
         select(User).where(
             User.id == reviewer_id,
@@ -506,8 +523,15 @@ def submit_skin_image_review(
         raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
     if image_record.review_status != "assigned":
         raise HTTPException(status_code=409, detail="Image is not awaiting review.")
-    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
-        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_processing"
+    ) or not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_review"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Active image-processing and human-review consent are required.",
+        )
     image_record.review_outcome = payload.outcome
     image_record.review_status = "reviewed" if payload.outcome == "capture_adequate" else "unable_to_assess"
     image_record.reviewed_at = datetime.now(timezone.utc)
@@ -563,8 +587,15 @@ def retrieve_assigned_review_image(
         db, user, prediction.id
     ):
         raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
-    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
-        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_processing"
+    ) or not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_review"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Active image-processing and human-review consent are required.",
+        )
     try:
         storage = build_skin_image_storage()
         if isinstance(storage, DisabledSkinImageStorage):
