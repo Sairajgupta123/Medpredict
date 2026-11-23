@@ -1,0 +1,49 @@
+# Prediction and symptom-review pipeline
+
+## Current implementation status
+
+MediPredict currently exposes a limited symptom phrase recognizer and an approved-catalog overlap comparison. Neither is a clinical prediction model.
+
+### Text symptom flow
+
+1. The browser sends symptom text and self-reported duration, severity and onset to the same-origin Next.js route.
+2. The route validates the request and forwards it to `POST /api/v1/symptoms/normalize`.
+3. The backend matches a curated phrase taxonomy in memory. It does not persist the submitted narrative.
+4. Negated, historical and uncertain mentions are separated for human review. Unsupported residual wording is flagged.
+5. The UI asks the user to confirm each recognized item. A phrase match is not treated as proof that a symptom is present.
+
+### Approved catalog comparison
+
+After the user explicitly confirms one or more symptoms as present:
+
+1. The frontend sends only those symptom identifiers to `POST /api/symptoms/catalog-match`.
+2. The same-origin Next.js route validates the list (1–20 unique identifiers) and proxies the request.
+3. The backend verifies that each selected symptom is active and approved, with reviewer identity and review timestamp.
+4. Disease entries, symptom entries and disease-symptom associations are all filtered to active, approved records with reviewer audit metadata.
+5. Results show matched association counts and a catalog-overlap ratio. The ratio is only a description of catalog coverage for that disease entry.
+
+The overlap ratio is **not** a disease probability, clinical risk score, confidence estimate, or measure of diagnostic accuracy. The matcher does not use the association relevance weight to imply calibrated risk. Diseases without an approved matched association are not returned. An empty result does not rule out disease.
+
+### Privacy boundaries
+
+- Free-text symptom narratives are sent only to the normalization endpoint and are not stored by that endpoint.
+- The catalog comparison receives only confirmed symptom IDs, not the original narrative or the self-reported context fields.
+- The comparison request is not stored as prediction history.
+- Do not add request-body logging or analytics that capture symptom narratives.
+
+### Clinical and governance constraints
+
+- Draft, in-review, retired and inactive catalog records must never be exposed as matches.
+- An approved status alone is insufficient: reviewer identity and review timestamp are required.
+- This prototype must not claim diagnosis, disease probability, model accuracy, treatment guidance or clinical validation.
+- Severe, rapidly worsening or worrying symptoms require professional assessment; the prototype must never be used to decide whether care is necessary.
+
+## Not implemented yet
+
+- A clinically validated disease-risk model and its external validation evidence.
+- A curated, source-cited and clinically reviewed disease/symptom knowledge base with adequate coverage.
+- Model calibration, subgroup performance, bias evaluation and prospective evaluation.
+- Skin-image classification, dataset provenance, image-quality checks, secure object storage and deletion lifecycle.
+- Clinician-facing review workflows for prediction outputs.
+
+These capabilities require suitable data, documented approvals, validation and privacy controls before any clinical-facing use.
