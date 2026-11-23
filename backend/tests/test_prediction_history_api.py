@@ -738,3 +738,50 @@ def test_image_review_assignment_rejects_unverified_reviewer(
         json={"reviewer_id": str(reviewer.id), "reason": "Assignment for review."},
     )
     assert response.status_code == 404
+
+
+def test_image_review_audit_is_visible_only_to_assignee_or_admin(
+    client: TestClient,
+) -> None:
+    from app.models.prediction import SkinImageReviewEvent
+
+    reviewer_token, reviewer = _register(client, "skin-audit-reviewer@example.com")
+    other_token, other = _register(client, "skin-audit-other@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    _set_account_role(other.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(reviewer.id)
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        db.add(
+            SkinImageReviewEvent(
+                prediction_id=prediction.id,
+                image_analysis_id=image.id,
+                event_type="assigned",
+                actor_id=other.id,
+                assigned_reviewer_id=reviewer.id,
+                reason="Assigned for technical image review.",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    own = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/events",
+        headers=_headers(reviewer_token),
+    )
+    assert own.status_code == 200
+    assert len(own.json()) == 1
+
+    forbidden = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/events",
+        headers=_headers(other_token),
+    )
+    assert forbidden.status_code == 404
