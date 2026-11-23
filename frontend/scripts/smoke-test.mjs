@@ -19,6 +19,19 @@ if (!home.ok) throw new Error(`Homepage returned HTTP ${home.status}`);
 const requestOrigin = new URL(home.url).origin;
 process.stdout.write(`PASS production homepage (HTTP ${home.status})\n`);
 
+
+const logoutPath = "/api/auth/logout";
+await check(
+  "reject cross-origin logout request",
+  { path: logoutPath, init: { method: "POST", headers: { Origin: "https://invalid.example" } } },
+  403,
+);
+await check(
+  "allow same-origin logout and clear session",
+  { path: logoutPath, init: { method: "POST", headers: { Origin: requestOrigin } } },
+  200,
+);
+
 const path = "/api/symptoms/normalize";
 await check(
   "reject cross-origin symptom request",
