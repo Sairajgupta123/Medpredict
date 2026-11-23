@@ -128,3 +128,8 @@ The multipart intake request includes `processing_consent`, `history_consent`, `
 - The frontend page is `/review/skin-images/audit`, linked from the skin-image reviewer queue. It displays metadata only; it never retrieves or embeds image bytes.
 - Pagination is bounded to 1–200 rows and offset 0–10,000. The feed is newest-first. It is an operational view, not a tamper-proof external compliance archive.
 - `image_accessed` is recorded only after private object retrieval and integrity/format checks succeed. It proves successful server-side retrieval, not that a human visually inspected the entire image.
+
+
+### Owner-facing technical image-review status
+
+Authenticated owners can request `GET /api/v1/skin-images/{prediction_id}/review-status` for their own skin-image submission. The endpoint returns only a small status vocabulary (awaiting review, assigned, technically reviewed, unable to assess, unavailable, or review permission withdrawn), a status timestamp where applicable, and explicit false flags for clinical interpretation and disease prediction. Cross-user access returns not found. Reviewer identities, assignment reasons, audit events, storage keys, image bytes, reviewer notes, and diagnostic fields are never included. The owner image-history page displays this status separately from the prediction record status. If review consent has been revoked, the endpoint reports that permission was withdrawn without disclosing further review details.
