@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.services.skin_image_storage import SkinImageStorage
 from app.models.prediction import (
     Prediction,
     PredictionConsentEvent,
@@ -99,9 +100,18 @@ def revoke_text_history_consent(
 
 
 def delete_user_history_item(
-    db: Session, user_id: UUID, prediction_id: UUID
+    db: Session,
+    user_id: UUID,
+    prediction_id: UUID,
+    *,
+    image_storage: SkinImageStorage | None = None,
 ) -> None:
-    """Delete a user's prediction when no external image object needs cleanup."""
+    """Delete owned history, removing any private image before its DB record.
+
+    The deletion-pending commit is a durable retry marker. If object deletion
+    succeeds but a later DB commit fails, the next attempt safely repeats the
+    idempotent object deletion before removing the database record.
+    """
     prediction = get_owned_prediction(db, user_id, prediction_id)
     image_record = db.scalar(
         select(SkinImageAnalysis).where(
@@ -109,12 +119,44 @@ def delete_user_history_item(
         )
     )
     if image_record is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This item includes a stored image reference. Deletion is blocked "
-                "until private object-storage cleanup is configured."
-            ),
-        )
+        if image_storage is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This item includes a stored image reference. Deletion is "
+                    "blocked until private object-storage cleanup is configured."
+                ),
+            )
+        if image_record.storage_status not in {"stored", "deletion_pending", "deleted"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "The image storage state is not verified. The item is retained "
+                    "for safe manual reconciliation."
+                ),
+            )
+
+        if image_record.storage_status != "deleted":
+            image_record.storage_status = "deletion_pending"
+            image_record.deletion_requested_at = (
+                image_record.deletion_requested_at or datetime.now(timezone.utc)
+            )
+            db.commit()
+
+            try:
+                image_storage.delete_private(image_record.object_key)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "Image deletion is pending and will need to be retried. "
+                        "The history record has been retained."
+                    ),
+                ) from exc
+
+            image_record.storage_status = "deleted"
+            image_record.deleted_at = datetime.now(timezone.utc)
+            db.commit()
+
     db.delete(prediction)
     db.commit()
