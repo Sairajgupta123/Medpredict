@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const maxRequestBytes = MAX_IMAGE_BYTES + 64 * 1024;
   const declaredLengthHeader = request.headers.get("content-length");
   if (declaredLengthHeader !== null) {
-    if (!/^\\d+$/.test(declaredLengthHeader)) {
+    if (!/^\d+$/.test(declaredLengthHeader)) {
       return NextResponse.json({ detail: "Invalid upload request size." }, { status: 400 });
     }
     if (Number(declaredLengthHeader) > maxRequestBytes) {
