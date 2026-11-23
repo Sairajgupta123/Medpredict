@@ -19,6 +19,7 @@ from app.models.prediction import (
     PredictionConsentEvent,
     PredictionResult,
     SkinImageAnalysis,
+    SkinImageReviewEvent,
 )
 from app.models.user import RoleProvisioningEvent, User
 
@@ -41,6 +42,7 @@ __all__ = [
     "RecommendationReference",
     "RoleProvisioningEvent",
     "SkinImageAnalysis",
+    "SkinImageReviewEvent",
     "Symptom",
     "User",
 ]
