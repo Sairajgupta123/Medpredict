@@ -102,11 +102,28 @@ export function SkinImageIntake() {
         setError(payload.detail ?? "The image could not be securely received.");
         return;
       }
+      const validPredictionId =
+        typeof payload.prediction_id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.prediction_id);
+      const allowedWarnings = new Set([
+        "low_resolution",
+        "possibly_too_dark",
+        "possibly_overexposed",
+        "low_contrast_or_uniform_image",
+      ]);
+      const validWarnings =
+        Array.isArray(payload.quality_warnings) &&
+        payload.quality_warnings.every(
+          (warning): warning is string =>
+            typeof warning === "string" && allowedWarnings.has(warning),
+        );
       if (
         payload.status !== "review_required" ||
         payload.storage_status !== "stored" ||
-        typeof payload.prediction_id !== "string" ||
-        !Array.isArray(payload.quality_warnings)
+        !validPredictionId ||
+        !validWarnings ||
+        typeof payload.message !== "string" ||
+        payload.message.trim().length === 0
       ) {
         setError("The server returned an unexpected response. Storage was not confirmed.");
         return;
