@@ -44,3 +44,55 @@ def test_retention_worker_returns_failure_exit_code_when_cleanup_needs_retry(mon
     output = capsys.readouterr().out
     assert "processed=3 deleted=2 failed=1" in output
     assert "skin-images/" not in output
+
+def test_retention_worker_passes_bounded_batch_and_closes_session(monkeypatch):
+    class FakeSession:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    db = FakeSession()
+    storage = object()
+    captured = {}
+
+    monkeypatch.setattr(worker, "build_skin_image_storage", lambda: storage)
+    monkeypatch.setattr(worker, "SessionLocal", lambda: db)
+
+    def fake_purge(session, *, image_storage, as_of, limit):
+        captured.update(
+            session=session, image_storage=image_storage, as_of=as_of, limit=limit
+        )
+        return {"processed": 2, "deleted": 2, "failed": 0}
+
+    monkeypatch.setattr(worker, "purge_expired_skin_image_records", fake_purge)
+
+    assert worker.run_retention_batch(limit=25) == {
+        "processed": 2, "deleted": 2, "failed": 0
+    }
+    assert captured["session"] is db
+    assert captured["image_storage"] is storage
+    assert captured["limit"] == 25
+    assert captured["as_of"].tzinfo is not None
+    assert captured["as_of"].utcoffset().total_seconds() == 0
+    assert db.closed is True
+
+
+def test_retention_worker_closes_session_when_purge_raises(monkeypatch):
+    class FakeSession:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    db = FakeSession()
+    monkeypatch.setattr(worker, "build_skin_image_storage", lambda: object())
+    monkeypatch.setattr(worker, "SessionLocal", lambda: db)
+
+    def fail_purge(*args, **kwargs):
+        raise RuntimeError("database operation failed")
+
+    monkeypatch.setattr(worker, "purge_expired_skin_image_records", fail_purge)
+    with pytest.raises(RuntimeError, match="database operation failed"):
+        worker.run_retention_batch()
+    assert db.closed is True
