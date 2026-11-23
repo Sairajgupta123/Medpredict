@@ -1,6 +1,7 @@
 """Authenticated API tests for prediction-history privacy controls."""
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -323,7 +324,7 @@ def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
 
     db = TestingSessionLocal()
     try:
-        prediction = db.get(Prediction, body["prediction_id"])
+        prediction = db.get(Prediction, UUID(body["prediction_id"]))
         assert prediction is not None
         assert prediction.user_id == user.id
         assert prediction.status == "review_required"
