@@ -113,10 +113,11 @@ def delete_user_history_item(
     idempotent object deletion before removing the database record.
     """
     prediction = get_owned_prediction(db, user_id, prediction_id)
+    # Lock against reviewer reads/assignments before marking the object pending.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(
-            SkinImageAnalysis.prediction_id == prediction.id
-        )
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
     )
     if image_record is not None:
         if image_storage is None:
@@ -358,10 +359,11 @@ def revoke_skin_image_history_consent(
             detail="No active image-history consent exists for this item.",
         )
 
+    # Serialize consent-driven object deletion with reviewer image access.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(
-            SkinImageAnalysis.prediction_id == prediction.id
-        )
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
     )
     if image_record is None or image_record.storage_status not in {
         "stored", "deletion_pending", "deleted"
