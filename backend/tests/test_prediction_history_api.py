@@ -1134,3 +1134,31 @@ def test_owner_revoking_review_consent_revokes_assigned_reviewer_scope(
         assert consent is not None and consent.action == "revoked"
     finally:
         db.close()
+
+
+def test_other_user_cannot_revoke_skin_image_review_consent(
+    client: TestClient,
+) -> None:
+    owner_token, owner = _register(client, "skin-review-consent-owner-2@example.com")
+    other_token, other = _register(client, "skin-review-consent-other@example.com")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+
+    response = client.post(
+        f"/api/v1/skin-images/{prediction.id}/revoke-review-consent",
+        headers=_headers(other_token),
+    )
+    assert response.status_code == 404
+
+    db = TestingSessionLocal()
+    try:
+        latest = db.scalar(
+            select(PredictionConsentEvent)
+            .where(
+                PredictionConsentEvent.prediction_id == prediction.id,
+                PredictionConsentEvent.purpose == "skin_image_review",
+            )
+            .order_by(PredictionConsentEvent.captured_at.desc())
+        )
+        assert latest is not None and latest.action == "granted"
+    finally:
+        db.close()
