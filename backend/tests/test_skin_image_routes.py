@@ -268,6 +268,7 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
         ])
         db.commit()
         prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
         owner_token = create_access_token(owner.id)
         reviewer_id = reviewer.id
     finally:
@@ -293,7 +294,7 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
             event_type="revoked",
         ).one()
         revoked_consent = db.query(PredictionConsentEvent).filter_by(
-            prediction_id=prediction_id,
+            prediction_id=prediction_uuid,
             purpose="skin_image_review",
             action="revoked",
         ).one()
