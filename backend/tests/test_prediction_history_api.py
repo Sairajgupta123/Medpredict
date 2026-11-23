@@ -671,9 +671,8 @@ def test_admin_assigns_image_to_verified_reviewer_and_review_is_audited(
         f"/api/v1/skin-images/review/{prediction.id}/decision",
         headers=_headers(reviewer_token),
         json={
-            "outcome": "image_adequate",
+            "outcome": "capture_adequate",
             "reason": "Image framing and exposure are adequate.",
-            "note": "Technical image quality only; no clinical assessment.",
         },
     )
     assert decision.status_code == 200, decision.text
