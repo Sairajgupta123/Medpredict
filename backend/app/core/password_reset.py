@@ -55,6 +55,23 @@ def issue_password_reset_token(
     return raw_token
 
 
+def invalidate_password_reset_token(db: Session, raw_token: str) -> bool:
+    """Invalidate one undelivered reset token without affecting newer requests."""
+    if not raw_token or len(raw_token) > 256:
+        return False
+
+    result = db.execute(
+        update(PasswordResetToken)
+        .where(
+            PasswordResetToken.token_hash == _token_digest(raw_token),
+            PasswordResetToken.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(timezone.utc))
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
+
+
 def consume_password_reset_token(db: Session, raw_token: str) -> User | None:
     """Atomically consume a valid token and return its active account once."""
     if not raw_token or len(raw_token) > 256:
