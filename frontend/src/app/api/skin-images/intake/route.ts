@@ -116,6 +116,7 @@ export async function POST(request: Request) {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       body: forwarded,
       cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
     });
     const body = await upstream.json().catch(() => null);
     return NextResponse.json(
