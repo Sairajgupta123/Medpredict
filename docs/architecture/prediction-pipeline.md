@@ -116,3 +116,6 @@ Successful image delivery is also recorded as an `image_accessed` audit event wi
 ### Separate consent for human image review
 
 Separate `skin_image_processing`, `skin_image_history`, and `skin_image_review` consent purposes are recorded with independent policy versions. The intake endpoint requires all three explicit choices. Human-review queue access, assignment, decisions and private reviewer image retrieval require active processing and human-review consent. The owner can revoke human-review consent at `POST /api/v1/skin-images/{prediction_id}/revoke-review-consent`; this immediately revokes exact-image reviewer scopes while retaining the minimal audit trail. Image-history consent remains a separate control for owner retrieval and retention.
+
+
+The multipart intake request includes `processing_consent`, `history_consent`, `review_consent` and the matching `processing_policy_version`, `history_policy_version`, and `review_policy_version` fields. Submissions created before this separate review-consent requirement do not become reviewable automatically; they need a fresh, explicit owner consent event before any human reviewer can access them. A missing review-consent event is treated as no consent.
