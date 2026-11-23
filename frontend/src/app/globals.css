@@ -628,3 +628,20 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 @media (max-width: 560px) {
   .skin-history-action { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* Scoped skin-image reviewer audit trail */
+.skin-review-top-links { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.skin-review-top-links .back-link { margin: 0; }
+.skin-audit-page { padding-bottom: 76px; }
+.skin-audit-card { gap: 14px; }
+.skin-audit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid #e8eee8; border-radius: 8px; background: #fbfcfa; }
+.skin-audit-grid > div { display: grid; gap: 5px; min-width: 0; }
+.skin-audit-grid span, .skin-audit-reason > span { color: #8a978d; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.skin-audit-grid strong { color: #526b58; font-size: 10px; overflow-wrap: anywhere; font-weight: 650; }
+.skin-audit-reason { padding: 13px 15px; border-left: 2px solid #a6bea9; border-radius: 5px; background: #f7faf6; }
+.skin-audit-reason p { margin: 6px 0 0; color: #75847a; font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .skin-review-top-links { align-items: flex-start; flex-direction: column; }
+  .skin-audit-grid { grid-template-columns: 1fr; }
+}
