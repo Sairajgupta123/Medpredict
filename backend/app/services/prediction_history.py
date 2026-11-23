@@ -173,8 +173,8 @@ def record_skin_image_consent_decision(
 ) -> PredictionConsentEvent:
     """Append an owner-scoped, versioned image consent decision.
 
-    Processing consent and history-retention consent are intentionally
-    independent. Callers must invoke this only after a clear user action.
+    Processing consent, history-retention consent and human-review consent are
+    intentionally independent. Callers must invoke this only after a clear user action.
     """
     prediction = get_owned_prediction(db, user_id, prediction_id)
     if prediction.modality not in {"skin_image", "combined"}:
