@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 const API_BASE_URL =
   process.env.MEDIPREDICT_API_INTERNAL_URL?.replace(/\/$/, "") ??
@@ -12,8 +13,7 @@ const allowedValues = {
 };
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) {
+  if (!hasSameRequestOrigin(request)) {
     return NextResponse.json(
       { detail: "Invalid request origin." },
       { status: 403, headers: { "Cache-Control": "no-store, max-age=0" } },
