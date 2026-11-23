@@ -42,7 +42,7 @@ def create_access_token(subject: UUID, token_version: int = 0) -> str:
 
 
 def decode_access_token(token: str) -> tuple[UUID, int] | None:
-    """Validate a signed access token and return its user UUID."""
+    """Validate a signed access token and return its user UUID and version."""
     settings = get_settings()
     try:
         payload = jwt.decode(
