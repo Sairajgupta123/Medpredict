@@ -71,3 +71,27 @@ def test_registry_rejects_non_object_entries_with_safe_error(tmp_path, invalid_e
 def test_record_validator_rejects_non_object_input():
     with pytest.raises(ValueError, match="record must be an object"):
         validate_dataset_record(None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["dataset_id", "name", "version", "retrieved_on", "license", "patient_grouping"],
+)
+@pytest.mark.parametrize("invalid_value", ["", "   ", None, 123])
+def test_registry_rejects_empty_or_non_string_metadata(field, invalid_value):
+    record = valid_record()
+    record[field] = invalid_value
+    result = validate_dataset_record(record)
+    assert result["record_complete"] is False
+    assert f"invalid_{field}" in result["validation_errors"]
+
+
+def test_registry_ignores_blank_ids_when_reporting_duplicates(tmp_path):
+    first = valid_record()
+    second = valid_record()
+    first["dataset_id"] = ""
+    second["dataset_id"] = None
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps({"datasets": [first, second]}), encoding="utf-8")
+    result = audit_registry(path)
+    assert result["duplicate_dataset_ids"] == []
