@@ -249,6 +249,13 @@ def revoke_skin_image_review_consent(
     if prediction.modality not in {"skin_image", "combined"}:
         raise HTTPException(status_code=409, detail="Human image-review consent applies only to image submissions.")
 
+    # Serialize consent withdrawal with reviewer assignment, which locks this
+    # same image row before checking consent and creating an access scope.
+    image_record = db.scalar(
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
+    )
     event = record_skin_image_consent_decision(
         db,
         user.id,
@@ -256,9 +263,6 @@ def revoke_skin_image_review_consent(
         purpose="skin_image_review",
         action="revoked",
         policy_version="image-review-v1",
-    )
-    image_record = db.scalar(
-        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
     )
     if image_record is not None:
         active_scopes = db.scalars(
