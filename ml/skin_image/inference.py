@@ -164,6 +164,91 @@ def validate_skin_checkpoint(
     }
 
 
+
+def load_skin_research_model(checkpoint_path: str | "Path", *, device: str = "cpu"):
+    """Load a skin research checkpoint only after adjacent manifest and metadata verification.
+
+    Only load artifacts from trusted, access-controlled storage. PyTorch's weights_only mode
+    reduces pickle exposure but does not establish artifact authenticity; SHA-256 detects
+    accidental or unauthorized byte changes only when the manifest itself is trusted.
+    """
+    import hashlib
+    import json
+    from pathlib import Path
+
+    path = Path(checkpoint_path)
+    if not path.is_absolute():
+        raise ValueError("Checkpoint path must be absolute")
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Checkpoint must be a regular non-symlink file")
+    root = path.parent
+    metadata_path = root / "model_metadata.json"
+    manifest_path = root / "artifact_manifest.json"
+    for candidate, label in (
+        (metadata_path, "Model metadata"),
+        (manifest_path, "Artifact manifest"),
+    ):
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ValueError(f"{label} must be a regular non-symlink file")
+
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Skin artifact metadata or manifest is unreadable") from exc
+    if not isinstance(metadata, dict) or not isinstance(manifest, dict):
+        raise ValueError("Skin artifact metadata and manifest must be JSON objects")
+    if manifest.get("purpose") != "offline_research_only":
+        raise ValueError("Skin artifact manifest is not marked offline research only")
+    if metadata.get("intended_use") != "offline_research_only" or metadata.get("clinical_validation") is not False:
+        raise ValueError("Skin artifact metadata does not meet research-only requirements")
+    if manifest.get("checkpoint_file") != path.name:
+        raise ValueError("Skin artifact manifest checkpoint filename does not match")
+    if manifest.get("metadata_file") != metadata_path.name:
+        raise ValueError("Skin artifact manifest metadata filename does not match")
+
+    def verify_digest(file_path: Path, expected: Any, label: str) -> None:
+        if not isinstance(expected, str) or len(expected) != 64 or any(
+            char not in "0123456789abcdef" for char in expected
+        ):
+            raise ValueError(f"Skin artifact {label} digest is invalid")
+        actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        if actual != expected:
+            raise ValueError(f"Skin artifact {label} digest mismatch")
+
+    verify_digest(path, manifest.get("checkpoint_sha256"), "checkpoint")
+    verify_digest(metadata_path, manifest.get("metadata_sha256"), "metadata")
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError("Install the optional skin dependencies from ml/requirements-skin.txt") from exc
+
+    try:
+        checkpoint = torch.load(path, map_location=device, weights_only=True)
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        raise ValueError("Skin checkpoint could not be loaded safely") from exc
+    settings = validate_skin_checkpoint(checkpoint, metadata)
+    from ml.skin_image.model import build_skin_classifier
+
+    model = build_skin_classifier(
+        num_classes=len(settings["class_names"]),
+        architecture=settings["architecture"],
+        variant=settings["variant"],
+        pretrained=False,
+    )
+    model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+    model.to(device)
+    model.eval()
+    return {
+        "model": model,
+        "settings": settings,
+        "metadata": metadata,
+        "status": "research_model_loaded",
+        "intended_use": "offline_research_only",
+    }
+
+
 def predict_skin_image(
     model: Any,
     image: Image.Image,
