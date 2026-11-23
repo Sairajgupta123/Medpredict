@@ -228,7 +228,7 @@ def has_active_skin_image_consent(
     db: Session, prediction_id: UUID, *, purpose: str
 ) -> bool:
     """Return whether the latest event grants the requested image purpose."""
-    if purpose not in {"skin_image_processing", "skin_image_history"}:
+    if purpose not in {"skin_image_processing", "skin_image_history", "skin_image_review"}:
         raise ValueError("Unsupported image consent purpose.")
     latest = db.scalar(
         select(PredictionConsentEvent)
