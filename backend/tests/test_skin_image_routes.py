@@ -14,6 +14,8 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User
+from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
+from app.models.reviewer_scope import CatalogReviewerScope
 
 
 test_engine = create_engine(
@@ -113,3 +115,89 @@ def test_patient_cannot_access_reviewer_queue_or_audit(
 
     assert queue.status_code == 403
     assert audit.status_code == 403
+
+
+
+def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
+    client: TestClient,
+) -> None:
+    """A leftover scope grant must never override the latest consent decision."""
+    db = TestingSessionLocal()
+    try:
+        administrator = User(
+            email=f"skin-review-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="admin",
+        )
+        reviewer = User(
+            email=f"skin-review-verified-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([administrator, reviewer])
+        db.flush()
+
+        prediction = Prediction(
+            user_id=administrator.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        image_record = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="private/test-image",
+            content_type="image/png",
+            image_sha256="0" * 64,
+            storage_status="stored",
+            review_status="assigned",
+            assigned_reviewer_id=reviewer.id,
+            assigned_by=administrator.id,
+        )
+        db.add(image_record)
+        db.add_all([
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="revoked",
+                policy_version="v1",
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Assigned for a controlled image review.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        token = create_access_token(reviewer.id)
+    finally:
+        db.close()
+
+    headers = {"Authorization": f"Bearer {token}"}
+    queue = client.get("/api/v1/skin-images/review/queue", headers=headers)
+    image = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/image",
+        headers=headers,
+    )
+
+    assert queue.status_code == 200
+    assert queue.json() == []
+    assert image.status_code == 403
+    assert "consent" in image.json()["detail"].lower()
