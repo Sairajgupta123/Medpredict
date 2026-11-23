@@ -191,6 +191,7 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
         ])
         db.commit()
         prediction_id = str(prediction.id)
+        reviewer_uuid = reviewer.id
         token = create_access_token(reviewer.id)
     finally:
         db.close()
@@ -205,6 +206,14 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
         f"/api/v1/skin-images/review/{prediction_id}/events",
         headers=headers,
     )
+    assignment = client.post(
+        f"/api/v1/skin-images/review/{prediction_id}/assign",
+        headers=_admin_headers(),
+        json={
+            "reviewer_id": str(reviewer_uuid),
+            "reason": "Reassignment must respect revoked consent.",
+        },
+    )
 
     assert queue.status_code == 200
     assert queue.json() == []
@@ -212,6 +221,8 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
     assert "consent" in image.json()["detail"].lower()
     assert events.status_code == 403
     assert "consent" in events.json()["detail"].lower()
+    assert assignment.status_code == 403
+    assert "consent" in assignment.json()["detail"].lower()
 
 
 
