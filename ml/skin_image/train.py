@@ -105,10 +105,37 @@ def train_skin_model(
     target_validation_coverage: float = 0.90,
 ) -> dict[str, Any]:
     """Train a supported image architecture using identical split and evaluation rules."""
-    if epochs < 1 or batch_size < 1 or learning_rate <= 0 or num_workers < 0:
-        raise ValueError("epochs, batch_size and learning_rate must be positive")
-    if not np.isfinite(target_validation_coverage) or not 0 < target_validation_coverage <= 1:
-        raise ValueError("target_validation_coverage must be in (0, 1]")
+    integer_parameters = {
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "seed": seed,
+        "num_workers": num_workers,
+    }
+    for name, value in integer_parameters.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{name} must be an integer")
+    if epochs < 1 or batch_size < 1 or num_workers < 0:
+        raise ValueError("epochs and batch_size must be positive; num_workers cannot be negative")
+    if (
+        isinstance(learning_rate, bool)
+        or not isinstance(learning_rate, (int, float, np.integer, np.floating))
+        or not np.isfinite(learning_rate)
+        or learning_rate <= 0
+    ):
+        raise ValueError("learning_rate must be a positive finite number")
+    if (
+        isinstance(target_validation_coverage, bool)
+        or not isinstance(target_validation_coverage, (int, float, np.integer, np.floating))
+        or not np.isfinite(target_validation_coverage)
+        or not 0 < target_validation_coverage <= 1
+    ):
+        raise ValueError("target_validation_coverage must be a finite number in (0, 1]")
+    if architecture not in {"mobilenet_v3", "resnet50", "efficientnet_b0"}:
+        raise ValueError("architecture must be mobilenet_v3, resnet50 or efficientnet_b0")
+    if (architecture == "mobilenet_v3" and variant not in {"large", "small"}) or (
+        architecture != "mobilenet_v3" and variant != "default"
+    ):
+        raise ValueError("variant is inconsistent with the selected architecture")
     if not manifest_path.is_file():
         raise FileNotFoundError("Manifest file does not exist")
     if not image_root.is_dir():
