@@ -525,3 +525,47 @@ def retrieve_assigned_review_image(
             "Content-Security-Policy": "default-src 'none'; sandbox",
         },
     )
+
+
+@router.get("/review/{prediction_id}/events")
+def list_skin_image_review_events(
+    prediction_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> list[dict]:
+    """Read the review audit trail only for the assigned reviewer or an admin."""
+    from uuid import UUID
+
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    try:
+        parsed_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Review history not found.") from exc
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == parsed_id
+        )
+    )
+    if image_record is None or (
+        user.role != "admin" and image_record.assigned_reviewer_id != user.id
+    ):
+        raise HTTPException(status_code=404, detail="Assigned review history not found.")
+    events = db.scalars(
+        select(SkinImageReviewEvent)
+        .where(SkinImageReviewEvent.prediction_id == parsed_id)
+        .order_by(SkinImageReviewEvent.created_at.asc(), SkinImageReviewEvent.id.asc())
+    ).all()
+    return [
+        {
+            "event_type": event.event_type,
+            "actor_id": str(event.actor_id),
+            "assigned_reviewer_id": (
+                str(event.assigned_reviewer_id) if event.assigned_reviewer_id else None
+            ),
+            "outcome": event.outcome,
+            "reason": event.reason,
+            "created_at": event.created_at,
+        }
+        for event in events
+    ]
