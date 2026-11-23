@@ -16,7 +16,7 @@ class FakeEstimator:
         return np.zeros(len(values), dtype=int)
 
     def predict_proba(self, values):
-        return np.tile([0.5, 0.5], (len(values), 1))
+        return np.tile([0.8, 0.2], (len(values), 1))
 
 
 class FakeLabelEncoder:
