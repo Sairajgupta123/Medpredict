@@ -56,6 +56,7 @@ def _signed_test_token(**overrides: object) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=5),
         "type": "access",
+        "ver": 0,
         "iss": "medipredict-api",
     }
     payload.update(overrides)
@@ -167,6 +168,12 @@ def test_password_reset_confirmation_changes_password_and_consumes_token(
         json={"email": "change-password@example.com", "password": "OldPassword123!"},
     )
     assert registration.status_code == 201
+    old_access_token = registration.json()["access_token"]
+    old_session = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {old_access_token}"},
+    )
+    assert old_session.status_code == 200
 
     delivered = {}
 
@@ -188,6 +195,12 @@ def test_password_reset_confirmation_changes_password_and_consumes_token(
         },
     )
     assert confirmation.status_code == 200
+
+    revoked_session = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {old_access_token}"},
+    )
+    assert revoked_session.status_code == 401
 
     old_login = client.post(
         "/api/v1/auth/login",
