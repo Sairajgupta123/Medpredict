@@ -653,3 +653,17 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .skin-owner-review-guidance strong { color: #526b58; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 .skin-owner-review-guidance p { margin: 6px 0 0; color: #718075; font-size: 11px; line-height: 1.7; }
 @media (max-width: 560px) { .skin-owner-review-guidance { grid-template-columns: 1fr; } }
+
+
+/* Explicit owner confirmation for permanent image-history deletion */
+.skin-history-delete-action { align-items: flex-end; border-color: #ead8d2; background: #fffaf8; }
+.skin-history-delete-action > div { flex: 1 1 auto; min-width: 0; }
+.skin-history-delete-action .skin-delete-confirm-label { margin-top: 5px; color: #76564e; font-size: 10px; font-weight: 700; }
+.skin-history-delete-action input[name="confirmation"] { width: min(100%, 240px); min-height: 38px; padding: 8px 10px; border: 1px solid #d9c5bf; border-radius: 7px; background: white; color: #493a36; font: 600 12px var(--font-body); letter-spacing: .08em; }
+.skin-history-delete-action input[name="confirmation"]:focus { outline: 3px solid rgba(166, 93, 75, .15); border-color: #a65d4b; }
+.button-danger { color: white; background: #965746; border: 1px solid #965746; }
+.button-danger:hover { background: #7e4638; border-color: #7e4638; }
+@media (max-width: 560px) {
+  .skin-history-delete-action { align-items: stretch; }
+  .skin-history-delete-action .button { width: 100%; }
+}
