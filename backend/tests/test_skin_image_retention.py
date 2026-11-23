@@ -135,3 +135,44 @@ def test_failed_expiry_keeps_retry_marker_and_does_not_revoke_consent(
     assert image.storage_status == "deletion_pending"
     assert image.retention_expires_at == original_expiry
     assert [event.action for event in consent_events] == ["granted"]
+
+
+def test_unexpired_image_is_not_deleted(db_session: Session) -> None:
+    _, image = _expired_image(db_session)
+    image.retention_expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+    db_session.commit()
+    storage = FakeImageStorage()
+
+    result = purge_expired_skin_image_records(
+        db_session,
+        image_storage=storage,
+        as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+
+    db_session.refresh(image)
+    assert result == {"processed": 0, "deleted": 0, "failed": 0}
+    assert storage.deleted == []
+    assert image.storage_status == "stored"
+
+
+def test_expiry_batch_respects_requested_limit(db_session: Session) -> None:
+    _, first = _expired_image(db_session)
+    _, second = _expired_image(db_session)
+    storage = FakeImageStorage()
+
+    result = purge_expired_skin_image_records(
+        db_session,
+        image_storage=storage,
+        as_of=datetime.now(timezone.utc),
+        limit=1,
+    )
+
+    db_session.refresh(first)
+    db_session.refresh(second)
+    assert result == {"processed": 1, "deleted": 1, "failed": 0}
+    assert len(storage.deleted) == 1
+    assert sorted([first.storage_status, second.storage_status]) == [
+        "deleted",
+        "stored",
+    ]
