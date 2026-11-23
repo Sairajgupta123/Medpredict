@@ -1561,3 +1561,80 @@ def test_admin_can_create_medical_reference_as_unapproved_draft(
         json=payload,
     )
     assert duplicate.status_code == 409
+
+
+
+def test_catalog_match_returns_only_approved_overlap_and_no_probability(
+    client: TestClient,
+) -> None:
+    db = TestingSessionLocal()
+    try:
+        disease = _approved_disease("DIS_MATCH", "Catalog Match Condition")
+        fever = _approved_symptom("SYM_MATCH_FEVER", "Fever")
+        cough = _approved_symptom("SYM_MATCH_COUGH", "Cough")
+        draft = Symptom(
+            code="SYM_MATCH_DRAFT",
+            name="Draft Symptom",
+            is_active=True,
+            review_status="draft",
+        )
+        db.add_all([disease, fever, cough, draft])
+        db.flush()
+        db.add_all([
+            _approved_link(disease, fever),
+            _approved_link(disease, cough),
+            DiseaseSymptom(
+                disease_id=disease.id,
+                symptom_id=draft.id,
+                relevance_weight=1.0,
+                review_status="approved",
+                reviewed_by="reviewer-test",
+                reviewed_at=datetime.now(timezone.utc),
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/v1/symptoms/catalog-match",
+        json={"symptom_ids": ["SYM_MATCH_FEVER"]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["method"] == "approved_catalog_overlap"
+    assert body["clinical_interpretation_performed"] is False
+    assert body["disease_probability_provided"] is False
+    assert len(body["results"]) == 1
+    result = body["results"][0]
+    assert result["disease_code"] == "DIS_MATCH"
+    assert result["matched_symptom_count"] == 1
+    assert result["catalog_symptom_count"] == 2
+    assert result["catalog_overlap_ratio"] == 0.5
+    assert result["matched_symptoms"][0]["symptom_code"] == "SYM_MATCH_FEVER"
+    assert "not a probability" in body["disclaimer"]
+
+
+def test_catalog_match_rejects_unknown_or_unapproved_symptom_ids(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/symptoms/catalog-match",
+        json={"symptom_ids": ["SYM_DOES_NOT_EXIST"]},
+    )
+    assert response.status_code == 422
+
+
+def test_catalog_match_rejects_duplicate_and_empty_symptom_lists(
+    client: TestClient,
+) -> None:
+    duplicate = client.post(
+        "/api/v1/symptoms/catalog-match",
+        json={"symptom_ids": ["SYM_FEVER", "SYM_FEVER"]},
+    )
+    empty = client.post(
+        "/api/v1/symptoms/catalog-match",
+        json={"symptom_ids": []},
+    )
+    assert duplicate.status_code == 422
+    assert empty.status_code == 422
