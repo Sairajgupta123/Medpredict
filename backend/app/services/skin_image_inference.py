@@ -37,9 +37,17 @@ class SkinImageInferenceResult:
     abstention_reason: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.model_version or len(self.model_version.strip()) > 100:
+        if (
+            not isinstance(self.model_version, str)
+            or not self.model_version
+            or self.model_version != self.model_version.strip()
+            or len(self.model_version) > 100
+        ):
             raise InvalidSkinImageModelOutput("A valid model version is required.")
-        if not _SHA256_RE.fullmatch(self.model_artifact_sha256):
+        if (
+            not isinstance(self.model_artifact_sha256, str)
+            or not _SHA256_RE.fullmatch(self.model_artifact_sha256)
+        ):
             raise InvalidSkinImageModelOutput(
                 "A verified SHA-256 model artifact digest is required."
             )
