@@ -182,7 +182,7 @@ def record_skin_image_consent_decision(
             status_code=status.HTTP_409_CONFLICT,
             detail="Image consent applies only to image or combined predictions.",
         )
-    if purpose not in {"skin_image_processing", "skin_image_history"}:
+    if purpose not in {"skin_image_processing", "skin_image_history", "skin_image_review"}:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Unsupported image consent purpose.",
