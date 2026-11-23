@@ -394,3 +394,93 @@ def test_retention_purge_retries_pending_object_deletion(
     assert image.retention_expires_at is None
     assert db_session.get(Prediction, prediction.id) is not None
     assert storage.deleted == ["skin-images/opaque-key.jpg"]
+
+
+def test_retention_purge_revokes_history_consent_and_keeps_audit_rows(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        has_active_skin_image_consent,
+        purge_expired_skin_image_records,
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session, user.id, prediction.id,
+        purpose="skin_image_history", action="granted",
+        policy_version="image-history-v1",
+    )
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=1)
+    image = set_skin_image_retention_expiry(
+        db_session, user.id, prediction.id,
+        expires_at=expiry, policy_version="retention-policy-v2",
+    )
+    storage = FakePrivateStorage()
+    summary = purge_expired_skin_image_records(
+        db_session, image_storage=storage, as_of=expiry + timedelta(seconds=1),
+    )
+
+    assert summary == {"processed": 1, "deleted": 1, "failed": 0}
+    db_session.refresh(image)
+    assert image.storage_status == "deleted"
+    assert image.retention_expires_at is None
+    assert db_session.get(Prediction, prediction.id) is not None
+    assert not has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
+    events = list(db_session.scalars(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        )
+        .order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+    ).all())
+    assert [event.action for event in events] == ["granted", "revoked"]
+    assert events[-1].policy_version == "retention-policy-v2"
+    assert storage.deleted == ["skin-images/opaque-key.jpg"]
+
+
+def test_retention_purge_does_not_revoke_consent_when_object_delete_fails(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        has_active_skin_image_consent,
+        purge_expired_skin_image_records,
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session, user.id, prediction.id,
+        purpose="skin_image_history", action="granted",
+        policy_version="image-history-v1",
+    )
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=1)
+    image = set_skin_image_retention_expiry(
+        db_session, user.id, prediction.id,
+        expires_at=expiry, policy_version="retention-policy-v2",
+    )
+    storage = FakePrivateStorage(fail_once=True)
+    summary = purge_expired_skin_image_records(
+        db_session, image_storage=storage, as_of=expiry + timedelta(seconds=1),
+    )
+    db_session.refresh(image)
+    events = list(db_session.scalars(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        )
+        .order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+    ).all())
+    assert summary == {"processed": 1, "deleted": 0, "failed": 1}
+    assert image.storage_status == "deletion_pending"
+    assert image.retention_expires_at == expiry
+    assert [event.action for event in events] == ["granted"]
+    assert has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
