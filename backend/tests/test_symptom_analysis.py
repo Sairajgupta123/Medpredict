@@ -48,6 +48,26 @@ def test_normalize_flags_negated_mentions_separately() -> None:
     assert body["contextual_mentions"][0]["context_flag"] == "negated_or_denied_context"
 
 
+def test_normalize_flags_unrecognized_words_even_when_symptoms_match() -> None:
+    response = client.post(
+        "/api/v1/symptoms/normalize",
+        json=request_payload("I have a headache and a completely unsupported phrase."),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["matched_symptoms"]] == ["SYM_HEADACHE"]
+    assert body["unrecognized_text_present"] is True
+
+
+def test_normalize_does_not_flag_ordinary_sentence_filler_as_unrecognized() -> None:
+    response = client.post(
+        "/api/v1/symptoms/normalize",
+        json=request_payload("I have a headache and fever."),
+    )
+    assert response.status_code == 200
+    assert response.json()["unrecognized_text_present"] is False
+
+
 def test_normalize_does_not_echo_unrecognized_text() -> None:
     private_text = "private phrase user@example.com"
     response = client.post(
