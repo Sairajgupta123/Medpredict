@@ -21,7 +21,11 @@ from app.services.skin_image_storage import (
     build_skin_image_object_key,
 )
 from app.services.skin_image_storage_factory import build_skin_image_storage
-from app.services.prediction_history import get_owned_prediction, has_active_skin_image_consent
+from app.services.prediction_history import (
+    get_owned_prediction,
+    has_active_skin_image_consent,
+    record_skin_image_consent_decision,
+)
 from app.services.skin_image_validation import (
     MAX_IMAGE_BYTES,
     assess_skin_image_quality,
@@ -226,6 +230,68 @@ def intake_skin_image(
             "or clinical interpretation was performed."
         ),
     )
+
+
+@router.post("/{prediction_id}/revoke-review-consent")
+def revoke_skin_image_review_consent(
+    prediction_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    """Revoke human-review permission and disable all reviewer scopes for this image."""
+    from uuid import UUID
+
+    try:
+        parsed_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Image history item not found.") from exc
+    prediction = get_owned_prediction(db, user.id, parsed_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(status_code=409, detail="Human image-review consent applies only to image submissions.")
+
+    event = record_skin_image_consent_decision(
+        db,
+        user.id,
+        prediction.id,
+        purpose="skin_image_review",
+        action="revoked",
+        policy_version="image-review-v1",
+    )
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
+    )
+    if image_record is not None:
+        active_scopes = db.scalars(
+            select(CatalogReviewerScope)
+            .where(
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+                CatalogReviewerScope.revoked_at.is_(None),
+            )
+            .with_for_update()
+        ).all()
+        for scope in active_scopes:
+            reason = "Image owner revoked human-review consent."
+            scope.revoked_by = user.id
+            scope.revoked_at = datetime.now(timezone.utc)
+            scope.revoke_reason = reason
+            db.add(CatalogReviewerScopeEvent(
+                scope_id=scope.id,
+                reviewer_id=scope.reviewer_id,
+                event_type="revoked",
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                operator_id=user.id,
+                reason=reason,
+            ))
+        db.commit()
+    return {
+        "prediction_id": str(prediction.id),
+        "purpose": event.purpose,
+        "consent_status": "revoked",
+        "reviewer_access_revoked": True,
+        "message": "Human review is disabled for this image. Existing audit records are retained.",
+    }
 
 
 @router.get("/{prediction_id}", response_class=Response)
@@ -665,6 +731,10 @@ def list_skin_image_review_events(
         db, user, parsed_id
     ):
         raise HTTPException(status_code=403, detail="Active skin-image review scope required.")
+    if user.role != "admin" and not has_active_skin_image_consent(
+        db, parsed_id, purpose="skin_image_review"
+    ):
+        raise HTTPException(status_code=403, detail="Active human-review consent is required.")
     events = db.scalars(
         select(SkinImageReviewEvent)
         .where(SkinImageReviewEvent.prediction_id == parsed_id)
