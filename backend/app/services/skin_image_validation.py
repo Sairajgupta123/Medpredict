@@ -85,23 +85,21 @@ def validate_and_sanitize_skin_image(
                 raise ValueError("Oriented image dimensions exceed the 6000 pixel limit.")
             if width * height > MAX_IMAGE_PIXELS:
                 raise ValueError("Oriented image exceeds the 20 megapixel processing limit.")
-            pixels = oriented.convert(mode)
             # Rebuild from raw pixels so EXIF, ICC, textual and other metadata
-            # cannot be copied into the sanitized output.
-            clean = Image.frombytes(mode, pixels.size, pixels.tobytes())
-            output = BytesIO()
-            save_options: dict[str, object] = {}
-            if detected_format == "JPEG":
-                save_options = {"quality": 90, "optimize": True}
-            elif detected_format == "PNG":
-                save_options = {"optimize": True}
-            else:
-                save_options = {"quality": 90, "method": 4}
-            clean.save(output, format=detected_format, **save_options)
-            sanitized = output.getvalue()
-            clean.close()
-            pixels.close()
-            oriented.close()
+            # cannot be copied into the sanitized output. Context managers ensure
+            # decoded pixel buffers are released even if conversion or encoding fails.
+            with oriented.convert(mode) as pixels:
+                with Image.frombytes(mode, pixels.size, pixels.tobytes()) as clean:
+                    output = BytesIO()
+                    save_options: dict[str, object] = {}
+                    if detected_format == "JPEG":
+                        save_options = {"quality": 90, "optimize": True}
+                    elif detected_format == "PNG":
+                        save_options = {"optimize": True}
+                    else:
+                        save_options = {"quality": 90, "method": 4}
+                    clean.save(output, format=detected_format, **save_options)
+                    sanitized = output.getvalue()
 
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ValueError("Image bytes are invalid or cannot be decoded.") from exc
