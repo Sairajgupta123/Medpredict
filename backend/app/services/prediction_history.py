@@ -316,7 +316,7 @@ def list_expired_skin_image_records(
         db.scalars(
             select(SkinImageAnalysis)
             .where(
-                SkinImageAnalysis.storage_status == "stored",
+                SkinImageAnalysis.storage_status.in_({"stored", "deletion_pending"}),
                 SkinImageAnalysis.retention_expires_at <= as_of,
                 SkinImageAnalysis.retention_expires_at.is_not(None),
             )
