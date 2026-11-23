@@ -214,6 +214,14 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
             "reason": "Reassignment must respect revoked consent.",
         },
     )
+    decision = client.post(
+        f"/api/v1/skin-images/review/{prediction_id}/decision",
+        headers=headers,
+        json={
+            "outcome": "capture_adequate",
+            "reason": "Decision must respect revoked consent.",
+        },
+    )
 
     assert queue.status_code == 200
     assert queue.json() == []
@@ -223,6 +231,8 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
     assert "consent" in events.json()["detail"].lower()
     assert assignment.status_code == 403
     assert "consent" in assignment.json()["detail"].lower()
+    assert decision.status_code == 403
+    assert "consent" in decision.json()["detail"].lower()
 
 
 
