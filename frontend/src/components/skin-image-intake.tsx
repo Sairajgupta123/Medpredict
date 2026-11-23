@@ -96,6 +96,9 @@ export function SkinImageIntake() {
         method: "POST",
         body,
         cache: "no-store",
+        // The server-side proxy allows 30 seconds for the private storage service.
+        // Keep the browser request slightly longer so it can receive that response.
+        signal: AbortSignal.timeout(35_000),
       });
       const payload = await response.json() as IntakeResponse & ApiError;
       if (!response.ok) {
