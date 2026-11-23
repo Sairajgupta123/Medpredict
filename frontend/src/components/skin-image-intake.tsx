@@ -151,7 +151,7 @@ export function SkinImageIntake() {
     try {
       const response = await fetch(
         `/api/skin-images/${encodeURIComponent(result.prediction_id)}/revoke-review-consent`,
-        { method: "POST", cache: "no-store" },
+        { method: "POST", cache: "no-store", signal: AbortSignal.timeout(10_000) },
       );
       const payload = await response.json() as ApiError & { consent_status?: string; reviewer_access_revoked?: boolean };
       if (!response.ok || payload.consent_status !== "revoked" || payload.reviewer_access_revoked !== true) {
