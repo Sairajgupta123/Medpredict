@@ -20,6 +20,21 @@ const requestOrigin = new URL(home.url).origin;
 process.stdout.write(`PASS production homepage (HTTP ${home.status})\n`);
 
 
+
+for (const endpoint of ["login", "register"]) {
+  const authPath = `/api/auth/${endpoint}`;
+  await check(
+    `reject cross-origin auth ${endpoint}`,
+    { path: authPath, init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject malformed auth ${endpoint} payload`,
+    { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
+    400,
+  );
+}
+
 const logoutPath = "/api/auth/logout";
 await check(
   "reject cross-origin logout request",
