@@ -748,10 +748,11 @@ def list_skin_image_review_events(
         parsed_id = UUID(prediction_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Review history not found.") from exc
+    # Serialize audit-history reads with consent withdrawal and reassignment.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(
-            SkinImageAnalysis.prediction_id == parsed_id
-        )
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == parsed_id)
+        .with_for_update()
     )
     if image_record is None or (
         user.role != "admin" and image_record.assigned_reviewer_id != user.id
