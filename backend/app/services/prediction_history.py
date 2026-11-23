@@ -307,8 +307,9 @@ def list_expired_skin_image_records(
 ) -> list[SkinImageAnalysis]:
     """Find stored images whose explicit retention deadline has elapsed.
 
-    This is a candidate query for a future worker, not an automatic deletion
-    operation. It intentionally excludes unknown, failed, and in-flight states.
+    The retention worker consumes this bounded candidate set and rechecks each
+    row under a lock before deleting its private object. Unknown, failed, and
+    in-flight states are intentionally excluded.
     """
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("Expiry query timestamp must include a timezone.")
