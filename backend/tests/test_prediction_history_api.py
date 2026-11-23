@@ -939,3 +939,24 @@ def test_admin_can_grant_a_prediction_specific_skin_image_scope(
         },
     )
     assert forbidden.status_code == 403
+
+
+def test_skin_image_scope_rejects_broad_null_scope(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-scope-null-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-scope-null-reviewer@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+
+    response = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=_headers(admin_token),
+        json={
+            "reviewer_id": str(reviewer.id),
+            "scope_type": "skin_image",
+            "scope_key": None,
+            "reason": "Broad image access should be rejected.",
+        },
+    )
+    assert response.status_code == 422
