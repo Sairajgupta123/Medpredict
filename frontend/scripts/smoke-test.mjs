@@ -54,4 +54,17 @@ await check(
   401,
 );
 
+
+const testPredictionId = "00000000-0000-4000-8000-000000000001";
+await check(
+  "require authentication to revoke skin-image review consent",
+  { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST", headers: { Origin: baseUrl } } },
+  401,
+);
+await check(
+  "require authentication to retrieve private skin review image",
+  { path: `/api/skin-images/review/${testPredictionId}/image`, init: { method: "GET" } },
+  401,
+);
+
 process.stdout.write("Production smoke checks completed. No personal health data was submitted.\n");
