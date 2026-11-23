@@ -16,6 +16,7 @@ type NormalizeResult = {
   contextual_mentions: ContextualMention[];
   unrecognized_text_present: boolean;
   review_required: boolean;
+  reason: string;
   reported_context: ReportedContext;
   clinical_interpretation_performed: false;
   model_inference_performed: false;
