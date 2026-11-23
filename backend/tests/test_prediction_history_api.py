@@ -1562,3 +1562,53 @@ def test_image_history_consent_revocation_blocks_unknown_storage_state(
         assert latest is not None and latest.action == "granted"
     finally:
         db.close()
+
+def test_retention_deleted_image_blocks_reviewer_even_with_active_scope_and_consent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+    from app.models.prediction import SkinImageReviewEvent
+
+    reviewer_token, reviewer = _register(client, "skin-review-expired@example.com")
+    admin_token, admin = _register(client, "skin-review-expired-admin@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    _set_account_role(admin.id, "admin")
+    prediction, _, _ = _prepare_skin_review_item(reviewer.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        image.storage_status = "deleted"
+        image.deleted_at = datetime.now(timezone.utc)
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        db.commit()
+    finally:
+        db.close()
+
+    def storage_must_not_be_opened():
+        raise AssertionError("Deleted image must be rejected before storage access.")
+
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", storage_must_not_be_opened)
+    response = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert response.status_code == 404
+
+    db = TestingSessionLocal()
+    try:
+        access_events = db.scalars(
+            select(SkinImageReviewEvent).where(
+                SkinImageReviewEvent.prediction_id == prediction.id,
+                SkinImageReviewEvent.event_type == "image_accessed",
+            )
+        ).all()
+        assert access_events == []
+    finally:
+        db.close()
