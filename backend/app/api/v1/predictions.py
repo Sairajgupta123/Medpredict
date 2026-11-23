@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.models.prediction import Prediction
@@ -12,11 +12,15 @@ from app.schemas.prediction_history import (
     PredictionHistoryItem,
     PredictionHistoryPage,
 )
-from app.services.skin_image_storage import DisabledSkinImageStorage\nfrom app.services.skin_image_storage_factory import build_skin_image_storage\nfrom app.services.prediction_history import (
+from app.services.prediction_history import (
     delete_user_history_item,
+    get_owned_prediction,
     list_user_history,
-    revoke_text_history_consent,\n    revoke_skin_image_history_consent,
+    revoke_skin_image_history_consent,
+    revoke_text_history_consent,
 )
+from app.services.skin_image_storage import DisabledSkinImageStorage
+from app.services.skin_image_storage_factory import build_skin_image_storage
 
 router = APIRouter(prefix="/predictions/history", tags=["Prediction history"])
 
@@ -29,9 +33,7 @@ def read_prediction_history(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> PredictionHistoryPage:
     """List only the current user's history without returning health inputs."""
-    items, total = list_user_history(
-        db, user.id, limit=limit, offset=offset
-    )
+    items, total = list_user_history(db, user.id, limit=limit, offset=offset)
     return PredictionHistoryPage(
         items=[PredictionHistoryItem.model_validate(item) for item in items],
         total=total,
@@ -49,20 +51,17 @@ def revoke_prediction_history_consent(
     user: CurrentUser,
     db: DbSession,
 ) -> ConsentRevocationResponse:
-    """Revoke text-history consent and erase retained free text and results."""
-    existing = db.get(Prediction, prediction_id)
-    if existing is None or existing.user_id != user.id:
-        # Preserve the same not-found behavior as all other history operations.
-        from app.services.prediction_history import get_owned_prediction
-        existing = get_owned_prediction(db, user.id, prediction_id)
-
-    if existing.modality in {"skin_image", "combined"}:
+    """Revoke the applicable history consent and remove retained input data."""
+    prediction = get_owned_prediction(db, user.id, prediction_id)
+    if prediction.modality in {"skin_image", "combined"}:
         storage = build_skin_image_storage()
         if isinstance(storage, DisabledSkinImageStorage):
-            from fastapi import HTTPException
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Private image storage is not configured; image consent cannot be revoked safely.",
+                detail=(
+                    "Private image storage is not configured; image consent "
+                    "cannot be revoked safely."
+                ),
             )
         prediction = revoke_skin_image_history_consent(
             db,
@@ -75,12 +74,13 @@ def revoke_prediction_history_consent(
             prediction_id=prediction.id,
             consent_revoked=True,
             retained_input_removed=True,
-            message="Private image deletion was confirmed and image-history consent was revoked. Audit metadata is retained.",
+            message=(
+                "Private image deletion was confirmed and image-history "
+                "consent was revoked. Minimal audit metadata is retained."
+            ),
         )
 
-    prediction: Prediction = revoke_text_history_consent(
-        db, user.id, prediction_id
-    )
+    prediction = revoke_text_history_consent(db, user.id, prediction_id)
     return ConsentRevocationResponse(
         prediction_id=prediction.id,
         consent_revoked=True,
@@ -101,7 +101,7 @@ def delete_prediction_history_item(
     user: CurrentUser,
     db: DbSession,
 ) -> None:
-    """Delete one owned history item when no external image cleanup is needed."""
+    """Delete one owned history item, cleaning private image storage first."""
     storage = build_skin_image_storage()
     image_storage = (
         None if isinstance(storage, DisabledSkinImageStorage) else storage
