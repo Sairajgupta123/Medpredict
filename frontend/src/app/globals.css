@@ -667,3 +667,9 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
   .skin-history-delete-action { align-items: stretch; }
   .skin-history-delete-action .button { width: 100%; }
 }
+
+/* Explicit skin-image inference capability notice */
+.skin-intake-model-status { display: grid; gap: 8px; margin: 0 0 24px; padding: 15px 17px; border: 1px solid #e7eade; border-left: 3px solid #8da88f; border-radius: 8px; background: #f8faf6; }
+.skin-intake-model-status > strong { color: #526b58; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.skin-intake-model-status p { margin: 0; color: #718075; font-size: 11px; line-height: 1.7; }
+.skin-intake-model-status ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; color: #718075; font-size: 10px; line-height: 1.6; }
