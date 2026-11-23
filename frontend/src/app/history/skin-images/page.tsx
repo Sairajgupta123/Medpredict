@@ -269,7 +269,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
               <article className="review-card skin-history-card" key={item.id}>
                 <div className="review-card-heading">
                   <div><span className="review-type">PRIVATE SKIN IMAGE</span><h3>Submission {item.id.slice(0, 8)}</h3><p className="review-key">Reference: {item.id}</p></div>
-                  <span className="review-status review-status-assigned">{reviewStatuses[item.id]?.status_label ?? "Review status unavailable"}</span>
+                  <span className={`review-status ${reviewStatuses[item.id]?.status === "assigned" || reviewStatuses[item.id]?.status === "reviewed" ? "review-status-assigned" : "review-status-pending"}`}>{reviewStatuses[item.id]?.status_label ?? "Review status unavailable"}</span>
                 </div>
                 {reviewStatuses[item.id] && (
                   <div className="skin-owner-review-guidance" aria-label="Technical review information">
