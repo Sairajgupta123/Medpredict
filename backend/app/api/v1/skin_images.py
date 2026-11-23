@@ -306,7 +306,6 @@ class SkinImageAssignmentRequest(BaseModel):
 class SkinImageReviewDecisionRequest(BaseModel):
     outcome: str
     reason: str
-    note: str | None = None
 
 
 @router.get("/review/queue")
@@ -424,13 +423,10 @@ def submit_skin_image_review(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Skin image review item not found.") from exc
     reason = payload.reason.strip()
-    note = payload.note.strip() if payload.note else None
     if len(reason) < 8 or len(reason) > 1000:
         raise HTTPException(status_code=422, detail="Review reason must be 8–1,000 characters.")
-    if note is not None and len(note) > 1000:
-        raise HTTPException(status_code=422, detail="Review note must not exceed 1,000 characters.")
-    if payload.outcome not in {"image_adequate", "unable_to_assess"}:
-        raise HTTPException(status_code=422, detail="Outcome must be image_adequate or unable_to_assess.")
+    if payload.outcome not in {"capture_adequate", "unable_to_assess"}:
+        raise HTTPException(status_code=422, detail="Outcome must be capture_adequate or unable_to_assess.")
     prediction = db.get(Prediction, parsed_id)
     if prediction is None or prediction.modality not in {"skin_image", "combined"}:
         raise HTTPException(status_code=404, detail="Skin image review item not found.")
@@ -446,9 +442,8 @@ def submit_skin_image_review(
     if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
         raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
     image_record.review_outcome = payload.outcome
-    image_record.review_status = "reviewed" if payload.outcome == "image_adequate" else "unable_to_assess"
+    image_record.review_status = "reviewed" if payload.outcome == "capture_adequate" else "unable_to_assess"
     image_record.reviewed_at = datetime.now(timezone.utc)
-    image_record.reviewer_note = note
     image_record.review_required = False
     db.add(SkinImageReviewEvent(
         prediction_id=prediction.id,
