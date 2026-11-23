@@ -1,0 +1,137 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { API_BASE_URL, getSessionToken, getSessionUser } from "@/lib/auth-proxy";
+
+export const metadata: Metadata = { title: "Your skin image history" };
+
+type HistoryItem = {
+  id: string;
+  modality: string;
+  status: string;
+  model_version: string | null;
+  disclaimer_version: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+type HistoryPage = {
+  items: HistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+async function revokeReviewConsent(formData: FormData) {
+  "use server";
+  const predictionId = String(formData.get("prediction_id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(predictionId)) redirect("/history/skin-images?error=invalid");
+  const token = await getSessionToken();
+  if (!token) redirect("/login");
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/skin-images/${encodeURIComponent(predictionId)}/revoke-review-consent`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+  } catch {
+    redirect("/history/skin-images?error=unavailable");
+  }
+
+  if (response.status === 409) redirect("/history/skin-images?error=already-revoked");
+  if (!response.ok) redirect("/history/skin-images?error=save");
+  revalidatePath("/history/skin-images");
+  redirect("/history/skin-images?updated=revoked");
+}
+
+type PageProps = { searchParams: Promise<{ updated?: string; error?: string }> };
+
+export default async function SkinImageHistoryPage({ searchParams }: PageProps) {
+  const session = await getSessionUser();
+  if (!session.user) redirect("/login");
+  const token = await getSessionToken();
+  const params = await searchParams;
+
+  let items: HistoryItem[] = [];
+  let loadError = "";
+  if (token) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/predictions/history?limit=100&offset=0`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = await response.json() as HistoryPage;
+        if (Array.isArray(payload.items)) {
+          items = payload.items.filter((item) => item.modality === "skin_image" || item.modality === "combined");
+        } else loadError = "The history service returned an unexpected response.";
+      } else loadError = "Your image history could not be loaded.";
+    } catch {
+      loadError = "The MediPredict server is unavailable.";
+    }
+  } else {
+    loadError = "Your session has expired. Please sign in again.";
+  }
+
+  return (
+    <main id="main-content" className="review-page skin-history-page">
+      <section className="review-hero">
+        <div className="container">
+          <Link className="back-link" href="/dashboard">← Back to workspace</Link>
+          <div className="eyebrow"><span className="eyebrow-dot" /> PRIVATE IMAGE HISTORY</div>
+          <h1>Your submissions, <em>your control.</em></h1>
+          <p>Only metadata for your own image submissions is listed here. Image bytes, storage keys and reviewer notes are not exposed in this history view.</p>
+          <div className="review-summary">
+            <div><strong>{items.length.toString().padStart(2, "0")}</strong><span>IMAGE SUBMISSIONS SHOWN</span></div>
+            <div><strong>Owner only</strong><span>AUTHENTICATED ACCOUNT</span></div>
+          </div>
+        </div>
+      </section>
+      <section className="container review-content">
+        {params.updated === "revoked" && <div className="review-alert review-alert-success" role="status">Human-review consent was revoked. Reviewer access for that image has been disabled.</div>}
+        {params.error === "invalid" && <div className="review-alert" role="alert">The selected image reference is invalid.</div>}
+        {params.error === "already-revoked" && <div className="review-alert" role="status">No active human-review consent was found for that image.</div>}
+        {params.error === "unavailable" && <div className="review-alert" role="alert">The consent service is unavailable. Revocation was not confirmed.</div>}
+        {params.error === "save" && <div className="review-alert" role="alert">The consent change could not be confirmed.</div>}
+        {loadError && <div className="review-alert" role="alert">{loadError}</div>}
+        <div className="review-section-heading">
+          <div><span className="eyebrow">YOUR RECORDS</span><h2>Skin image submissions</h2></div>
+          <Link className="review-page-link" href="/skin-image">Upload another image →</Link>
+        </div>
+        {!loadError && items.length === 0 ? (
+          <div className="review-empty"><h3>No skin-image submissions yet</h3><p>When you submit an image with all required consents, its private history metadata will appear here.</p><Link className="button button-primary" href="/skin-image">Start a private upload →</Link></div>
+        ) : (
+          <div className="review-list">
+            {items.map((item) => (
+              <article className="review-card skin-history-card" key={item.id}>
+                <div className="review-card-heading">
+                  <div><span className="review-type">PRIVATE SKIN IMAGE</span><h3>Submission {item.id.slice(0, 8)}</h3><p className="review-key">Reference: {item.id}</p></div>
+                  <span className="review-status review-status-assigned">{item.status.replaceAll("_", " ")}</span>
+                </div>
+                <div className="review-item-meta">
+                  <span>Submitted {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</span>
+                  <span>Image contents are not included in this list</span>
+                </div>
+                <form action={revokeReviewConsent} className="skin-history-action">
+                  <input type="hidden" name="prediction_id" value={item.id} />
+                  <div><strong>Human-review permission</strong><small>Revoke the separate consent and disable assigned reviewer access for this image.</small></div>
+                  <button className="button button-secondary" type="submit">Revoke review consent</button>
+                </form>
+              </article>
+            ))}
+          </div>
+        )}
+        <div className="review-safety-note">
+          <strong>Separate controls</strong>
+          <p>Revoking human-review consent does not delete your image-history record. Image-history deletion is a separate action and is not offered here until its retention and deletion consequences can be presented with clear confirmation.</p>
+        </div>
+      </section>
+    </main>
+  );
+}
