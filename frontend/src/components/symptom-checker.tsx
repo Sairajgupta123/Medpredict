@@ -145,7 +145,20 @@ export function SymptomChecker() {
         body.method !== "approved_catalog_overlap" ||
         body.clinical_interpretation_performed !== false ||
         body.disease_probability_provided !== false ||
-        !Array.isArray(body.results)
+        typeof body.disclaimer !== "string" || body.disclaimer.trim().length === 0 ||
+        !Array.isArray(body.results) ||
+        !body.results.every((item) => item &&
+          typeof item.disease_code === "string" && item.disease_code.trim().length > 0 &&
+          typeof item.disease_name === "string" && item.disease_name.trim().length > 0 &&
+          Number.isInteger(item.catalog_symptom_count) && item.catalog_symptom_count > 0 &&
+          Number.isInteger(item.matched_symptom_count) && item.matched_symptom_count > 0 &&
+          item.matched_symptom_count <= item.catalog_symptom_count &&
+          Array.isArray(item.matched_symptoms) && item.matched_symptoms.length === item.matched_symptom_count &&
+          item.matched_symptoms.every((symptom) => symptom &&
+            typeof symptom.symptom_code === "string" && symptom.symptom_code.trim().length > 0 &&
+            typeof symptom.symptom_name === "string" && symptom.symptom_name.trim().length > 0) &&
+          typeof item.catalog_overlap_ratio === "number" && Number.isFinite(item.catalog_overlap_ratio) &&
+          item.catalog_overlap_ratio >= 0 && item.catalog_overlap_ratio <= 1)
       ) {
         setMatchError("The catalog service returned an unexpected response. No result was displayed.");
         return;
@@ -179,10 +192,23 @@ export function SymptomChecker() {
         return;
       }
       if (
-        body.clinical_interpretation_performed !== false ||
-        body.model_inference_performed !== false ||
-        body.disease_prediction_performed !== false ||
-        body.research_only !== true
+        typeof body.taxonomy_version !== "string" || body.taxonomy_version.trim().length === 0 ||
+        typeof body.unrecognized_text_present !== "boolean" || body.review_required !== true ||
+        typeof body.reason !== "string" || body.reason.trim().length === 0 ||
+        typeof body.disclaimer !== "string" || body.disclaimer.trim().length === 0 ||
+        !body.reported_context || body.reported_context.duration !== duration ||
+        body.reported_context.severity !== severity || body.reported_context.onset !== onset ||
+        !Array.isArray(body.matched_symptoms) || !Array.isArray(body.contextual_mentions) ||
+        ![...body.matched_symptoms, ...body.contextual_mentions].every((item) => item &&
+          typeof item.id === "string" && /^[A-Z0-9_]{2,80}$/.test(item.id) &&
+          typeof item.label === "string" && item.label.trim().length > 0 && item.label.length <= 120 &&
+          typeof item.category === "string" && item.category.trim().length > 0 && item.category.length <= 80) ||
+        new Set([...body.matched_symptoms, ...body.contextual_mentions].map((item) => item.id)).size !==
+          body.matched_symptoms.length + body.contextual_mentions.length ||
+        !body.contextual_mentions.every((item) =>
+          ["negated_or_denied_context", "possibly_historical_context", "uncertain_context", "explicit_mention_unresolved"].includes(item.context_flag)) ||
+        body.clinical_interpretation_performed !== false || body.model_inference_performed !== false ||
+        body.disease_prediction_performed !== false || body.research_only !== true
       ) {
         setError("The symptom service returned an unexpected response. No result was displayed.");
         return;
