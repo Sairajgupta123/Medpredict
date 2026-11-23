@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from typing import Annotated
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
@@ -319,22 +319,14 @@ def revoke_skin_image_review_consent(
     }
 
 
-@router.get("/{prediction_id}", response_class=Response)
+@router.get("/{prediction_id:uuid}", response_class=Response)
 def retrieve_skin_image(
-    prediction_id: str,
+    prediction_id: UUID,
     user: CurrentUser,
     db: DbSession,
 ) -> Response:
     """Stream an owner's retained image only while image-history consent is active."""
-    from uuid import UUID
-
-    try:
-        parsed_prediction_id = UUID(prediction_id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image history item not found.",
-        ) from exc
+    parsed_prediction_id = prediction_id
 
     prediction = get_owned_prediction(db, user.id, parsed_prediction_id)
     if prediction.modality not in {"skin_image", "combined"}:
