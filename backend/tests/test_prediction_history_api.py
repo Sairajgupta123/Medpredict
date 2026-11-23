@@ -1053,3 +1053,82 @@ def test_reassignment_revokes_previous_reviewers_exact_image_scope(
     )
     assert new_queue.status_code == 200
     assert [item["prediction_id"] for item in new_queue.json()] == [str(prediction.id)]
+
+
+def test_skin_image_intake_requires_separate_human_review_consent(
+    client: TestClient,
+) -> None:
+    token, _ = _register(client, "image-review-consent-required@example.com")
+    form = _intake_form()
+    form["review_consent"] = "false"
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=_headers(token),
+        data=form,
+        files={"image": ("skin.png", _small_png(), "image/png")},
+    )
+    assert response.status_code == 422
+    assert "human-review" in response.json()["detail"]
+
+
+def test_owner_revoking_review_consent_revokes_assigned_reviewer_scope(
+    client: TestClient,
+) -> None:
+    from app.models.reviewer_scope import CatalogReviewerScope
+    from app.models.prediction import PredictionConsentEvent
+
+    owner_token, owner = _register(client, "skin-review-consent-owner@example.com")
+    admin_token, admin = _register(client, "skin-review-consent-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-review-consent-reviewer@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    assigned = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(reviewer.id), "reason": "Assign for technical image review."},
+    )
+    assert assigned.status_code == 200, assigned.text
+
+    revoked = client.post(
+        f"/api/v1/skin-images/{prediction.id}/revoke-review-consent",
+        headers=_headers(owner_token),
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json()["consent_status"] == "revoked"
+    assert revoked.json()["reviewer_access_revoked"] is True
+
+    queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=_headers(reviewer_token),
+    )
+    assert queue.status_code == 200
+    assert queue.json() == []
+
+    image = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert image.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        scope = db.scalar(
+            select(CatalogReviewerScope).where(
+                CatalogReviewerScope.reviewer_id == reviewer.id,
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+            )
+        )
+        assert scope is not None and scope.revoked_at is not None
+        consent = db.scalar(
+            select(PredictionConsentEvent).where(
+                PredictionConsentEvent.prediction_id == prediction.id,
+                PredictionConsentEvent.purpose == "skin_image_review",
+            ).order_by(PredictionConsentEvent.captured_at.desc())
+        )
+        assert consent is not None and consent.action == "revoked"
+    finally:
+        db.close()
