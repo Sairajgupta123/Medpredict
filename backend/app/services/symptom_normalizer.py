@@ -212,11 +212,29 @@ def normalize_symptoms(
         else:
             contextual.append({**item, "context_flag": status})
 
+    # Remove every recognized phrase, then ignore common grammatical filler.
+    # Any remaining token is deliberately surfaced as unsupported text rather
+    # than silently treating a partially understood narrative as fully parsed.
+    residual_characters = list(padded_text)
+    for start, end in accepted_spans:
+        for position in range(start, end):
+            residual_characters[position] = " "
+    residual_tokens = set(" ".join(residual_characters).split())
+    filler_tokens = {
+        "i", "me", "my", "we", "you", "he", "she", "they", "it",
+        "have", "has", "had", "am", "is", "are", "was", "were",
+        "a", "an", "the", "and", "but", "or", "with", "of", "to",
+        "for", "in", "on", "at", "some", "any", "please", "experiencing",
+        "experience", "feeling", "feel", "been", "being", "there",
+        "this", "that", "from", "since",
+    }
+    unrecognized_text_present = bool(residual_tokens - filler_tokens)
+
     return {
         "taxonomy_version": _taxonomy_version() if taxonomy is None else "custom",
         "matched_symptoms": matched,
         "contextual_mentions": contextual,
-        "unrecognized_text_present": not bool(matched or contextual),
+        "unrecognized_text_present": unrecognized_text_present,
         "review_required": True,
         "reason": "explicit_phrase_matches" if matched else (
             "context_requires_review" if contextual else "no_supported_phrase_match"
