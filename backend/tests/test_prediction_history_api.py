@@ -247,3 +247,156 @@ def test_image_history_delete_is_blocked_until_object_cleanup_exists(
     )
     assert response.status_code == 409
     assert "object-storage cleanup" in response.json()["detail"]
+
+
+class _FakeIntakeStorage:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.objects: dict[str, tuple[bytes, str]] = {}
+
+    def put_private(self, object_key: str, content: bytes, content_type: str) -> None:
+        if self.fail:
+            raise OSError("simulated private storage outage")
+        self.objects[object_key] = (content, content_type)
+
+    def get_private(self, object_key: str) -> bytes:
+        return self.objects[object_key][0]
+
+    def delete_private(self, object_key: str) -> None:
+        self.objects.pop(object_key, None)
+
+
+def _small_png() -> bytes:
+    from io import BytesIO
+    from PIL import Image
+
+    output = BytesIO()
+    Image.new("RGB", (320, 320), (120, 80, 60)).save(output, format="PNG")
+    return output.getvalue()
+
+
+def _intake_form() -> dict[str, str]:
+    return {
+        "processing_consent": "true",
+        "history_consent": "true",
+        "processing_policy_version": "image-processing-v1",
+        "history_policy_version": "image-history-v1",
+    }
+
+
+def test_skin_image_intake_requires_both_separate_consents(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token, _ = _register(client, "image-consent-required@example.com")
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=_headers(token),
+        data={**_intake_form(), "history_consent": "false"},
+        files={"image": ("skin.png", _small_png(), "image/png")},
+    )
+    assert response.status_code == 422
+    assert "separate" in response.json()["detail"].lower()
+
+
+def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-intake@example.com")
+    storage = _FakeIntakeStorage()
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=_headers(token),
+        data=_intake_form(),
+        files={"image": ("skin.png", _small_png(), "image/png")},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["storage_status"] == "stored"
+    assert body["clinical_interpretation_performed"] is False
+    assert body["disease_prediction_performed"] is False
+    assert "object_key" not in body and "url" not in body
+    assert len(storage.objects) == 1
+
+    db = TestingSessionLocal()
+    try:
+        prediction = db.get(Prediction, body["prediction_id"])
+        assert prediction is not None
+        assert prediction.user_id == user.id
+        assert prediction.status == "review_required"
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        assert image is not None and image.storage_status == "stored"
+        events = list(
+            db.scalars(
+                select(PredictionConsentEvent).where(
+                    PredictionConsentEvent.prediction_id == prediction.id
+                )
+            ).all()
+        )
+        assert {event.purpose for event in events} == {
+            "skin_image_processing",
+            "skin_image_history",
+        }
+    finally:
+        db.close()
+
+
+def test_skin_image_intake_records_failed_storage_without_claiming_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-intake-failure@example.com")
+    monkeypatch.setattr(
+        skin_images,
+        "build_skin_image_storage",
+        lambda: _FakeIntakeStorage(fail=True),
+    )
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=_headers(token),
+        data=_intake_form(),
+        files={"image": ("skin.png", _small_png(), "image/png")},
+    )
+    assert response.status_code == 503
+    db = TestingSessionLocal()
+    try:
+        prediction = db.scalar(
+            select(Prediction).where(Prediction.user_id == user.id)
+        )
+        assert prediction is not None
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        assert image is not None and image.storage_status == "failed"
+    finally:
+        db.close()
+
+
+def test_skin_image_intake_fails_closed_when_storage_is_not_configured(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+    from app.services.skin_image_storage import DisabledSkinImageStorage
+
+    token, _ = _register(client, "image-intake-disabled@example.com")
+    monkeypatch.setattr(
+        skin_images, "build_skin_image_storage", DisabledSkinImageStorage
+    )
+    response = client.post(
+        "/api/v1/skin-images/intake",
+        headers=_headers(token),
+        data=_intake_form(),
+        files={"image": ("skin.png", _small_png(), "image/png")},
+    )
+    assert response.status_code == 503
+    assert "not configured" in response.json()["detail"]
