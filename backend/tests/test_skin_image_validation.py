@@ -90,3 +90,30 @@ def test_rejects_animated_webp() -> None:
     )
     with pytest.raises(ValueError, match="Animated"):
         validate_and_sanitize_skin_image(buffer.getvalue(), "image/webp")
+
+
+def test_quality_assessment_flags_small_dark_uniform_image() -> None:
+    from app.services.skin_image_validation import assess_skin_image_quality
+
+    result = assess_skin_image_quality(_image_bytes(size=(64, 64)))
+    assert result.width == 64
+    assert result.height == 64
+    assert "low_resolution" in result.warnings
+    assert "possibly_too_dark" in result.warnings
+    assert "low_contrast_or_uniform_image" in result.warnings
+
+
+def test_quality_assessment_does_not_call_technical_checks_a_diagnosis() -> None:
+    from app.services.skin_image_validation import assess_skin_image_quality
+
+    result = assess_skin_image_quality(_image_bytes(size=(512, 512)))
+    assert isinstance(result.warnings, tuple)
+    assert result.mean_luminance >= 0
+    assert result.luminance_spread >= 0
+
+
+def test_quality_assessment_rejects_invalid_bytes() -> None:
+    from app.services.skin_image_validation import assess_skin_image_quality
+
+    with pytest.raises(ValueError, match="invalid or cannot be decoded"):
+        assess_skin_image_quality(b"not sanitized image bytes")
