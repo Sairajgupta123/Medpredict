@@ -364,6 +364,169 @@ def assign_skin_image_review(
     reason = payload.reason.strip()
     if len(reason) < 8 or len(reason) > 1000:
         raise HTTPException(status_code=422, detail="Assignment reason must be 8–1,000 characters.")
-    prediction = get_owned_prediction(db, administrator.id, parsed_id)
-    # Admin assignment is cross-user by design; ownership helper is not applicable.
-    raise HTTPException(status_code=501, detail="Assignment service is not yet available.")
+    prediction = db.get(Prediction, parsed_id)
+    if prediction is None or prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(status_code=404, detail="Skin image review item not found.")
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id).with_for_update()
+    )
+    if image_record is None or image_record.storage_status != "stored":
+        raise HTTPException(status_code=409, detail="Only stored images can be assigned for review.")
+    if image_record.review_status in {"reviewed", "unable_to_assess"}:
+        raise HTTPException(status_code=409, detail="This image review is already completed.")
+    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
+        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    reviewer = db.scalar(
+        select(User).where(
+            User.id == reviewer_id,
+            User.role == "reviewer",
+            User.is_active.is_(True),
+            User.email_verified.is_(True),
+        )
+    )
+    if reviewer is None:
+        raise HTTPException(status_code=404, detail="Active verified reviewer not found.")
+    previous_reviewer_id = image_record.assigned_reviewer_id
+    image_record.assigned_reviewer_id = reviewer.id
+    image_record.assigned_by = administrator.id
+    image_record.assigned_at = datetime.now(timezone.utc)
+    image_record.review_status = "assigned"
+    db.add(SkinImageReviewEvent(
+        prediction_id=prediction.id,
+        image_analysis_id=image_record.id,
+        event_type="reassigned" if previous_reviewer_id else "assigned",
+        actor_id=administrator.id,
+        assigned_reviewer_id=reviewer.id,
+        reason=reason,
+    ))
+    db.commit()
+    return {
+        "prediction_id": str(prediction.id),
+        "reviewer_id": str(reviewer.id),
+        "review_status": image_record.review_status,
+    }
+
+
+@router.post("/review/{prediction_id}/decision")
+def submit_skin_image_review(
+    prediction_id: str,
+    payload: SkinImageReviewDecisionRequest,
+    user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    """Record a non-diagnostic technical image review by its assignee or admin."""
+    from uuid import UUID
+
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    try:
+        parsed_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Skin image review item not found.") from exc
+    reason = payload.reason.strip()
+    note = payload.note.strip() if payload.note else None
+    if len(reason) < 8 or len(reason) > 1000:
+        raise HTTPException(status_code=422, detail="Review reason must be 8–1,000 characters.")
+    if note is not None and len(note) > 1000:
+        raise HTTPException(status_code=422, detail="Review note must not exceed 1,000 characters.")
+    if payload.outcome not in {"image_adequate", "unable_to_assess"}:
+        raise HTTPException(status_code=422, detail="Outcome must be image_adequate or unable_to_assess.")
+    prediction = db.get(Prediction, parsed_id)
+    if prediction is None or prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(status_code=404, detail="Skin image review item not found.")
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id).with_for_update()
+    )
+    if image_record is None or image_record.storage_status != "stored":
+        raise HTTPException(status_code=409, detail="Stored image is not available for review.")
+    if user.role != "admin" and image_record.assigned_reviewer_id != user.id:
+        raise HTTPException(status_code=404, detail="Assigned review item not found.")
+    if image_record.review_status != "assigned":
+        raise HTTPException(status_code=409, detail="Image is not awaiting review.")
+    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
+        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    image_record.review_outcome = payload.outcome
+    image_record.review_status = "reviewed" if payload.outcome == "image_adequate" else "unable_to_assess"
+    image_record.reviewed_at = datetime.now(timezone.utc)
+    image_record.reviewer_note = note
+    image_record.review_required = False
+    db.add(SkinImageReviewEvent(
+        prediction_id=prediction.id,
+        image_analysis_id=image_record.id,
+        event_type="reviewed",
+        actor_id=user.id,
+        assigned_reviewer_id=image_record.assigned_reviewer_id,
+        outcome=payload.outcome,
+        reason=reason,
+    ))
+    db.commit()
+    return {
+        "prediction_id": str(prediction.id),
+        "review_status": image_record.review_status,
+        "review_outcome": image_record.review_outcome,
+        "reviewed_at": image_record.reviewed_at,
+        "clinical_interpretation_performed": False,
+        "disease_prediction_performed": False,
+    }
+
+
+@router.get("/review/{prediction_id}/image", response_class=Response)
+def retrieve_assigned_review_image(
+    prediction_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Return image bytes only to its assigned reviewer or an administrator."""
+    from uuid import UUID
+
+    if user.role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    try:
+        parsed_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Review image not found.") from exc
+    prediction = db.get(Prediction, parsed_id)
+    if prediction is None or prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(status_code=404, detail="Review image not found.")
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
+    )
+    if (
+        image_record is None
+        or image_record.storage_status != "stored"
+        or image_record.review_status != "assigned"
+        or (user.role != "admin" and image_record.assigned_reviewer_id != user.id)
+    ):
+        raise HTTPException(status_code=404, detail="Assigned review image not found.")
+    if not has_active_skin_image_consent(db, prediction.id, purpose="skin_image_processing"):
+        raise HTTPException(status_code=403, detail="Active image-processing consent is required.")
+    try:
+        storage = build_skin_image_storage()
+        if isinstance(storage, DisabledSkinImageStorage):
+            raise RuntimeError("Private image storage is disabled.")
+        content = storage.get_private(image_record.object_key)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Private review image is unavailable.") from exc
+    if (
+        not isinstance(content, bytes)
+        or not content
+        or len(content) > MAX_IMAGE_BYTES
+        or hashlib.sha256(content).hexdigest() != image_record.image_sha256
+    ):
+        raise HTTPException(status_code=503, detail="Review image failed integrity validation.")
+    try:
+        validated = validate_and_sanitize_skin_image(content, image_record.content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="Review image failed format validation.") from exc
+    if validated.content_type != image_record.content_type:
+        raise HTTPException(status_code=503, detail="Review image format metadata is inconsistent.")
+    return Response(
+        content=content,
+        media_type=image_record.content_type,
+        headers={
+            "Cache-Control": "private, no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+    )
