@@ -2,11 +2,14 @@
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.dependencies import DbSession
+from app.schemas.catalog_match import CatalogMatchRequest, CatalogMatchResponse
 from app.schemas.symptom_analysis import (
     SymptomNormalizeRequest,
     SymptomNormalizeResponse,
 )
 from app.schemas.symptom_catalog import SymptomCatalogResponse
+from app.services.catalog_match import match_approved_catalog
 from app.services.symptom_catalog import get_symptom_catalog
 from app.services.symptom_normalizer import normalize_symptoms
 
@@ -43,5 +46,30 @@ def normalize_symptom_text(
             "It does not understand all medical context and does not diagnose, "
             "predict a disease, or recommend treatment. Review all information "
             "with a qualified healthcare professional."
+        ),
+    )
+
+
+
+@router.post("/catalog-match", response_model=CatalogMatchResponse)
+def compare_selected_symptoms_with_catalog(
+    payload: CatalogMatchRequest,
+    db: DbSession,
+) -> CatalogMatchResponse:
+    """Return research-only overlap with reviewed catalog associations.
+
+    This is not a diagnostic or risk prediction model. Submitted IDs are
+    processed for this request and are not persisted by this endpoint.
+    """
+    results = match_approved_catalog(db, payload.symptom_ids)
+    return CatalogMatchResponse(
+        method="approved_catalog_overlap",
+        results=results,
+        disclaimer=(
+            "These results show only overlap with currently approved catalog "
+            "associations. The ratio is not a probability, likelihood, or "
+            "measure of disease risk. Catalog coverage may be incomplete and "
+            "the method is not clinically validated. It does not diagnose or "
+            "recommend treatment; consult a qualified healthcare professional."
         ),
     )
