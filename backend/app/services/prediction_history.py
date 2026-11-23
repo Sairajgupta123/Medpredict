@@ -243,3 +243,84 @@ def has_active_skin_image_consent(
         .limit(1)
     )
     return latest is not None and latest.action == "granted"
+
+
+def set_skin_image_retention_expiry(
+    db: Session,
+    user_id: UUID,
+    prediction_id: UUID,
+    *,
+    expires_at: datetime,
+    policy_version: str,
+) -> SkinImageAnalysis:
+    """Schedule expiry only when the owner explicitly granted image-history consent.
+
+    The caller supplies the expiry and policy version; this service deliberately
+    does not invent a medical-image retention duration.
+    """
+    prediction = get_owned_prediction(db, user_id, prediction_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Image retention applies only to image or combined predictions.",
+        )
+    if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Retention expiry must include a timezone.",
+        )
+    if expires_at <= datetime.now(timezone.utc) or not policy_version.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A future expiry and retention policy version are required.",
+        )
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_history"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Active image-history consent is required to schedule retention.",
+        )
+
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == prediction.id
+        )
+    )
+    if image_record is None or image_record.storage_status != "stored":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a verified stored image can receive a retention schedule.",
+        )
+
+    image_record.retention_expires_at = expires_at.astimezone(timezone.utc)
+    image_record.retention_policy_version = policy_version.strip()
+    db.commit()
+    db.refresh(image_record)
+    return image_record
+
+
+def list_expired_skin_image_records(
+    db: Session, *, as_of: datetime, limit: int = 100
+) -> list[SkinImageAnalysis]:
+    """Find stored images whose explicit retention deadline has elapsed.
+
+    This is a candidate query for a future worker, not an automatic deletion
+    operation. It intentionally excludes unknown, failed, and in-flight states.
+    """
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("Expiry query timestamp must include a timezone.")
+    if not 1 <= limit <= 500:
+        raise ValueError("Expiry query limit must be between 1 and 500.")
+    return list(
+        db.scalars(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.storage_status == "stored",
+                SkinImageAnalysis.retention_expires_at <= as_of,
+                SkinImageAnalysis.retention_expires_at.is_not(None),
+            )
+            .order_by(SkinImageAnalysis.retention_expires_at, SkinImageAnalysis.id)
+            .limit(limit)
+        ).all()
+    )
