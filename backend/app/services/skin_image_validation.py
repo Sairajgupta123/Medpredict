@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps, ImageStat, UnidentifiedImageError
 
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -143,7 +143,7 @@ def assess_skin_image_quality(content: bytes) -> SkinImageQualityAssessment:
                 raise ValueError("Only sanitized JPEG, PNG and WebP images are supported.")
             image.load()
             grayscale = image.convert("L")
-            stats = Image.Stat.Stat(grayscale)
+            stats = ImageStat.Stat(grayscale)
             mean_luminance = float(stats.mean[0])
             luminance_spread = float(stats.stddev[0])
             width, height = image.size
