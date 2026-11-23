@@ -80,10 +80,22 @@ export function SymptomChecker() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/symptoms/catalog", { headers: { Accept: "application/json" }, cache: "no-store" })
+    fetch("/api/symptoms/catalog", { headers: { Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(6_000) })
       .then(async (response) => {
         const body = await response.json() as SymptomCatalog & { detail?: string };
         if (!response.ok) throw new Error(body.detail ?? "Could not load the symptom list.");
+        if (
+          typeof body.taxonomy_version !== "string" ||
+          typeof body.status !== "string" ||
+          typeof body.disclaimer !== "string" ||
+          !Array.isArray(body.symptoms) ||
+          !body.symptoms.every((item) =>
+            item && typeof item.id === "string" && /^[A-Z0-9_]{2,80}$/.test(item.id) &&
+            typeof item.label === "string" && item.label.trim().length > 0 && item.label.length <= 120 &&
+            typeof item.category === "string" && item.category.trim().length > 0 && item.category.length <= 80
+          ) ||
+          new Set(body.symptoms.map((item) => item.id)).size !== body.symptoms.length
+        ) throw new Error("The symptom list returned an unexpected response.");
         if (active) setCatalog(body);
       })
       .catch((cause: unknown) => {
@@ -122,6 +134,7 @@ export function SymptomChecker() {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ symptom_ids: symptomIds }),
         cache: "no-store",
+        signal: AbortSignal.timeout(12_000),
       });
       const body = await response.json() as CatalogMatchResult & { detail?: string };
       if (!response.ok) {
@@ -158,6 +171,7 @@ export function SymptomChecker() {
           text,
           reported_context: { duration, severity, onset },
         }),
+        signal: AbortSignal.timeout(15_000),
       });
       const body = await response.json() as NormalizeResult & { detail?: string };
       if (!response.ok) {
