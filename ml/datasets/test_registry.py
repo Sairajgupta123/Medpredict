@@ -1,6 +1,8 @@
 """Tests for dataset provenance registry validation."""
 import json
 
+import pytest
+
 from ml.datasets.registry import audit_registry, validate_dataset_record
 
 
@@ -56,3 +58,16 @@ def test_registry_audit_reports_duplicate_ids_without_exposing_private_data(tmp_
     assert result["dataset_count"] == 2
     assert result["duplicate_dataset_ids"] == ["example-image-v1"]
     assert result["automatic_training_approval"] is False
+
+
+@pytest.mark.parametrize("invalid_entry", [None, [], "not-an-object", 42])
+def test_registry_rejects_non_object_entries_with_safe_error(tmp_path, invalid_entry):
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps({"datasets": [invalid_entry]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="entry at index 0 must be an object"):
+        audit_registry(path)
+
+
+def test_record_validator_rejects_non_object_input():
+    with pytest.raises(ValueError, match="record must be an object"):
+        validate_dataset_record(None)  # type: ignore[arg-type]
