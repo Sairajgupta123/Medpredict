@@ -95,3 +95,64 @@ def test_bundle_rejects_missing_inference_methods() -> None:
     bundle["vectorizer"] = object()
     with pytest.raises(ValueError, match="transform"):
         validate_text_model_bundle(bundle)
+
+def test_predict_text_research_returns_research_only_class() -> None:
+    from ml.text_model.inference import predict_text_research
+
+    result = predict_text_research(valid_bundle(), "fever and cough")
+    assert result["status"] == "research_prediction"
+    assert result["prediction"] == "class_a"
+    assert result["purpose"] == "research_only_not_for_clinical_use"
+    assert result["clinical_interpretation_performed"] is False
+    assert 0 <= result["confidence_score"] <= 1
+
+
+def test_predict_text_research_abstains_below_threshold() -> None:
+    from ml.text_model.inference import predict_text_research
+
+    bundle = valid_bundle()
+    bundle["minimum_confidence"] = 0.9
+    result = predict_text_research(bundle, "fever and cough")
+    assert result["status"] == "uncertain_abstained"
+    assert result["prediction"] is None
+
+
+@pytest.mark.parametrize("text", ["", "   "])
+def test_predict_text_research_rejects_empty_input(text) -> None:
+    from ml.text_model.inference import predict_text_research
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        predict_text_research(valid_bundle(), text)
+
+
+def test_predict_text_research_rejects_oversized_input() -> None:
+    from ml.text_model.inference import predict_text_research
+
+    with pytest.raises(ValueError, match="4000"):
+        predict_text_research(valid_bundle(), "x" * 4001)
+
+
+def test_predict_text_research_rejects_invalid_probability_output() -> None:
+    from ml.text_model.inference import predict_text_research
+
+    class InvalidEstimator(FakeEstimator):
+        def predict_proba(self, values):
+            return np.asarray([[0.2, 0.2]])
+
+    bundle = valid_bundle()
+    bundle["estimator"] = InvalidEstimator()
+    with pytest.raises(ValueError, match="sum to one"):
+        predict_text_research(bundle, "fever and cough")
+
+
+def test_predict_text_research_rejects_non_finite_probability_output() -> None:
+    from ml.text_model.inference import predict_text_research
+
+    class InvalidEstimator(FakeEstimator):
+        def predict_proba(self, values):
+            return np.asarray([[float("nan"), float("nan")]])
+
+    bundle = valid_bundle()
+    bundle["estimator"] = InvalidEstimator()
+    with pytest.raises(ValueError, match="finite"):
+        predict_text_research(bundle, "fever and cough")
