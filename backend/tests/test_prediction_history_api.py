@@ -830,3 +830,64 @@ def test_admin_review_queue_includes_unassigned_stored_images(
     assert len(response.json()) == 1
     assert response.json()[0]["prediction_id"] == str(prediction.id)
     assert response.json()[0]["review_status"] == "pending"
+
+
+def test_admin_cannot_assign_skin_image_without_explicit_image_scope(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-review-no-scope-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-review-no-scope@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+
+    response = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(reviewer.id), "reason": "Assign image for review."},
+    )
+    assert response.status_code == 403
+    assert "skin-image review scope" in response.json()["detail"]
+
+
+def test_revoked_skin_image_scope_blocks_assigned_reviewer_access(
+    client: TestClient,
+) -> None:
+    from datetime import datetime, timezone
+
+    from app.models.reviewer_scope import CatalogReviewerScope
+
+    reviewer_token, reviewer = _register(client, "skin-review-revoked@example.com")
+    admin_token, admin = _register(client, "skin-review-revoked-admin@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    _set_account_role(admin.id, "admin")
+    prediction, _, _ = _prepare_skin_review_item(reviewer.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        scope = db.scalar(
+            select(CatalogReviewerScope).where(
+                CatalogReviewerScope.reviewer_id == reviewer.id,
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+            )
+        )
+        scope.revoked_by = admin.id
+        scope.revoked_at = datetime.now(timezone.utc)
+        scope.revoke_reason = "Reviewer access is no longer authorized."
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert response.status_code == 403
