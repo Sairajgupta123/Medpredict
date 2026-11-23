@@ -864,8 +864,12 @@ def get_owner_skin_image_review_status(
     if prediction.modality not in {"skin_image", "combined"}:
         raise HTTPException(status_code=404, detail="Image history item not found.")
 
+    # Serialize this status snapshot with consent withdrawal and reviewer
+    # assignment, which lock the same image row before changing access state.
     image_record = db.scalar(
-        select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id)
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
     )
     if image_record is None:
         raise HTTPException(status_code=404, detail="Image history item not found.")
