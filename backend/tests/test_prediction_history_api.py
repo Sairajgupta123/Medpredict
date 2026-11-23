@@ -19,6 +19,7 @@ from app.models.prediction import (
     PredictionConsentEvent,
     PredictionResult,
     SkinImageAnalysis,
+    SkinImageReviewEvent,
 )
 from app.models.user import User
 
