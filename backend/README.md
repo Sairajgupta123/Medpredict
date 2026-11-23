@@ -414,3 +414,18 @@ The multipart intake request includes `processing_consent`, `history_consent`, `
 - The frontend page is `/review/skin-images/audit`, linked from the skin-image reviewer queue. It displays metadata only; it never retrieves or embeds image bytes.
 - Pagination is bounded to 1–200 rows and offset 0–10,000. The feed is newest-first. It is an operational view, not a tamper-proof external compliance archive.
 - `image_accessed` is recorded only after private object retrieval and integrity/format checks succeed. It proves successful server-side retrieval, not that a human visually inspected the entire image.
+
+## Research model capability status
+
+The operational capability endpoint is:
+
+- `GET /api/v1/models/status`
+
+It reports whether optional model artifact paths are configured for the skin-image and symptom-text research pipelines. It does not check whether files exist, load an artifact, execute inference, or expose configured filesystem paths.
+
+Optional environment variables (leave unset until trusted artifacts and an approved operating procedure are available):
+
+- `SKIN_RESEARCH_CHECKPOINT_PATH` — absolute path to a skin-image research checkpoint.
+- `TEXT_RESEARCH_ARTIFACT_PATH` — absolute path to a symptom-text research artifact.
+
+The endpoint reports `not_configured`, `invalid_configuration` (non-absolute path), or `configured_not_loaded`. A configured path is not proof that the file exists, is authentic, or is safe to load. Both modalities always report `loaded=false` and `inference_enabled=false`; the response explicitly marks the system as research-only and clinical diagnosis as disabled. Do not connect these artifacts to patient-facing prediction routes until artifact provenance, trusted storage, dependencies, evaluation, consent, and the applicable review gates have been completed.
