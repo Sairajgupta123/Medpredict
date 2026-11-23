@@ -1648,12 +1648,13 @@ def test_revoked_review_consent_blocks_reviewer_image_storage_access(
         assert image is not None
         image.review_status = "assigned"
         image.assigned_reviewer_id = reviewer.id
-        db.add(PredictionConsentEvent(
-            prediction_id=prediction.id,
-            purpose="skin_image_review",
-            action="revoked",
-            policy_version="image-review-v1",
+        review_grant = db.scalar(select(PredictionConsentEvent).where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_review",
+            PredictionConsentEvent.action == "granted",
         ))
+        assert review_grant is not None
+        review_grant.action = "revoked"
         db.commit()
     finally:
         db.close()
