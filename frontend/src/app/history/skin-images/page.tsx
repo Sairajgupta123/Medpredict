@@ -34,6 +34,33 @@ type OwnerReviewStatus = {
   disease_prediction_performed: false;
 };
 
+async function deleteSkinImageHistory(formData: FormData) {
+  "use server";
+  const predictionId = String(formData.get("prediction_id") ?? "");
+  const confirmation = String(formData.get("confirmation") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(predictionId) || confirmation !== "DELETE") redirect("/history/skin-images?error=delete-confirmation");
+  const token = await getSessionToken();
+  if (!token) redirect("/login");
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/predictions/history/${encodeURIComponent(predictionId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+  } catch {
+    redirect("/history/skin-images?error=delete-unavailable");
+  }
+  if (response.status === 204) {
+    revalidatePath("/history/skin-images");
+    redirect(`/history/skin-images?deleted=${encodeURIComponent(predictionId)}&receipt=${encodeURIComponent(new Date().toISOString())}`);
+  }
+  if (response.status === 404) redirect("/history/skin-images?error=delete-not-found");
+  if (response.status === 503) redirect("/history/skin-images?error=delete-pending");
+  if (response.status === 409) redirect("/history/skin-images?error=delete-blocked");
+  redirect("/history/skin-images?error=delete-failed");
+}
+
 async function revokeReviewConsent(formData: FormData) {
   "use server";
   const predictionId = String(formData.get("prediction_id") ?? "");
@@ -61,7 +88,7 @@ async function revokeReviewConsent(formData: FormData) {
   redirect("/history/skin-images?updated=revoked");
 }
 
-type PageProps = { searchParams: Promise<{ updated?: string; error?: string }> };
+type PageProps = { searchParams: Promise<{ updated?: string; deleted?: string; receipt?: string; error?: string }> };
 
 export default async function SkinImageHistoryPage({ searchParams }: PageProps) {
   const session = await getSessionUser();
@@ -126,10 +153,17 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
       </section>
       <section className="container review-content">
         {params.updated === "revoked" && <div className="review-alert review-alert-success" role="status">Human-review consent was revoked. Reviewer access for that image has been disabled.</div>}
+        {params.deleted && /^[0-9a-f-]{36}$/i.test(params.deleted) && <div className="review-alert review-alert-success" role="status"><strong>Deletion confirmed.</strong> Private image deletion and history-record removal were confirmed for reference {params.deleted.slice(0, 8)}.{params.receipt && !Number.isNaN(Date.parse(params.receipt)) ? ` Receipt time: ${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(params.receipt))}.` : ""} The minimal independent review audit trail may remain.</div>}
         {params.error === "invalid" && <div className="review-alert" role="alert">The selected image reference is invalid.</div>}
         {params.error === "already-revoked" && <div className="review-alert" role="status">No active human-review consent was found for that image.</div>}
         {params.error === "unavailable" && <div className="review-alert" role="alert">The consent service is unavailable. Revocation was not confirmed.</div>}
         {params.error === "save" && <div className="review-alert" role="alert">The consent change could not be confirmed.</div>}
+        {params.error === "delete-confirmation" && <div className="review-alert" role="alert">Deletion was not submitted. Type DELETE exactly to confirm permanent removal.</div>}
+        {params.error === "delete-unavailable" && <div className="review-alert" role="alert">The deletion service is unavailable. No deletion was confirmed; retry later.</div>}
+        {params.error === "delete-pending" && <div className="review-alert" role="alert">Private image deletion is pending. Your history record has been retained so cleanup can be retried. Do not assume the image has been deleted.</div>}
+        {params.error === "delete-blocked" && <div className="review-alert" role="alert">The image storage state could not be safely verified. The record was retained for manual reconciliation.</div>}
+        {params.error === "delete-not-found" && <div className="review-alert" role="status">This history item was not found in your account.</div>}
+        {params.error === "delete-failed" && <div className="review-alert" role="alert">Deletion could not be confirmed. The item may still be retained; contact support or retry.</div>}
         {loadError && <div className="review-alert" role="alert">{loadError}</div>}
         <div className="review-section-heading">
           <div><span className="eyebrow">YOUR RECORDS</span><h2>Skin image submissions</h2></div>
@@ -156,6 +190,17 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                   <span>Image contents are not included in this list</span>
                   {reviewStatuses[item.id]?.status_at && <span>Status updated {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(reviewStatuses[item.id].status_at as string))}</span>}
                 </div>
+                <form action={deleteSkinImageHistory} className="skin-history-action skin-history-delete-action">
+                  <input type="hidden" name="prediction_id" value={item.id} />
+                  <div>
+                    <strong>Delete image and history permanently</strong>
+                    <small>This removes the private image object first, then removes this history record and linked consent data. Independent technical-review audit events may remain without the image or patient record.</small>
+                    <label className="skin-delete-confirm-label" htmlFor={`delete-confirm-${item.id}`}>Type DELETE to confirm</label>
+                    <input id={`delete-confirm-${item.id}`} name="confirmation" type="text" required pattern="DELETE" autoComplete="off" spellCheck={false} />
+                    <small>This action cannot be undone. If private storage is unavailable, deletion will not be reported as complete.</small>
+                  </div>
+                  <button className="button button-danger" type="submit">Permanently delete</button>
+                </form>
                 <form action={revokeReviewConsent} className="skin-history-action">
                   <input type="hidden" name="prediction_id" value={item.id} />
                   <div><strong>Human-review permission</strong><small>Revoke the separate consent and disable assigned reviewer access for this image.</small></div>
