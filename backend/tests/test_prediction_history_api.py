@@ -509,3 +509,59 @@ def test_image_retrieval_rejects_corrupted_private_object(
     )
     assert response.status_code == 503
     assert "integrity" in response.json()["detail"].lower()
+
+
+def test_skin_image_retrieval_revalidates_jpeg_without_changing_stored_bytes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+    from io import BytesIO
+    from PIL import Image
+    from app.api.v1 import skin_images
+
+    token, user = _register(client, "image-read-jpeg@example.com")
+    output = BytesIO()
+    Image.new("RGB", (320, 320), (120, 80, 60)).save(
+        output, format="JPEG", quality=88
+    )
+    jpeg_bytes = output.getvalue()
+    item = _prediction(user.id, modality="skin_image")
+    key = "skin-images/22222222222222222222222222222222.jpg"
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            SkinImageAnalysis(
+                prediction_id=item.id,
+                object_key=key,
+                content_type="image/jpeg",
+                image_sha256=hashlib.sha256(jpeg_bytes).hexdigest(),
+                storage_status="stored",
+            )
+        )
+        db.add(
+            PredictionConsentEvent(
+                prediction_id=item.id,
+                purpose="skin_image_history",
+                action="granted",
+                policy_version="image-history-v1",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (jpeg_bytes, "image/jpeg")
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+    response = client.get(
+        f"/api/v1/skin-images/{item.id}", headers=_headers(token)
+    )
+    assert response.status_code == 200
+    assert response.content == jpeg_bytes
+
+
+def test_skin_image_retrieval_requires_authentication(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/skin-images/00000000-0000-0000-0000-000000000001"
+    )
+    assert response.status_code == 401
