@@ -150,8 +150,24 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                 );
                 if (statusResponse.ok) {
                   const statusPayload = await statusResponse.json() as OwnerReviewStatus;
+                  const allowedStatuses = new Set([
+                    "review_access_withdrawn",
+                    "submission_unavailable",
+                    "awaiting_review",
+                    "assigned",
+                    "reviewed",
+                    "unable_to_assess",
+                  ]);
+                  const validStatusAt = statusPayload.status_at === null
+                    || (typeof statusPayload.status_at === "string"
+                      && Number.isFinite(Date.parse(statusPayload.status_at)));
                   if (statusPayload.prediction_id === item.id
+                    && typeof statusPayload.status === "string"
+                    && allowedStatuses.has(statusPayload.status)
                     && typeof statusPayload.status_label === "string"
+                    && typeof statusPayload.status_detail === "string"
+                    && typeof statusPayload.next_step === "string"
+                    && validStatusAt
                     && statusPayload.clinical_interpretation_performed === false
                     && statusPayload.disease_prediction_performed === false) {
                     reviewStatuses[item.id] = statusPayload;
