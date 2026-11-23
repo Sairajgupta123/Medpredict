@@ -76,6 +76,9 @@ following:
       with credentialed requests.
 - [ ] Configure secure cookie behavior for the actual frontend/API topology and verify
       CSRF/origin protections in the deployed environment.
+- [ ] Configure the trusted reverse proxy to overwrite (not append or pass through
+      client-supplied) `X-Forwarded-Proto`, preserve the canonical `Host`, and accept
+      forwarded headers only from known proxy hops; verify same-origin checks over HTTPS.
 - [ ] Configure rate limiting, abuse monitoring, account recovery, email verification,
       and a reviewed token refresh/revocation design.
 - [ ] If image intake is enabled, configure a private encrypted object bucket, public
