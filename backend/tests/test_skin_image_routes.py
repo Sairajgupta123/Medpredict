@@ -827,3 +827,18 @@ def test_skin_image_intake_requires_each_separate_consent(
 
     assert response.status_code == 422
     assert "Separate image-processing" in response.json()["detail"]
+
+def test_skin_image_model_status_reports_inference_unavailable(
+    client: TestClient,
+) -> None:
+    """Clients must not present image intake as an active disease classifier."""
+    response = client.get("/api/v1/skin-images/model-status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["inference_available"] is False
+    assert body["model_configured"] is False
+    assert body["disease_prediction_performed"] is False
+    assert body["clinical_validation_status"] == "not_established"
+    assert body["human_review_required"] is True
+    assert "not configured" in body["message"]
