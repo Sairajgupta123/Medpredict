@@ -136,6 +136,7 @@ def compare_text_models(
             "logistic_regression_selected.joblib",
             "random_forest_selected.joblib",
             "xgboost_selected.joblib",
+            "artifact_manifest.json",
         ],
     )
     frame = load_dataset(data_path)
@@ -265,6 +266,26 @@ def compare_text_models(
     validate_text_model_bundle(bundle)
     artifact_path = output_dir / f"{winner_name}_selected.joblib"
     joblib.dump(bundle, artifact_path)
+    artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    artifact_manifest = {
+        "purpose": "research_only_not_for_clinical_use",
+        "artifact_file": artifact_path.name,
+        "artifact_sha256": artifact_sha256,
+        "model_name": winner_name,
+        "dataset_sha256": dataset_hash,
+        "experiment_config_sha256": experiment_config_sha256({
+            "pipeline": "tfidf_word_char_candidate_comparison",
+            "candidate_models": list(fitted.keys()),
+            "random_state": random_state,
+            "test_size": test_size,
+            "validation_size": validation_size,
+        }),
+        "integrity_note": "SHA-256 detects accidental or uncoordinated file changes; it is not a digital signature and does not establish artifact authenticity.",
+    }
+    (output_dir / "artifact_manifest.json").write_text(
+        json.dumps(artifact_manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     experiment_config = {
         "pipeline": "tfidf_word_char_candidate_comparison",
@@ -344,6 +365,8 @@ def compare_text_models(
             ),
         },
         "artifact_file": artifact_path.name,
+        "artifact_sha256": artifact_sha256,
+        "artifact_manifest_file": "artifact_manifest.json",
         "library_versions": {
             "pandas": pd.__version__,
             "scikit_learn": sklearn.__version__,
