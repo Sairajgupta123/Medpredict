@@ -138,12 +138,11 @@ def assess_skin_image_quality(content: bytes) -> SkinImageQualityAssessment:
             if image.format not in SUPPORTED_FORMATS:
                 raise ValueError("Only sanitized JPEG, PNG and WebP images are supported.")
             image.load()
-            grayscale = image.convert("L")
-            stats = ImageStat.Stat(grayscale)
-            mean_luminance = float(stats.mean[0])
-            luminance_spread = float(stats.stddev[0])
+            with image.convert("L") as grayscale:
+                stats = ImageStat.Stat(grayscale)
+                mean_luminance = float(stats.mean[0])
+                luminance_spread = float(stats.stddev[0])
             width, height = image.size
-            grayscale.close()
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise ValueError("Sanitized image bytes are invalid or cannot be decoded.") from exc
 
