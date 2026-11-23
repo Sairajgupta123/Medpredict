@@ -6,7 +6,7 @@ import hashlib
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -18,6 +18,7 @@ from app.services.skin_image_storage import (
     build_skin_image_object_key,
 )
 from app.services.skin_image_storage_factory import build_skin_image_storage
+from app.services.prediction_history import get_owned_prediction, has_active_skin_image_consent
 from app.services.skin_image_validation import (
     MAX_IMAGE_BYTES,
     assess_skin_image_quality,
@@ -187,4 +188,103 @@ def intake_skin_image(
             "Image securely received for future review. No disease classification "
             "or clinical interpretation was performed."
         ),
+    )
+
+
+@router.get("/{prediction_id}", response_class=Response)
+def retrieve_skin_image(
+    prediction_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> Response:
+    """Stream an owner's retained image only while image-history consent is active."""
+    from uuid import UUID
+
+    try:
+        parsed_prediction_id = UUID(prediction_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image history item not found.",
+        ) from exc
+
+    prediction = get_owned_prediction(db, user.id, parsed_prediction_id)
+    if prediction.modality not in {"skin_image", "combined"}:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image history item not found.",
+        )
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_history"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active image-history consent is required to retrieve this image.",
+        )
+
+    image_record = db.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == prediction.id
+        )
+    )
+    if image_record is None or image_record.storage_status != "stored":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Stored image is not available.",
+        )
+    if image_record.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stored image metadata failed validation.",
+        )
+
+    storage: SkinImageStorage = build_skin_image_storage()
+    if isinstance(storage, DisabledSkinImageStorage):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Private image storage is not configured.",
+        )
+    try:
+        content = storage.get_private(image_record.object_key)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Private image retrieval is temporarily unavailable.",
+        ) from exc
+
+    if (
+        not isinstance(content, bytes)
+        or not content
+        or len(content) > MAX_IMAGE_BYTES
+        or hashlib.sha256(content).hexdigest() != image_record.image_sha256
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stored image failed integrity validation.",
+        )
+    try:
+        validated = validate_and_sanitize_skin_image(
+            content, image_record.content_type
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stored image failed format validation.",
+        ) from exc
+    if validated.content != content:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stored image is not in the expected sanitized format.",
+        )
+
+    return Response(
+        content=content,
+        media_type=image_record.content_type,
+        headers={
+            "Cache-Control": "private, no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Content-Length": str(len(content)),
+        },
     )
