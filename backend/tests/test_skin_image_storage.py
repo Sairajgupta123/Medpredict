@@ -150,3 +150,54 @@ def test_s3_client_factory_rejects_insecure_or_partial_configuration() -> None:
         create_s3_private_client(
             region="ap-south-1", access_key_id="only-one-half"
         )
+
+def test_s3_adapter_rejects_missing_or_malformed_integrity_metadata() -> None:
+    from app.services.skin_image_storage import (
+        S3PrivateSkinImageStorage,
+        SkinImageStorageIntegrityError,
+    )
+
+    client = _FakeS3Client()
+    storage = S3PrivateSkinImageStorage(client=client, bucket="private")
+    key = build_skin_image_object_key(UUID(int=6), "JPEG")
+    storage.put_private(key, b"valid-image-content", "image/jpeg")
+
+    client.objects[key]["Metadata"] = {}
+    with pytest.raises(SkinImageStorageIntegrityError, match="SHA-256"):
+        storage.get_private(key)
+
+    client.objects[key]["Metadata"] = {"sha256": "not-a-sha256"}
+    with pytest.raises(SkinImageStorageIntegrityError, match="SHA-256"):
+        storage.get_private(key)
+
+
+def test_s3_adapter_rejects_empty_and_oversized_uploads() -> None:
+    from app.services.skin_image_storage import S3PrivateSkinImageStorage
+    from app.services.skin_image_validation import MAX_IMAGE_BYTES
+
+    storage = S3PrivateSkinImageStorage(client=_FakeS3Client(), bucket="private")
+    key = build_skin_image_object_key(UUID(int=7), "PNG")
+
+    with pytest.raises(ValueError, match="non-empty"):
+        storage.put_private(key, b"", "image/png")
+    with pytest.raises(ValueError, match="8 MiB"):
+        storage.put_private(key, b"x" * (MAX_IMAGE_BYTES + 1), "image/png")
+
+
+def test_s3_adapter_rejects_oversized_download_before_returning_bytes() -> None:
+    from app.services.skin_image_storage import (
+        S3PrivateSkinImageStorage,
+        SkinImageStorageIntegrityError,
+    )
+    from app.services.skin_image_validation import MAX_IMAGE_BYTES
+
+    client = _FakeS3Client()
+    storage = S3PrivateSkinImageStorage(client=client, bucket="private")
+    key = build_skin_image_object_key(UUID(int=8), "WEBP")
+    client.objects[key] = {
+        "Body": b"x" * (MAX_IMAGE_BYTES + 1),
+        "Metadata": {"sha256": "0" * 64},
+    }
+
+    with pytest.raises(SkinImageStorageIntegrityError, match="size limit"):
+        storage.get_private(key)
