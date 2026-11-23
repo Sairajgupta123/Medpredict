@@ -313,7 +313,7 @@ def list_skin_image_review_queue(
     user: CurrentUser,
     db: DbSession,
 ) -> list[dict]:
-    """List only stored images assigned to this reviewer; admins can inspect all."""
+    """List assigned images for reviewers and pending/assigned items for admins."""
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
     statement = (
