@@ -586,3 +586,156 @@ def test_image_retrieval_fails_closed_when_storage_initialization_errors(
     )
     assert response.status_code == 503
     assert "storage is unavailable" in response.json()["detail"].lower()
+
+
+def _prepare_skin_review_item(owner_id):
+    import hashlib
+
+    from app.services.skin_image_validation import validate_and_sanitize_skin_image
+
+    prediction = _prediction(owner_id, modality="skin_image")
+    sanitized = validate_and_sanitize_skin_image(_small_png(), "image/png")
+    key = "skin-images/33333333333333333333333333333333.png"
+    db = TestingSessionLocal()
+    try:
+        image = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key=key,
+            content_type="image/png",
+            image_sha256=hashlib.sha256(sanitized.content).hexdigest(),
+            storage_status="stored",
+        )
+        db.add(image)
+        db.add(
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="image-processing-v1",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    return prediction, key, sanitized.content
+
+
+def _set_account_role(user_id, role):
+    db = TestingSessionLocal()
+    try:
+        user = db.get(User, user_id)
+        user.role = role
+        user.email_verified = True
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_admin_assigns_image_to_verified_reviewer_and_review_is_audited(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import skin_images
+    from app.models.prediction import SkinImageReviewEvent
+
+    admin_token, admin = _register(client, "skin-review-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-reviewer@example.com")
+    owner_token, owner = _register(client, "skin-review-owner@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, key, image_bytes = _prepare_skin_review_item(owner.id)
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (image_bytes, "image/png")
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", lambda: storage)
+
+    assigned = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(reviewer.id), "reason": "Assigned for image quality review."},
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["review_status"] == "assigned"
+
+    queue = client.get("/api/v1/skin-images/review/queue", headers=_headers(reviewer_token))
+    assert queue.status_code == 200
+    assert [row["prediction_id"] for row in queue.json()] == [str(prediction.id)]
+
+    image_response = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert image_response.status_code == 200
+    assert image_response.content == image_bytes
+    assert image_response.headers["cache-control"].startswith("private, no-store")
+
+    decision = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/decision",
+        headers=_headers(reviewer_token),
+        json={
+            "outcome": "image_adequate",
+            "reason": "Image framing and exposure are adequate.",
+            "note": "Technical image quality only; no clinical assessment.",
+        },
+    )
+    assert decision.status_code == 200, decision.text
+    assert decision.json()["review_status"] == "reviewed"
+    assert decision.json()["clinical_interpretation_performed"] is False
+    assert client.get(
+        "/api/v1/skin-images/review/queue", headers=_headers(reviewer_token)
+    ).json() == []
+
+    db = TestingSessionLocal()
+    try:
+        events = db.scalars(
+            select(SkinImageReviewEvent).where(
+                SkinImageReviewEvent.prediction_id == prediction.id
+            )
+        ).all()
+        assert [event.event_type for event in events] == ["assigned", "reviewed"]
+        assert events[0].actor_id == admin.id
+        assert events[1].actor_id == reviewer.id
+    finally:
+        db.close()
+
+
+def test_image_review_is_not_available_to_patient_or_unassigned_reviewer(
+    client: TestClient,
+) -> None:
+    patient_token, patient = _register(client, "skin-review-patient@example.com")
+    reviewer_token, reviewer = _register(client, "skin-review-unassigned@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(patient.id)
+
+    patient_queue = client.get(
+        "/api/v1/skin-images/review/queue", headers=_headers(patient_token)
+    )
+    assert patient_queue.status_code == 403
+
+    unassigned_image = client.get(
+        f"/api/v1/skin-images/review/{prediction.id}/image",
+        headers=_headers(reviewer_token),
+    )
+    assert unassigned_image.status_code == 404
+
+
+def test_image_review_assignment_rejects_unverified_reviewer(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-review-admin-unverified@example.com")
+    reviewer_token, reviewer = _register(client, "skin-review-unverified@example.com")
+    _set_account_role(admin.id, "admin")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+    db = TestingSessionLocal()
+    try:
+        account = db.get(User, reviewer.id)
+        account.role = "reviewer"
+        account.email_verified = False
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(reviewer.id), "reason": "Assignment for review."},
+    )
+    assert response.status_code == 404
