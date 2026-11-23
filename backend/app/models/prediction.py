@@ -73,7 +73,7 @@ class PredictionConsentEvent(Base):
     __tablename__ = "prediction_consent_events"
     __table_args__ = (
         CheckConstraint(
-            "purpose IN ('prediction_history', 'skin_image_processing', 'skin_image_history')",
+            "purpose IN ('prediction_history', 'skin_image_processing', 'skin_image_history', 'skin_image_review')",
             name="ck_prediction_consent_purpose",
         ),
         CheckConstraint(
