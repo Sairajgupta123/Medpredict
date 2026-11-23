@@ -1,5 +1,6 @@
 """Image retention lifecycle tests using a retryable fake private store."""
 
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -176,3 +177,84 @@ def test_processing_and_history_consents_are_independent_and_revocable(
     assert has_active_skin_image_consent(
         db_session, prediction.id, purpose="skin_image_processing"
     )
+
+
+
+def test_retention_expiry_requires_separate_image_history_consent(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import set_skin_image_retention_expiry
+
+    user, prediction = _owned_image_history(db_session)
+    with pytest.raises(HTTPException) as error:
+        set_skin_image_retention_expiry(
+            db_session,
+            user.id,
+            prediction.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            policy_version="image-retention-v1",
+        )
+    assert error.value.status_code == 409
+
+
+def test_expired_image_query_only_returns_expired_stored_objects(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        list_expired_skin_image_records,
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_history",
+        action="granted",
+        policy_version="image-history-v1",
+    )
+    expiry = datetime.now(timezone.utc) + timedelta(days=2)
+    image = set_skin_image_retention_expiry(
+        db_session,
+        user.id,
+        prediction.id,
+        expires_at=expiry,
+        policy_version="image-retention-v1",
+    )
+    assert image.retention_expires_at is not None
+    assert image.retention_policy_version == "image-retention-v1"
+    assert list_expired_skin_image_records(
+        db_session, as_of=expiry - timedelta(seconds=1)
+    ) == []
+    due = list_expired_skin_image_records(db_session, as_of=expiry + timedelta(seconds=1))
+    assert [item.id for item in due] == [image.id]
+
+
+def test_retention_expiry_requires_timezone_and_future_timestamp(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_history",
+        action="granted",
+        policy_version="image-history-v1",
+    )
+    with pytest.raises(HTTPException) as error:
+        set_skin_image_retention_expiry(
+            db_session,
+            user.id,
+            prediction.id,
+            expires_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            policy_version="image-retention-v1",
+        )
+    assert error.value.status_code == 422
