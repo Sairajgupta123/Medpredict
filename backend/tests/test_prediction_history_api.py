@@ -785,3 +785,19 @@ def test_image_review_audit_is_visible_only_to_assignee_or_admin(
         headers=_headers(other_token),
     )
     assert forbidden.status_code == 404
+
+
+def test_admin_review_queue_includes_unassigned_stored_images(
+    client: TestClient,
+) -> None:
+    admin_token, admin = _register(client, "skin-review-pending-admin@example.com")
+    _set_account_role(admin.id, "admin")
+    prediction, _, _ = _prepare_skin_review_item(admin.id)
+
+    response = client.get(
+        "/api/v1/skin-images/review/queue", headers=_headers(admin_token)
+    )
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["prediction_id"] == str(prediction.id)
+    assert response.json()[0]["review_status"] == "pending"
