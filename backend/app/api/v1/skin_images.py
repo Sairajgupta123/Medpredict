@@ -24,7 +24,6 @@ from app.services.skin_image_storage_factory import build_skin_image_storage
 from app.services.prediction_history import (
     get_owned_prediction,
     has_active_skin_image_consent,
-    record_skin_image_consent_decision,
 )
 from app.services.skin_image_validation import (
     MAX_IMAGE_BYTES,
@@ -256,14 +255,35 @@ def revoke_skin_image_review_consent(
         .where(SkinImageAnalysis.prediction_id == prediction.id)
         .with_for_update()
     )
-    event = record_skin_image_consent_decision(
-        db,
-        user.id,
-        prediction.id,
+    latest_consent = db.scalar(
+        select(PredictionConsentEvent)
+        .where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_review",
+        )
+        .order_by(
+            PredictionConsentEvent.captured_at.desc(),
+            PredictionConsentEvent.id.desc(),
+        )
+        .limit(1)
+    )
+    if latest_consent is None or latest_consent.action != "granted":
+        raise HTTPException(
+            status_code=409,
+            detail="No active consent exists for this image purpose.",
+        )
+
+    event = PredictionConsentEvent(
+        prediction_id=prediction.id,
         purpose="skin_image_review",
         action="revoked",
         policy_version="image-review-v1",
+        captured_at=datetime.now(timezone.utc),
     )
+    db.add(event)
+
+    # Keep the consent event and every scope revocation in the same transaction.
+    # The image-row lock prevents assignment from slipping between these writes.
     if image_record is not None:
         active_scopes = db.scalars(
             select(CatalogReviewerScope)
@@ -274,10 +294,11 @@ def revoke_skin_image_review_consent(
             )
             .with_for_update()
         ).all()
+        revoked_at = datetime.now(timezone.utc)
         for scope in active_scopes:
             reason = "Image owner revoked human-review consent."
             scope.revoked_by = user.id
-            scope.revoked_at = datetime.now(timezone.utc)
+            scope.revoked_at = revoked_at
             scope.revoke_reason = reason
             db.add(CatalogReviewerScopeEvent(
                 scope_id=scope.id,
@@ -288,7 +309,7 @@ def revoke_skin_image_review_consent(
                 operator_id=user.id,
                 reason=reason,
             ))
-        db.commit()
+    db.commit()
     return {
         "prediction_id": str(prediction.id),
         "purpose": event.purpose,
