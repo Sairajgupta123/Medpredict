@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 export const API_BASE_URL =
   process.env.MEDIPREDICT_API_INTERNAL_URL?.replace(/\/$/, "") ??
@@ -7,6 +8,13 @@ export const API_BASE_URL =
   "http://localhost:8000/api/v1";
 
 export const SESSION_COOKIE = "medipredict_session";
+
+function privateJson(body: unknown, init: ResponseInit = {}): NextResponse {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "private, no-store, max-age=0");
+  headers.set("Pragma", "no-cache");
+  return NextResponse.json(body, { ...init, headers });
+}
 
 type BackendTokenResponse = {
   access_token: string;
@@ -18,16 +26,15 @@ export async function proxyCredentials(
   request: Request,
   endpoint: "login" | "register",
 ): Promise<NextResponse> {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) {
-    return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
+  if (!hasSameRequestOrigin(request)) {
+    return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
 
   let payload: unknown;
   try {
     payload = await request.json();
   } catch {
-    return NextResponse.json({ detail: "Please provide valid JSON." }, { status: 400 });
+    return privateJson({ detail: "Please provide valid JSON." }, { status: 400 });
   }
 
   let backendResponse: Response;
@@ -40,7 +47,7 @@ export async function proxyCredentials(
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
-    return NextResponse.json(
+    return privateJson(
       { detail: "The MediPredict server is unavailable. Please try again shortly." },
       { status: 503 },
     );
@@ -52,7 +59,7 @@ export async function proxyCredentials(
     | null;
 
   if (!backendResponse.ok) {
-    return NextResponse.json(
+    return privateJson(
       { detail: result && "detail" in result ? result.detail : "Authentication failed." },
       { status: backendResponse.status },
     );
@@ -74,13 +81,13 @@ export async function proxyCredentials(
     typeof result.user !== "object" ||
     Array.isArray(result.user)
   ) {
-    return NextResponse.json(
+    return privateJson(
       { detail: "The server returned an invalid session response." },
       { status: 502 },
     );
   }
 
-  const response = NextResponse.json({
+  const response = privateJson({
     user: result.user,
     expires_in: result.expires_in,
   });
