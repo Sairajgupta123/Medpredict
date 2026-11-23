@@ -446,7 +446,6 @@ def submit_skin_image_review(
     image_record.review_outcome = payload.outcome
     image_record.review_status = "reviewed" if payload.outcome == "capture_adequate" else "unable_to_assess"
     image_record.reviewed_at = datetime.now(timezone.utc)
-    image_record.review_required = False
     db.add(SkinImageReviewEvent(
         prediction_id=prediction.id,
         image_analysis_id=image_record.id,
