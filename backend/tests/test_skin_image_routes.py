@@ -326,3 +326,154 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
         assert scope_event.reason
     finally:
         db.close()
+
+def test_reassignment_revokes_previous_reviewers_access(
+    client: TestClient,
+) -> None:
+    """Reassignment transfers access and revokes the previous reviewer's scope."""
+    db = TestingSessionLocal()
+    try:
+        administrator = User(
+            email=f"skin-reassign-admin-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="admin",
+        )
+        previous_reviewer = User(
+            email=f"skin-reassign-old-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        new_reviewer = User(
+            email=f"skin-reassign-new-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([administrator, previous_reviewer, new_reviewer])
+        db.flush()
+
+        prediction = Prediction(
+            user_id=administrator.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        image_record = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="private/reassignment-test",
+            content_type="image/png",
+            image_sha256="2" * 64,
+            storage_status="stored",
+            review_status="assigned",
+            assigned_reviewer_id=previous_reviewer.id,
+            assigned_by=administrator.id,
+        )
+        db.add_all([
+            image_record,
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=previous_reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Initial reviewer access approved.",
+            ),
+            CatalogReviewerScope(
+                reviewer_id=new_reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Replacement reviewer access approved.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        previous_id = previous_reviewer.id
+        new_id = new_reviewer.id
+        admin_token = create_access_token(administrator.id)
+        previous_token = create_access_token(previous_reviewer.id)
+        new_token = create_access_token(new_reviewer.id)
+    finally:
+        db.close()
+
+    assignment = client.post(
+        f"/api/v1/skin-images/review/{prediction_id}/assign",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "reviewer_id": str(new_id),
+            "reason": "Transfer to the replacement reviewer.",
+        },
+    )
+    assert assignment.status_code == 200
+    assert assignment.json()["reviewer_id"] == str(new_id)
+
+    previous_headers = {"Authorization": f"Bearer {previous_token}"}
+    previous_queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=previous_headers,
+    )
+    previous_image = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/image",
+        headers=previous_headers,
+    )
+    previous_events = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/events",
+        headers=previous_headers,
+    )
+
+    new_headers = {"Authorization": f"Bearer {new_token}"}
+    new_queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=new_headers,
+    )
+    new_events = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/events",
+        headers=new_headers,
+    )
+
+    assert previous_queue.status_code == 200
+    assert previous_queue.json() == []
+    assert previous_image.status_code == 404
+    assert previous_events.status_code == 404
+    assert new_queue.status_code == 200
+    assert [item["prediction_id"] for item in new_queue.json()] == [prediction_id]
+    assert new_events.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        old_scope = db.query(CatalogReviewerScope).filter_by(
+            reviewer_id=previous_id,
+            scope_type="skin_image",
+            scope_key=prediction_id,
+        ).one()
+        old_scope_event = db.query(CatalogReviewerScopeEvent).filter_by(
+            scope_id=old_scope.id,
+            event_type="revoked",
+        ).one()
+        current_image = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_id,
+        ).one()
+        assert old_scope.revoked_at is not None
+        assert old_scope.revoke_reason
+        assert old_scope_event.reason
+        assert current_image.assigned_reviewer_id == new_id
+    finally:
+        db.close()
