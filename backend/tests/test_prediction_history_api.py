@@ -1223,3 +1223,73 @@ def test_skin_image_audit_feed_is_scoped_and_identifies_event_actor(
         headers=_headers(admin_token),
     )
     assert invalid_pagination.status_code == 422
+
+
+
+def test_owner_skin_image_review_status_exposes_only_safe_status_fields(
+    client: TestClient,
+) -> None:
+    owner_token, owner = _register(client, "skin-status-owner@example.com")
+    other_token, _ = _register(client, "skin-status-other@example.com")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+
+    own = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(owner_token),
+    )
+    assert own.status_code == 200, own.text
+    payload = own.json()
+    assert payload["status"] == "awaiting_review"
+    assert payload["status_label"] == "Awaiting technical image review"
+    assert payload["clinical_interpretation_performed"] is False
+    assert payload["disease_prediction_performed"] is False
+    assert set(payload) == {
+        "prediction_id", "status", "status_label", "status_at",
+        "clinical_interpretation_performed", "disease_prediction_performed",
+    }
+
+    forbidden = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(other_token),
+    )
+    assert forbidden.status_code == 404
+
+
+def test_owner_skin_image_review_status_reflects_assignment_and_revocation(
+    client: TestClient,
+) -> None:
+    owner_token, owner = _register(client, "skin-status-assignment-owner@example.com")
+    admin_token, admin = _register(client, "skin-status-assignment-admin@example.com")
+    reviewer_token, reviewer = _register(client, "skin-status-assignment-reviewer@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    assigned = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={"reviewer_id": str(reviewer.id), "reason": "Assign for technical review."},
+    )
+    assert assigned.status_code == 200, assigned.text
+    status_response = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(owner_token),
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "assigned"
+    assert "assigned_reviewer" not in status_response.json()
+    assert "reason" not in status_response.json()
+
+    revoked = client.post(
+        f"/api/v1/skin-images/{prediction.id}/revoke-review-consent",
+        headers=_headers(owner_token),
+    )
+    assert revoked.status_code == 200
+    after_revoke = client.get(
+        f"/api/v1/skin-images/{prediction.id}/review-status",
+        headers=_headers(owner_token),
+    )
+    assert after_revoke.status_code == 200
+    assert after_revoke.json()["status"] == "review_access_withdrawn"
+    assert after_revoke.json()["status_at"] is None
