@@ -201,8 +201,14 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
         f"/api/v1/skin-images/review/{prediction_id}/image",
         headers=headers,
     )
+    events = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/events",
+        headers=headers,
+    )
 
     assert queue.status_code == 200
     assert queue.json() == []
     assert image.status_code == 403
     assert "consent" in image.json()["detail"].lower()
+    assert events.status_code == 403
+    assert "consent" in events.json()["detail"].lower()
