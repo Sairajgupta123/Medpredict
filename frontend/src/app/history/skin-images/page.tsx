@@ -286,7 +286,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
           <strong>Technical review only</strong>
           <p>The status describes image handling and capture-quality review only. It is not a diagnosis, disease-risk estimate, or medical interpretation.</p>
           <strong>Separate controls</strong>
-          <p>Revoking human-review consent does not delete your image-history record. Image-history deletion is a separate action and is not offered here until its retention and deletion consequences can be presented with clear confirmation.</p>
+          <p>Revoking human-review consent does not delete your image-history record. Permanent deletion is a separate action: the private image object is removed first, then the history record and linked consent data. Independent technical-review audit events may remain.</p>
         </div>
       </section>
     </main>
