@@ -14,7 +14,7 @@ from sqlalchemy import or_, select
 from app.api.dependencies import Administrator, CurrentUser, DbSession
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
 from app.models.user import User
-from app.models.reviewer_scope import CatalogReviewerScope
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 from app.services.skin_image_storage import (
     DisabledSkinImageStorage,
     SkinImageStorage,
@@ -427,6 +427,31 @@ def assign_skin_image_review(
             detail="Reviewer does not have an active skin-image review scope.",
         )
     previous_reviewer_id = image_record.assigned_reviewer_id
+    if previous_reviewer_id is not None and previous_reviewer_id != reviewer.id:
+        previous_scope = db.scalar(
+            select(CatalogReviewerScope)
+            .where(
+                CatalogReviewerScope.reviewer_id == previous_reviewer_id,
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+                CatalogReviewerScope.revoked_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if previous_scope is not None:
+            revocation_reason = "Exact image access revoked after reassignment."
+            previous_scope.revoked_by = administrator.id
+            previous_scope.revoked_at = datetime.now(timezone.utc)
+            previous_scope.revoke_reason = revocation_reason
+            db.add(CatalogReviewerScopeEvent(
+                scope_id=previous_scope.id,
+                reviewer_id=previous_reviewer_id,
+                event_type="revoked",
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                operator_id=administrator.id,
+                reason=revocation_reason,
+            ))
     image_record.assigned_reviewer_id = reviewer.id
     image_record.assigned_by = administrator.id
     image_record.assigned_at = datetime.now(timezone.utc)
