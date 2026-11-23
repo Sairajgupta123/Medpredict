@@ -27,6 +27,8 @@ type OwnerReviewStatus = {
   prediction_id: string;
   status: string;
   status_label: string;
+  status_detail: string;
+  next_step: string;
   status_at: string | null;
   clinical_interpretation_performed: false;
   disease_prediction_performed: false;
@@ -143,6 +145,12 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                   <div><span className="review-type">PRIVATE SKIN IMAGE</span><h3>Submission {item.id.slice(0, 8)}</h3><p className="review-key">Reference: {item.id}</p></div>
                   <span className="review-status review-status-assigned">{reviewStatuses[item.id]?.status_label ?? "Review status unavailable"}</span>
                 </div>
+                {reviewStatuses[item.id] && (
+                  <div className="skin-owner-review-guidance" aria-label="Technical review information">
+                    <div><strong>What this means</strong><p>{reviewStatuses[item.id].status_detail}</p></div>
+                    <div><strong>Next step</strong><p>{reviewStatuses[item.id].next_step}</p></div>
+                  </div>
+                )}
                 <div className="review-item-meta">
                   <span>Submitted {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</span>
                   <span>Image contents are not included in this list</span>
