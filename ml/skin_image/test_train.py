@@ -161,3 +161,42 @@ def test_training_refuses_existing_output_before_reading_manifest(tmp_path) -> N
         train_skin_model(manifest, image_root, output)
 
     assert report.read_text(encoding="utf-8") == '{"keep": true}'
+
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"epochs": True}, "epochs must be an integer"),
+        ({"batch_size": 1.5}, "batch_size must be an integer"),
+        ({"seed": False}, "seed must be an integer"),
+        ({"num_workers": -1}, "num_workers cannot be negative"),
+        ({"learning_rate": float("nan")}, "positive finite"),
+        ({"learning_rate": float("inf")}, "positive finite"),
+        ({"target_validation_coverage": True}, "finite number"),
+        ({"target_validation_coverage": float("nan")}, "finite number"),
+        ({"architecture": "unknown"}, "architecture must be"),
+        ({"architecture": "resnet50", "variant": "large"}, "variant is inconsistent"),
+    ],
+)
+def test_training_rejects_invalid_configuration_before_torch_import(
+    tmp_path, kwargs, message
+) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_path": ["one.jpg"],
+            "label": ["class_a"],
+            "patient_id": ["patient-1"],
+        }
+    ).to_csv(manifest, index=False)
+
+    with pytest.raises(ValueError, match=message):
+        train_skin_model(
+            manifest,
+            image_root,
+            tmp_path / "output",
+            **kwargs,
+        )
