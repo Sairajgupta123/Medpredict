@@ -38,9 +38,12 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   if (!upstream.ok) {
-    const body = await upstream.json().catch(() => ({ detail: "Review image is unavailable." }));
-    return privateJson(body, {
-      status: upstream.status,
+    // Do not parse or buffer an upstream error body: it is not needed by the
+    // browser and could otherwise make this private proxy consume unbounded memory.
+    await upstream.body?.cancel().catch(() => undefined);
+    const status = upstream.status >= 400 && upstream.status <= 599 ? upstream.status : 502;
+    return privateJson({ detail: "Review image is unavailable." }, {
+      status,
       headers: { "Cache-Control": "private, no-store" },
     });
   }
