@@ -67,7 +67,7 @@ password hash are not writable through this endpoint.
 - `email_verified`: defaults to false. Email verification is not implemented yet; do not treat
   this field as proof that an address has been verified.
 - `last_login_at`: updated after successful login.
-- `token_version`: monotonically incremented when the password is reset; protected routes compare
+- `token_version`: monotonically incremented when the password is reset or the account logs out; protected routes compare
 the JWT `ver` claim with this database value.
 
 ## Password reset foundation
@@ -99,8 +99,8 @@ The current implementation does not yet include:
 - Account export/deletion workflow and associated prediction-data retention handling
 - Security event audit logging
 
-Password-reset-driven access-token revocation and account-wide logout are implemented through per-user token versions. Logout revokes every access token for the account, not only the token used to call the endpoint.
-A dedicated logout endpoint and per-device session management are still deferred. Tokens issued
+Password-reset-driven access-token revocation and account-wide logout are implemented through per-user token versions. Logout revokes every access token for the account, not only the token used to call the endpoint. The frontend logout route calls the backend revocation endpoint before clearing the HttpOnly session cookie; if the backend is temporarily unavailable, it retains the cookie so revocation can be retried.
+Per-device session management is still deferred. Tokens issued
 before the token-version rollout do not contain the required `ver` claim and will be rejected
 after deployment, requiring users to sign in again. Keep the lifetime short and always use HTTPS
 outside local development.
