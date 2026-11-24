@@ -514,6 +514,19 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
         assert scope.revoked_by is not None
         assert scope.revoke_reason
         assert scope_event.reason
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_uuid,
+        ).one()
+        assert image_record.review_status == "pending"
+        assert image_record.assigned_reviewer_id is None
+        assert image_record.assigned_by is None
+        assert image_record.assigned_at is None
+        unassignment = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_uuid,
+            event_type="unassigned",
+            assigned_reviewer_id=reviewer_id,
+        ).one()
+        assert "revoked human-review consent" in unassignment.reason
     finally:
         db.close()
 
