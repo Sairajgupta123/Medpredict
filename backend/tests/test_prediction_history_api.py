@@ -1408,6 +1408,11 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
     response = client.delete(f"/api/v1/predictions/history/{item.id}", headers=_headers(token))
     assert response.status_code == 204
     assert key not in storage.objects
+    reviewer_history = client.get(
+        f"/api/v1/skin-images/review/{item.id}/events",
+        headers=_headers(reviewer_token),
+    )
+    assert reviewer_history.status_code == 404
     db = TestingSessionLocal()
     try:
         assert db.get(Prediction, item.id) is None
