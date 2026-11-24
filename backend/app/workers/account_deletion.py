@@ -184,6 +184,7 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
     user.password_hash = hash_password(secrets.token_urlsafe(48))
     user.is_active = False
     user.email_verified = False
+    user.last_login_at = None
     user.token_version += 1
     request.status = "completed"
     request.last_error_code = None
