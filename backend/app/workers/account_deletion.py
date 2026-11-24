@@ -23,6 +23,31 @@ def _release_for_retry(request: AccountDeletionRequest, error_code: str) -> None
     request.last_error_code = error_code
 
 
+def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before: datetime) -> bool:
+    """Claim one pending or abandoned job with a compare-and-set update."""
+    claimed_id = db.scalar(
+        update(AccountDeletionRequest)
+        .where(
+            AccountDeletionRequest.id == request_id,
+            or_(
+                AccountDeletionRequest.status == "pending",
+                and_(
+                    AccountDeletionRequest.status == "processing",
+                    AccountDeletionRequest.last_attempt_at < stale_before,
+                ),
+            ),
+        )
+        .values(
+            status="processing",
+            attempts=AccountDeletionRequest.attempts + 1,
+            last_attempt_at=now,
+        )
+        .returning(AccountDeletionRequest.id)
+    )
+    db.commit()
+    return claimed_id is not None
+
+
 def process_deletion_request(db, request_id: UUID, storage) -> bool:
     """Erase one claimed patient account; retain a non-identifying audit tombstone."""
     request = db.scalar(
@@ -118,29 +143,11 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
         ).all())
         summary = {"processed": 0, "completed": 0, "failed": 0}
         for request_id in candidate_ids:
-            # Conditional UPDATE is the cross-worker claim. A competing worker
-            # cannot claim the same pending row after this transaction commits.
-            claimed_id = db.scalar(
-                update(AccountDeletionRequest)
-                .where(
-                    AccountDeletionRequest.id == request_id,
-                    or_(
-                        AccountDeletionRequest.status == "pending",
-                        and_(
-                            AccountDeletionRequest.status == "processing",
-                            AccountDeletionRequest.last_attempt_at < stale_processing_before,
-                        ),
-                    ),
-                )
-                .values(
-                    status="processing",
-                    attempts=AccountDeletionRequest.attempts + 1,
-                    last_attempt_at=now,
-                )
-                .returning(AccountDeletionRequest.id)
+            # Compare-and-set claim prevents duplicate work across workers.
+            claimed = _claim_deletion_request(
+                db, request_id, now=now, stale_before=stale_processing_before
             )
-            db.commit()
-            if claimed_id is None:
+            if not claimed:
                 continue
 
             summary["processed"] += 1
