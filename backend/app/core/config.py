@@ -58,6 +58,26 @@ class Settings(BaseSettings):
                 )
             if self.app_secret_key == "development-only-change-this-secret":
                 raise ValueError("The development secret cannot be used in production.")
+            if not self.require_verified_email:
+                raise ValueError("REQUIRE_VERIFIED_EMAIL must be enabled in production.")
+            if not self.database_url.lower().startswith(("postgresql://", "postgresql+")):
+                raise ValueError("A PostgreSQL DATABASE_URL is required in production.")
+            if not self.frontend_base_url.lower().startswith("https://"):
+                raise ValueError("FRONTEND_BASE_URL must use HTTPS in production.")
+            origins = self.allowed_origins
+            if not origins or any(
+                not origin.lower().startswith("https://") or "*" in origin
+                for origin in origins
+            ):
+                raise ValueError("Production CORS_ORIGINS must contain explicit HTTPS origins only.")
+            if not self.smtp_host or not self.smtp_host.strip():
+                raise ValueError("SMTP_HOST is required for production account verification.")
+            if not self.smtp_sender_email or not self.smtp_sender_email.strip():
+                raise ValueError("SMTP_SENDER_EMAIL is required for production account verification.")
+            if not self.smtp_use_tls:
+                raise ValueError("SMTP_USE_TLS must be enabled in production.")
+            if bool(self.smtp_username) != bool(self.smtp_password):
+                raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together.")
         if self.access_token_expire_minutes < 5:
             raise ValueError("Access token lifetime must be at least 5 minutes.")
 
