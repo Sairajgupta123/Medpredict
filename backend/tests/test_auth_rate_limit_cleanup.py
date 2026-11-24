@@ -64,3 +64,10 @@ def test_cleanup_worker_prints_only_aggregate_count(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "deleted=7" in output
     assert "example.com" not in output
+
+
+def test_cleanup_index_supports_expiry_scan():
+    from app.models.auth_rate_limit import AuthRateLimitBucket
+
+    indexes = {index.name for index in AuthRateLimitBucket.__table__.indexes}
+    assert "ix_auth_rate_limit_buckets_window_started_at" in indexes

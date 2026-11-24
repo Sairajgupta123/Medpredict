@@ -24,8 +24,17 @@ def upgrade() -> None:
         sa.Column("window_started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("request_count", sa.Integer(), nullable=False),
     )
+    op.create_index(
+        "ix_auth_rate_limit_buckets_window_started_at",
+        "auth_rate_limit_buckets",
+        ["window_started_at"],
+    )
 
 
 def downgrade() -> None:
     """Remove authentication throttle state."""
+    op.drop_index(
+        "ix_auth_rate_limit_buckets_window_started_at",
+        table_name="auth_rate_limit_buckets",
+    )
     op.drop_table("auth_rate_limit_buckets")

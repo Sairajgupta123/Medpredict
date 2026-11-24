@@ -62,6 +62,19 @@ storage is not configured, and owner-scoped history/review authorization using t
 and synthetic non-identifiable data only. Never upload real patient images or symptoms to
 a test environment without an approved privacy and consent process.
 
+## Scheduled operational jobs
+
+Run the authentication throttle cleanup daily from the backend environment:
+
+```bash
+python -m app.workers.auth_rate_limit_cleanup
+```
+
+Each run deletes at most 500 throttle rows older than 48 hours and prints only an aggregate
+count. Schedule repeated runs if the backlog exceeds one batch. Also configure IP/network-level
+limits at the trusted ingress (API gateway, reverse proxy, or WAF); the application-level
+per-email limits are not a replacement for edge protection.
+
 ## Production gate — not yet cleared
 
 Before exposing the application publicly, complete and independently verify all of the
@@ -79,7 +92,9 @@ following:
 - [ ] Configure the trusted reverse proxy to overwrite (not append or pass through
       client-supplied) `X-Forwarded-Proto`, preserve the canonical `Host`, and accept
       forwarded headers only from known proxy hops; verify same-origin checks over HTTPS.
-- [ ] Configure rate limiting, abuse monitoring, account recovery, email verification,
+- [ ] Configure trusted-ingress IP/network rate limiting, schedule the daily
+      `python -m app.workers.auth_rate_limit_cleanup` job, and monitor abuse; complete
+      account recovery, email verification,
       and a reviewed token refresh/revocation design.
 - [ ] If image intake is enabled, configure a private encrypted object bucket, public
       access blocking, least-privilege IAM, retention/deletion jobs, lifecycle policy,
