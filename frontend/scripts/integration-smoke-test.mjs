@@ -40,10 +40,12 @@ if (
 ) {
   throw new Error("Symptom catalog response did not match the safe API contract");
 }
-const firstSymptomId = catalog.symptoms[0]?.id;
-if (typeof firstSymptomId !== "string" || !/^[A-Z0-9_]{2,80}$/.test(firstSymptomId)) {
-  throw new Error("Symptom catalog did not provide a valid stable symptom ID");
-}
+// The phrase taxonomy IDs are intentionally distinct from clinician-approved
+// database catalog codes. The CI database has no reviewed clinical catalog seed,
+// so assert that an unknown, well-formed code is rejected rather than treating
+// a research taxonomy ID as an approved clinical catalog entry.
+const unknownCatalogCode = "SMOKE_TEST_UNAPPROVED";
+
 
 const modelResponse = await request("frontend-to-backend skin model status proxy", "/api/skin-images/model-status", {}, 200);
 const model = await modelResponse.json();
@@ -86,24 +88,20 @@ if (
 }
 
 const matchResponse = await request(
-  "frontend-to-backend catalog overlap proxy",
+  "frontend-to-backend catalog rejects unapproved symptom code",
   "/api/symptoms/catalog-match",
   {
     method: "POST",
     headers: { Origin: origin, "Content-Type": "application/json" },
-    body: JSON.stringify({ symptom_ids: [firstSymptomId] }),
+    body: JSON.stringify({ symptom_ids: [unknownCatalogCode] }),
   },
-  200,
+  422,
 );
-const match = await matchResponse.json();
-if (
-  match.method !== "approved_catalog_overlap" ||
-  match.clinical_interpretation_performed !== false ||
-  match.disease_probability_provided !== false ||
-  !Array.isArray(match.results)
-) {
-  throw new Error("Catalog overlap response violated the non-diagnostic contract");
+const matchError = await matchResponse.json();
+if (matchError.detail !== "One or more symptom IDs are not in the approved catalog.") {
+  throw new Error("Catalog matching did not reject an unapproved symptom code safely");
 }
+
 
 await request(
   "unauthenticated private skin-image intake is rejected",
