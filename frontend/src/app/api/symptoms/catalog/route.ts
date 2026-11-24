@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJson } from "@/lib/auth-proxy";
 
 const API_BASE_URL =
   process.env.MEDIPREDICT_API_INTERNAL_URL?.replace(/\/$/, "") ??
@@ -13,7 +14,7 @@ export async function GET() {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-    const result = await upstream.json().catch(() => null);
+    const result = await readBoundedJson(upstream, 256 * 1024);
     return NextResponse.json(
       result ?? { detail: "The symptom catalogue returned an invalid response." },
       {
