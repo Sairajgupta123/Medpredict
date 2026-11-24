@@ -409,6 +409,34 @@ def revoke_skin_image_history_consent(
             detail="The image storage state cannot be safely reconciled; manual review is required.",
         )
 
+    # History-consent withdrawal removes the image from owner retention.
+    # Revoke exact reviewer grants before storage cleanup, so a failed delete
+    # cannot leave stale reviewer permissions active during reconciliation.
+    active_scopes = db.scalars(
+        select(CatalogReviewerScope)
+        .where(
+            CatalogReviewerScope.scope_type == "skin_image",
+            CatalogReviewerScope.scope_key == str(prediction.id),
+            CatalogReviewerScope.revoked_at.is_(None),
+        )
+        .with_for_update()
+    ).all()
+    revoked_at = datetime.now(timezone.utc)
+    revoke_reason = "Image-history consent revoked; reviewer access revoked."
+    for scope in active_scopes:
+        scope.revoked_by = user_id
+        scope.revoked_at = revoked_at
+        scope.revoke_reason = revoke_reason
+        db.add(CatalogReviewerScopeEvent(
+            scope_id=scope.id,
+            reviewer_id=scope.reviewer_id,
+            event_type="revoked",
+            scope_type=scope.scope_type,
+            scope_key=scope.scope_key,
+            operator_id=user_id,
+            reason=revoke_reason,
+        ))
+
     if image_record.storage_status != "deleted":
         image_record.storage_status = "deletion_pending"
         image_record.deletion_requested_at = (
