@@ -119,17 +119,6 @@ def delete_user_history_item(
         .where(SkinImageAnalysis.prediction_id == prediction.id)
         .with_for_update()
     )
-    # Re-read consent only after acquiring the image-row lock. Concurrent
-    # revocation requests serialize here, so a waiter cannot append a duplicate
-    # revocation event based on a stale pre-lock consent snapshot.
-    if not has_active_skin_image_consent(
-        db, prediction.id, purpose="skin_image_history"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No active image-history consent exists for this item.",
-        )
-
     if image_record is not None:
         if image_storage is None:
             raise HTTPException(
@@ -370,6 +359,16 @@ def revoke_skin_image_history_consent(
         .where(SkinImageAnalysis.prediction_id == prediction.id)
         .with_for_update()
     )
+    # Re-read consent only after acquiring the image-row lock. Concurrent
+    # revocation requests serialize here, so a waiter cannot append a duplicate
+    # revocation event based on a stale pre-lock consent snapshot.
+    if not has_active_skin_image_consent(
+        db, prediction.id, purpose="skin_image_history"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No active image-history consent exists for this item.",
+        )
     if image_record is None or image_record.storage_status not in {
         "stored", "deletion_pending", "deleted"
     }:
