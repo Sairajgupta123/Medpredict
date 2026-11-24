@@ -16,6 +16,7 @@ from app.models.prediction import (
     SkinImageAnalysis,
 )
 from app.models.user import User
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 from app.services.prediction_history import purge_expired_skin_image_records
 
 
@@ -79,10 +80,31 @@ def _expired_image(db: Session) -> tuple[Prediction, SkinImageAnalysis]:
     return prediction, image
 
 
+def _grant_reviewer_scope(db: Session, prediction: Prediction, reviewer: User) -> CatalogReviewerScope:
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id,
+        scope_type="skin_image",
+        scope_key=str(prediction.id),
+        granted_by=prediction.user_id,
+        grant_reason="Owner approved exact image review access.",
+    )
+    db.add(scope)
+    db.commit()
+    db.refresh(scope)
+    return scope
+
+
 def test_expired_image_is_deleted_and_history_consent_is_revoked(
     db_session: Session,
 ) -> None:
     prediction, image = _expired_image(db_session)
+    reviewer = User(
+        email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-hash",
+    )
+    db_session.add(reviewer)
+    db_session.commit()
+    scope = _grant_reviewer_scope(db_session, prediction, reviewer)
     storage = FakeImageStorage()
 
     result = purge_expired_skin_image_records(
@@ -106,12 +128,30 @@ def test_expired_image_is_deleted_and_history_consent_is_revoked(
     assert image.storage_status == "deleted"
     assert image.retention_expires_at is None
     assert [event.action for event in consent_events] == ["granted", "revoked"]
+    db_session.refresh(scope)
+    assert scope.revoked_at is not None
+    assert scope.revoked_by == prediction.user_id
+    scope_event = db_session.scalar(
+        select(CatalogReviewerScopeEvent).where(
+            CatalogReviewerScopeEvent.scope_id == scope.id,
+            CatalogReviewerScopeEvent.event_type == "revoked",
+        )
+    )
+    assert scope_event is not None
+    assert scope_event.operator_id == prediction.user_id
 
 
 def test_failed_expiry_keeps_retry_marker_and_does_not_revoke_consent(
     db_session: Session,
 ) -> None:
     prediction, image = _expired_image(db_session)
+    reviewer = User(
+        email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-hash",
+    )
+    db_session.add(reviewer)
+    db_session.commit()
+    scope = _grant_reviewer_scope(db_session, prediction, reviewer)
     original_expiry = image.retention_expires_at
     storage = FakeImageStorage(fail=True)
 
@@ -135,6 +175,9 @@ def test_failed_expiry_keeps_retry_marker_and_does_not_revoke_consent(
     assert image.storage_status == "deletion_pending"
     assert image.retention_expires_at == original_expiry
     assert [event.action for event in consent_events] == ["granted"]
+    db_session.refresh(scope)
+    assert scope.revoked_at is not None
+    assert scope.revoked_by == prediction.user_id
 
 
 def test_unexpired_image_is_not_deleted(db_session: Session) -> None:
