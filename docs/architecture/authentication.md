@@ -9,6 +9,8 @@ project foundation, not a production security certification.
 |---|---|---|---|
 | POST | `/api/v1/auth/register` | Public | Create an account and issue an access token |
 | POST | `/api/v1/auth/login` | Public | Verify credentials and issue an access token |
+| POST | `/api/v1/auth/email-verification/request` | Public | Send a generic verification email response |
+| POST | `/api/v1/auth/email-verification/confirm` | Public | Consume a one-time email verification token |
 | POST | `/api/v1/auth/logout` | Bearer token | Revoke all access tokens for the account |
 | GET | `/api/v1/auth/me` | Bearer token | Return the authenticated account profile |
 | PATCH | `/api/v1/auth/me` | Bearer token | Update or clear the account display name |
