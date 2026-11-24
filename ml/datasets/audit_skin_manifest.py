@@ -38,6 +38,15 @@ def _safe_group_summary(frame: pd.DataFrame, column: str) -> dict[str, Any]:
     }
 
 
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash image content incrementally so large datasets do not exhaust memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def audit_skin_manifest(
     manifest_path: Path,
     image_root: Path,
@@ -118,7 +127,7 @@ def audit_skin_manifest(
             continue
 
         try:
-            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            digest = _sha256_file(candidate)
             image_hashes[digest].append((int(index), row["label"]))
             with Image.open(candidate) as image:
                 image_format = image.format
