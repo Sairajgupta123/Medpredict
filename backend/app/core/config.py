@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,11 @@ class Settings(BaseSettings):
     skin_image_s3_kms_key_id: str | None = None
     skin_research_checkpoint_path: str | None = None
     text_research_artifact_path: str | None = None
+    database_pool_size: int = Field(default=5, ge=1, le=50)
+    database_max_overflow: int = Field(default=10, ge=0, le=100)
+    database_pool_timeout_seconds: int = Field(default=30, ge=1, le=120)
+    database_pool_recycle_seconds: int = Field(default=1800, ge=60, le=86400)
+    database_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
     database_url: str = (
         "postgresql+psycopg://medipredict:change-me@localhost:5432/medipredict"
     )
