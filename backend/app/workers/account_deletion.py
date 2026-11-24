@@ -190,6 +190,9 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
         try:
             storage.delete_private(image.object_key)
         except Exception:
+            request = _lock_owned_request(db, request_id, claim_token)
+            if request is None:
+                return False
             _release_for_retry(request, "private_image_deletion_failed")
             db.commit()
             return False
@@ -275,7 +278,11 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
             except Exception:
                 db.rollback()
                 row = db.get(AccountDeletionRequest, request_id)
-                if row is not None and row.status == "processing":
+                if (
+                    row is not None
+                    and row.status == "processing"
+                    and row.claim_token == claimed
+                ):
                     _release_for_retry(row, "unexpected_processing_error")
                     row.claim_token = None
                     db.commit()
