@@ -45,7 +45,7 @@ def test_accepts_explicit_abstention_without_candidate_or_confidence() -> None:
     assert result.confidence is None
 
 
-@pytest.mark.parametrize("confidence", [-0.01, 1.01, math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("confidence", [True, False, -0.01, 1.01, math.nan, math.inf, -math.inf])
 def test_rejects_invalid_confidence(confidence: float) -> None:
     with pytest.raises(InvalidSkinImageModelOutput, match="finite value"):
         SkinImageInferenceResult(
@@ -56,6 +56,34 @@ def test_rejects_invalid_confidence(confidence: float) -> None:
             confidence=confidence,
             confidence_calibrated=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("abstained", 1, "abstained flag must be boolean"),
+        ("confidence_calibrated", 1, "confidence_calibrated flag must be boolean"),
+        ("candidate_label", 123, "valid candidate label"),
+        ("abstention_reason", 123, "require a concise reason"),
+    ],
+)
+def test_rejects_malformed_adapter_field_types(field, value, message) -> None:
+    values = {
+        "abstained": False,
+        "model_version": "skin-model-1.0.0",
+        "model_artifact_sha256": MODEL_DIGEST,
+        "candidate_label": "candidate_a",
+        "confidence": 0.8,
+        "confidence_calibrated": True,
+    }
+    values[field] = value
+    if field == "abstention_reason":
+        values["abstained"] = True
+        values.pop("candidate_label")
+        values.pop("confidence")
+        values.pop("confidence_calibrated")
+    with pytest.raises(InvalidSkinImageModelOutput, match=message):
+        SkinImageInferenceResult(**values)
 
 
 def test_rejects_uncalibrated_confidence() -> None:
