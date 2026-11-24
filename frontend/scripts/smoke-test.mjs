@@ -51,6 +51,17 @@ for (const endpoint of ["login", "register"]) {
   );
 }
 
+await check(
+  "reject invalid email verification request fields",
+  { path: "/api/auth/email-verification/request", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ email: 42 }) } },
+  422,
+);
+await check(
+  "reject invalid email verification token",
+  { path: "/api/auth/email-verification/confirm", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ token: "short" }) } },
+  422,
+);
+
 for (const action of ["request", "confirm"]) {
   const verificationPath = `/api/auth/email-verification/${action}`;
   await check(
