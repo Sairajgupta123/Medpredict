@@ -1155,10 +1155,29 @@ def test_owner_revoking_review_consent_revokes_assigned_reviewer_scope(
         f"/api/v1/skin-images/review/{prediction.id}/image",
         headers=_headers(reviewer_token),
     )
-    assert image.status_code == 403
+    # The assignment is cleared transactionally, so the former reviewer
+    # now receives the non-disclosing "not assigned" response.
+    assert image.status_code == 404
 
     db = TestingSessionLocal()
     try:
+        image_record = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        assert image_record is not None
+        assert image_record.review_status == "pending"
+        assert image_record.assigned_reviewer_id is None
+        unassigned = db.scalar(
+            select(SkinImageReviewEvent).where(
+                SkinImageReviewEvent.prediction_id == prediction.id,
+                SkinImageReviewEvent.event_type == "unassigned",
+                SkinImageReviewEvent.assigned_reviewer_id == reviewer.id,
+            )
+        )
+        assert unassigned is not None
+        assert "revoked human-review consent" in unassigned.reason
         scope = db.scalar(
             select(CatalogReviewerScope).where(
                 CatalogReviewerScope.reviewer_id == reviewer.id,
