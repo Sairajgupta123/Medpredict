@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
+import { API_BASE_URL, SESSION_COOKIE, readBoundedJson } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 function privateJson(body: unknown, status = 200) {
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     return privateJson({ detail: "The MediPredict server is unavailable. Please try again." }, 503);
   }
 
-  const result = await upstream.json().catch(() => null);
+  const result = await readBoundedJson(upstream, 16 * 1024);\n  if (result === null) {\n    return privateJson({ detail: "The deletion service returned an invalid response." }, 502);\n  }
   if (!upstream.ok) {
     const detail = result && typeof result === "object" && "detail" in result
       ? result.detail : "The deletion request could not be submitted.";
