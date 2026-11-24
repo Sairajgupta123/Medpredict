@@ -212,7 +212,17 @@ export async function getSessionUser(): Promise<{
   }
 
   if (!backendResponse.ok) return { user: null };
-  return { user: await backendResponse.json() };
+  const user = await readBoundedJson(backendResponse);
+  if (!user || typeof user !== "object" || Array.isArray(user)) {
+    return {
+      user: null,
+      response: privateJson(
+        { detail: "The session service returned an invalid response." },
+        { status: 502 },
+      ),
+    };
+  }
+  return { user };
 }
 
 export async function getSessionToken(): Promise<string | null> {
@@ -274,7 +284,7 @@ export async function getCatalogReviewQueue(
           : "The review queue could not be loaded. Please try again.",
       };
     }
-    return { items: await response.json() as CatalogReviewQueueItem[], error: null };
+    return { items: await readBoundedJson(response, 256 * 1024) as CatalogReviewQueueItem[], error: null };
   } catch {
     return { items: [], error: "The MediPredict server is unavailable." };
   }
@@ -331,7 +341,7 @@ export async function getCatalogReviewHistory(
           : "Review history could not be loaded. Please try again.",
       };
     }
-    return { items: await response.json() as CatalogReviewEvent[], error: null };
+    return { items: await readBoundedJson(response, 512 * 1024) as CatalogReviewEvent[], error: null };
   } catch {
     return { items: [], error: "The MediPredict server is unavailable." };
   }
@@ -376,7 +386,7 @@ export async function getReviewedCatalogEntry(eventId: string): Promise<{
           : "The reviewed catalog entry could not be loaded.",
       };
     }
-    return { data: await response.json() as ReviewedCatalogEntry, error: null };
+    return { data: await readBoundedJson(response, 128 * 1024) as ReviewedCatalogEntry, error: null };
   } catch {
     return { data: null, error: "The MediPredict server is unavailable." };
   }
@@ -420,7 +430,7 @@ export async function getGovernanceOverview(): Promise<{
           : "The governance overview could not be loaded. Please try again.",
       };
     }
-    return { data: await response.json() as GovernanceOverview, error: null };
+    return { data: await readBoundedJson(response, 256 * 1024) as GovernanceOverview, error: null };
   } catch {
     return { data: null, error: "The MediPredict server is unavailable." };
   }
@@ -490,9 +500,9 @@ export async function getReviewerScopeGovernance(): Promise<{
       };
     }
     const [reviewers, scopes, events] = await Promise.all([
-      reviewersResponse.json(),
-      scopesResponse.json(),
-      eventsResponse.json(),
+      readBoundedJson(reviewersResponse, 128 * 1024),
+      readBoundedJson(scopesResponse, 256 * 1024),
+      readBoundedJson(eventsResponse, 256 * 1024),
     ]);
     return {
       reviewers: reviewers as ReviewerAccount[],
@@ -553,7 +563,7 @@ export async function getReviewerWorkload(): Promise<{
           : "Your review workload could not be loaded.",
       };
     }
-    return { data: await response.json() as ReviewerWorkload, error: null };
+    return { data: await readBoundedJson(response, 128 * 1024) as ReviewerWorkload, error: null };
   } catch {
     return { data: null, error: "The MediPredict server is unavailable." };
   }
@@ -627,7 +637,7 @@ export async function getReviewableMedicalReferences(q = ""): Promise<{
     if (!response.ok) {
       return { items: [], error: "The medical source registry could not be loaded." };
     }
-    return { items: await response.json() as ReviewableMedicalReference[], error: null };
+    return { items: await readBoundedJson(response, 512 * 1024) as ReviewableMedicalReference[], error: null };
   } catch {
     return { items: [], error: "The MediPredict server is unavailable." };
   }
@@ -720,7 +730,7 @@ export async function getPendingCatalogEntry(
             : "The catalog entry could not be loaded. Please try again.",
       };
     }
-    return { data: await response.json() as PendingCatalogEntry, error: null };
+    return { data: await readBoundedJson(response, 256 * 1024) as PendingCatalogEntry, error: null };
   } catch {
     return { data: null, error: "The MediPredict server is unavailable." };
   }
