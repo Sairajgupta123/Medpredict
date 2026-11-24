@@ -94,8 +94,8 @@ def test_abandoned_processing_request_can_be_reclaimed() -> None:
             stale_before=now - timedelta(hours=2),
         )
         assert token is not None
-        assert request.claim_token == token
         db.refresh(request)
+        assert request.claim_token == token
         assert request.status == "processing"
         assert request.attempts == 2
         assert request.last_attempt_at.replace(tzinfo=timezone.utc) == now
@@ -174,8 +174,8 @@ def test_processing_request_without_attempt_timestamp_is_recovered() -> None:
             stale_before=now - timedelta(hours=2),
         )
         assert token is not None
-        assert request.claim_token == token
         db.refresh(request)
+        assert request.claim_token == token
         assert request.status == "processing"
         assert request.attempts == 2
         assert request.last_attempt_at.replace(tzinfo=timezone.utc) == now
