@@ -17,10 +17,9 @@ def send_password_reset_email(recipient: str, raw_token: str) -> None:
     if not all(required):
         raise RuntimeError("Password reset email delivery is not configured.")
 
-    query = urlencode({"token": raw_token})
-    reset_url = (
-        f"{settings.frontend_base_url.rstrip('/')}/reset-password?{query}"
-    )
+    fragment = urlencode({"token": raw_token})
+    # Keep bearer-like recovery tokens out of HTTP request URLs and access logs.
+    reset_url = f"{settings.frontend_base_url.rstrip('/')}/reset-password#{fragment}"
     message = EmailMessage()
     message["Subject"] = "Reset your MediPredict password"
     message["From"] = settings.smtp_sender_email
