@@ -26,6 +26,7 @@ async function requireAdminToken() {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) redirect("/login");
   const user = await response.json() as { role?: string };
@@ -62,6 +63,7 @@ async function grantReviewerScope(formData: FormData) {
       reason,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (response.status === 409) redirect("/admin?scope_error=duplicate");
   if (!response.ok) redirect("/admin?scope_error=grant");
@@ -122,6 +124,7 @@ async function createMedicalReference(formData: FormData) {
       reason,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (response.status === 409) redirect("/admin?reference_error=duplicate");
   if (!response.ok) redirect("/admin?reference_error=create");
@@ -142,6 +145,7 @@ async function reviewMedicalReference(formData: FormData) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ expected_status: expectedStatus, status, reason }),
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (response.status === 409) redirect("/admin?reference_error=stale");
   if (!response.ok) redirect("/admin?reference_error=review");
@@ -167,6 +171,7 @@ async function revokeReviewerScope(formData: FormData) {
       },
       body: JSON.stringify({ reason }),
       cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
     },
   );
   if (response.status === 409) redirect("/admin?scope_error=revoked");
@@ -196,6 +201,7 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
   const referencesResponse = await fetch(`${API_BASE_URL}/admin/medical-references?limit=50`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   const medicalReferences = referencesResponse.ok
     ? await referencesResponse.json() as Array<{
@@ -208,6 +214,7 @@ export default async function AdminGovernancePage({ searchParams }: AdminPagePro
     ? await fetch(`${API_BASE_URL}/admin/medical-references/${encodeURIComponent(historyId)}/history`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
       })
     : null;
   const referenceHistory = historyResponse?.ok
