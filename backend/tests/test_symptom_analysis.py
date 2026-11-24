@@ -56,6 +56,9 @@ def test_normalize_flags_negated_mentions_separately() -> None:
         "Not fever, but I have a cough.",
         "I am not having a fever but I have a cough.",
         "I was not having a headache yesterday.",
+        "I am not experiencing a fever.",
+        "I do not experience a headache.",
+        "I don't experience a fever.",
     ],
 )
 def test_normalize_flags_additional_negation_phrases(text: str) -> None:
