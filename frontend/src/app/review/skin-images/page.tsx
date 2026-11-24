@@ -47,11 +47,16 @@ function isEligibleReviewer(value: unknown): value is EligibleReviewer {
 async function requireReviewerToken() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) redirect("/login");
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch {
+    redirect("/review/skin-images?error=unavailable");
+  }
   if (!response.ok) redirect("/login");
   const user = await response.json() as { role?: string };
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
@@ -159,17 +164,22 @@ async function submitImageReview(formData: FormData) {
   if (!/^[0-9a-f-]{36}$/i.test(predictionId) || !["capture_adequate", "unable_to_assess"].includes(outcome) || reason.length < 8 || reason.length > 1000) {
     redirect("/review/skin-images?error=invalid");
   }
-  const response = await fetch(`${API_BASE_URL}/skin-images/review/${encodeURIComponent(predictionId)}/decision`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ outcome, reason }),
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/skin-images/review/${encodeURIComponent(predictionId)}/decision`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ outcome, reason }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    redirect("/review/skin-images?error=unavailable");
+  }
   if (!response.ok) redirect(`/review/skin-images?error=${response.status === 409 ? "conflict" : "save"}`);
   revalidatePath("/review/skin-images");
   redirect("/review/skin-images?updated=reviewed");
@@ -244,6 +254,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
         {params.error === "forbidden" && <div className="review-alert" role="alert">Only administrators can assign images.</div>}
         {params.error === "conflict" && <div className="review-alert" role="alert">This image changed before your action. Refresh the queue and try again.</div>}
         {params.error === "save" && <div className="review-alert" role="alert">The action could not be saved. Please try again.</div>}
+        {params.error === "unavailable" && <div className="review-alert" role="alert">The MediPredict server did not respond in time. Check your connection and try again.</div>}
         {params.error === "scope" && <div className="review-alert" role="alert">The image-specific reviewer permission could not be granted. No assignment was made.</div>}
         {queueError && <div className="review-alert" role="alert">{queueError}</div>}
         <div className="review-section-heading">
