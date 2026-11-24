@@ -47,6 +47,84 @@ def test_training_rejects_manifest_modified_during_dataset_audit(tmp_path, monke
         train_skin_model(manifest, image_root, tmp_path / "output")
 
 
+def _approved_dataset_record():
+    return {
+        "dataset_id": "approved-skin-set-v1",
+        "name": "Reviewed skin research dataset",
+        "source_url": "https://example.org/skin-dataset",
+        "version": "1.0",
+        "retrieved_on": "2026-01-01",
+        "modality": "image",
+        "image_domain": "dermoscopy",
+        "license": "CC-BY-4.0",
+        "license_review": "approved",
+        "permitted_use_review": "approved",
+        "privacy_review": "approved",
+        "label_review": "approved",
+        "patient_grouping": "pseudonymous patient_id",
+        "clinical_reviewer_signoff": "approved",
+        "approval_status": "research_only_approved",
+    }
+
+
+def test_training_dataset_gate_requires_all_explicit_governance_approvals(tmp_path):
+    import json
+
+    from ml.skin_image.train import require_research_dataset_approval
+
+    registry = tmp_path / "registry.json"
+    record = _approved_dataset_record()
+    record["privacy_review"] = "not_reviewed"
+    registry.write_text(json.dumps({"datasets": [record]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="governance reviews"):
+        require_research_dataset_approval(registry, "approved-skin-set-v1")
+
+
+def test_training_dataset_gate_requires_research_only_status(tmp_path):
+    import json
+
+    from ml.skin_image.train import require_research_dataset_approval
+
+    registry = tmp_path / "registry.json"
+    record = _approved_dataset_record()
+    record["approval_status"] = "not_approved"
+    registry.write_text(json.dumps({"datasets": [record]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="research-only"):
+        require_research_dataset_approval(registry, "approved-skin-set-v1")
+
+
+def test_training_dataset_gate_returns_governance_provenance(tmp_path):
+    import json
+
+    from ml.skin_image.train import require_research_dataset_approval
+
+    registry = tmp_path / "registry.json"
+    registry.write_text(
+        json.dumps({"datasets": [_approved_dataset_record()]}), encoding="utf-8"
+    )
+    result = require_research_dataset_approval(registry, "approved-skin-set-v1")
+
+    assert result["dataset_id"] == "approved-skin-set-v1"
+    assert result["approval_status"] == "research_only_approved"
+    assert result["governance_reviews"]["clinical_reviewer_signoff"] == "approved"
+    assert len(result["registry_sha256"]) == 64
+
+
+def test_training_dataset_gate_rejects_duplicate_dataset_ids(tmp_path):
+    import json
+
+    from ml.skin_image.train import require_research_dataset_approval
+
+    record = _approved_dataset_record()
+    registry = tmp_path / "registry.json"
+    registry.write_text(json.dumps({"datasets": [record, record]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exactly one"):
+        require_research_dataset_approval(registry, "approved-skin-set-v1")
+
+
 def test_training_rejects_missing_patient_column(tmp_path) -> None:
     manifest = tmp_path / "manifest.csv"
     pd.DataFrame(
@@ -146,6 +224,10 @@ def test_training_cli_forwards_validation_coverage(monkeypatch, tmp_path) -> Non
             str(tmp_path / "images"),
             "--output-dir",
             str(tmp_path / "output"),
+            "--dataset-registry",
+            str(tmp_path / "registry.json"),
+            "--dataset-id",
+            "approved-skin-set-v1",
             "--target-validation-coverage",
             "0.82",
         ],
