@@ -56,11 +56,18 @@ await check(
   { path: logoutPath, init: { method: "POST", headers: { Origin: "https://invalid.example" } } },
   403,
 );
-await check(
+const logoutResponse = await check(
   "allow same-origin logout and clear session",
   { path: logoutPath, init: { method: "POST", headers: { Origin: requestOrigin } } },
   200,
 );
+const clearedCookie = logoutResponse.headers.get("set-cookie") ?? "";
+for (const attribute of ["HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=0"]) {
+  if (!clearedCookie.toLowerCase().includes(attribute.toLowerCase())) {
+    throw new Error(`logout cookie: expected ${attribute} in "${clearedCookie}"`);
+  }
+}
+process.stdout.write("PASS logout clears the session with secure cookie attributes\\n");
 
 const path = "/api/symptoms/normalize";
 await check(
