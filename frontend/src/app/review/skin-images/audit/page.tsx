@@ -16,6 +16,24 @@ type AuditEvent = {
   created_at: string;
 };
 
+function isAuditEvent(value: unknown): value is AuditEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const event = value as Record<string, unknown>;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return typeof event.event_id === "string" && uuid.test(event.event_id)
+    && typeof event.prediction_id === "string" && uuid.test(event.prediction_id)
+    && ["assigned", "reassigned", "image_accessed", "reviewed"].includes(String(event.event_type))
+    && typeof event.actor_id === "string" && uuid.test(event.actor_id)
+    && typeof event.actor_identity === "string" && event.actor_identity.length <= 320
+    && typeof event.actor_role === "string" && ["admin", "reviewer"].includes(event.actor_role)
+    && (event.assigned_reviewer_id === null || (typeof event.assigned_reviewer_id === "string" && uuid.test(event.assigned_reviewer_id)))
+    && (event.outcome === null || (typeof event.outcome === "string" && event.outcome.length <= 80))
+    && typeof event.reason === "string" && event.reason.length <= 1000
+    && typeof event.created_at === "string" && Number.isFinite(Date.parse(event.created_at));
+}
+
+const PAGE_SIZE = 200;
+
 const EVENT_LABELS: Record<AuditEvent["event_type"], string> = {
   assigned: "Image assigned",
   reassigned: "Image reassigned",
@@ -23,7 +41,15 @@ const EVENT_LABELS: Record<AuditEvent["event_type"], string> = {
   reviewed: "Technical review submitted",
 };
 
-export default async function SkinImageAuditPage() {
+type PageProps = { searchParams: Promise<{ page?: string }> };
+
+export default async function SkinImageAuditPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const parsedPage = Number(params.page ?? "0");
+  const page = Number.isSafeInteger(parsedPage) && parsedPage >= 0 && parsedPage <= 50
+    ? parsedPage
+    : 0;
+  const offset = page * PAGE_SIZE;
   const session = await getSessionUser();
   if (!session.user) redirect("/login");
   const user = session.user as { role?: string };
@@ -36,7 +62,7 @@ export default async function SkinImageAuditPage() {
   let error = "";
   try {
     const response = await fetch(
-      `${API_BASE_URL}/skin-images/review/audit?limit=200&offset=0`,
+      `${API_BASE_URL}/skin-images/review/audit?limit=${PAGE_SIZE}&offset=${offset}`,
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
@@ -44,7 +70,7 @@ export default async function SkinImageAuditPage() {
     );
     if (response.ok) {
       const payload = await response.json();
-      if (Array.isArray(payload)) events = payload as AuditEvent[];
+      if (Array.isArray(payload) && payload.every(isAuditEvent)) events = payload;
       else error = "The audit service returned an unexpected response.";
     } else {
       error = response.status === 403
@@ -74,7 +100,7 @@ export default async function SkinImageAuditPage() {
         {error && <div className="review-alert" role="alert">{error}</div>}
         <div className="review-section-heading">
           <div><span className="eyebrow">IMMUTABLE EVENT RECORDS</span><h2>Recent activity</h2></div>
-          <span className="review-count">{events.length} EVENTS</span>
+          <span className="review-count">{events.length} EVENTS · PAGE {page + 1}</span>
         </div>
         {!error && events.length === 0 ? (
           <div className="review-empty"><h3>No audit events are available</h3><p>Assignment, private image access and technical review events will appear here when recorded.</p></div>
@@ -100,6 +126,12 @@ export default async function SkinImageAuditPage() {
               </article>
             ))}
           </div>
+        )}
+        {!error && (
+          <nav className="review-filter-actions" aria-label="Audit history pagination">
+            {page > 0 && <Link className="button button-secondary" href={`/review/skin-images/audit?page=${page - 1}`}>← Newer events</Link>}
+            {events.length === PAGE_SIZE && page < 50 && <Link className="button button-primary" href={`/review/skin-images/audit?page=${page + 1}`}>Older events →</Link>}
+          </nav>
         )}
         <div className="review-safety-note">
           <strong>Audit interpretation</strong>
