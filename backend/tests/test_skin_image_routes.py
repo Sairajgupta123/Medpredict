@@ -493,6 +493,15 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
     assert response.status_code == 200
     assert response.json()["reviewer_access_revoked"] is True
 
+    # Repeating the same withdrawal must not append duplicate consent or scope
+    # audit events, and must not claim that an already-revoked grant was active.
+    repeated_response = client.post(
+        f"/api/v1/skin-images/{prediction_id}/revoke-review-consent",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert repeated_response.status_code == 409
+    assert "no active consent" in repeated_response.json()["detail"].lower()
+
     db = TestingSessionLocal()
     try:
         scope = db.query(CatalogReviewerScope).filter_by(
