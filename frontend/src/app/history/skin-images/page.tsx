@@ -295,8 +295,23 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                 </form>
                 <form action={revokeReviewConsent} className="skin-history-action">
                   <input type="hidden" name="prediction_id" value={item.id} />
-                  <div><strong>Human-review permission</strong><small>Revoke the separate consent and disable assigned reviewer access for this image.</small></div>
-                  <button className="button button-secondary" type="submit">Revoke review consent</button>
+                  <div>
+                    <strong>Human-review permission</strong>
+                    <small>
+                      {reviewStatuses[item.id]?.status === "review_access_withdrawn"
+                        ? "Human-review consent has already been revoked. No reviewer can access this image."
+                        : "Revoke the separate consent and disable assigned reviewer access for this image."}
+                    </small>
+                  </div>
+                  <button
+                    className="button button-secondary"
+                    type="submit"
+                    disabled={reviewStatuses[item.id]?.status === "review_access_withdrawn"}
+                  >
+                    {reviewStatuses[item.id]?.status === "review_access_withdrawn"
+                      ? "Review access revoked"
+                      : "Revoke review consent"}
+                  </button>
                 </form>
               </article>
             ))}
