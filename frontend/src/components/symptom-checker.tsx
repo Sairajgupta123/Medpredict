@@ -130,6 +130,10 @@ export function SymptomChecker() {
       setMatchError("Confirm at least one symptom as present before comparing the catalog.");
       return;
     }
+    if (symptomIds.length > 20) {
+      setMatchError("The catalog comparison supports up to 20 confirmed symptoms at a time. Mark fewer symptoms as present and try again.");
+      return;
+    }
     setMatchError("");
     setMatchResult(null);
     setMatchLoading(true);
@@ -401,9 +405,14 @@ export function SymptomChecker() {
                 <h3 id="catalog-match-title">Compare with the approved catalog</h3>
                 <p>Only symptoms you explicitly confirm as present are sent. This compares catalog associations; it does not estimate disease risk or provide a diagnosis.</p>
               </div>
+              {confirmedSymptomCount > 20 && (
+                <p className="human-review-note" role="status">
+                  Select up to 20 confirmed symptoms for one catalog comparison. You currently have {confirmedSymptomCount}.
+                </p>
+              )}
               <button
                 className="button button-secondary"
-                disabled={matchLoading || confirmedSymptomCount === 0}
+                disabled={matchLoading || confirmedSymptomCount === 0 || confirmedSymptomCount > 20}
                 onClick={handleCatalogMatch}
                 type="button"
               >
