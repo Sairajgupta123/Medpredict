@@ -107,6 +107,23 @@ await check(
 );
 
 
+const deletionRequestPath = "/api/auth/me/deletion-request";
+await check(
+  "reject cross-origin account deletion request",
+  { path: deletionRequestPath, init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: JSON.stringify({ password: "SmokeTestPassword123!" }) } },
+  403,
+);
+await check(
+  "require authentication for account deletion request",
+  { path: deletionRequestPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ password: "SmokeTestPassword123!" }) } },
+  401,
+);
+await check(
+  "require authentication for private account export",
+  { path: "/api/auth/me/export", init: { method: "GET" } },
+  401,
+);
+
 const testPredictionId = "00000000-0000-4000-8000-000000000001";
 await check(
   "require authentication to revoke skin-image review consent",
