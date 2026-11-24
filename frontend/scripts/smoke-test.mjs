@@ -52,6 +52,25 @@ for (const endpoint of ["login", "register"]) {
 }
 
 for (const action of ["request", "confirm"]) {
+  const verificationPath = `/api/auth/email-verification/${action}`;
+  await check(
+    `reject cross-origin email verification ${action}`,
+    { path: verificationPath, init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject missing origin for email verification ${action}`,
+    { path: verificationPath, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject malformed email verification ${action} payload`,
+    { path: verificationPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
+    400,
+  );
+}
+
+for (const action of ["request", "confirm"]) {
   const resetPath = `/api/auth/password-reset/${action}`;
   await check(
     `reject cross-origin password reset ${action}`,
