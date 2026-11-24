@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from PIL import Image
 
@@ -690,7 +690,6 @@ def test_admin_can_recover_pending_image_after_reviewer_deactivation(
     admin_headers = _admin_headers()
     db = TestingSessionLocal()
     try:
-        admin_id = admin_headers["Authorization"].split(" ", 1)[1]
         # Resolve the administrator from its signed token through the same
         # authenticated endpoint rather than relying on token payload details.
         admin_response = client.get("/api/v1/auth/me", headers=admin_headers)
@@ -770,7 +769,7 @@ def test_admin_can_recover_pending_image_after_reviewer_deactivation(
             prediction_id=prediction_id,
         ).one()
         assert image_record.review_status == "assigned"
-        assert image_record.assigned_reviewer_id == uuid4_from_string(reviewer_id)
+        assert image_record.assigned_reviewer_id == UUID(reviewer_id)
     finally:
         db.close()
 
