@@ -357,6 +357,73 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
         db.close()
 
 
+def test_revoked_history_consent_blocks_owner_image_retrieval(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale owner consent grant cannot authorize image retrieval."""
+    from app.api.v1 import skin_images
+
+    def unexpected_storage():
+        raise AssertionError("storage must not be accessed after consent revocation")
+
+    monkeypatch.setattr(skin_images, "build_skin_image_storage", unexpected_storage)
+
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-owner-revoked-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        db.add(owner)
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/owner-revoked-test",
+                content_type="image/png",
+                image_sha256="0" * 64,
+                storage_status="stored",
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_history",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_history",
+                action="revoked",
+                policy_version="v1",
+                captured_at=captured_at + timedelta(seconds=1),
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        owner_token = create_access_token(owner.id)
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/skin-images/{prediction_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert response.status_code == 403
+    assert "image-history consent" in response.json()["detail"].lower()
+
+
 def test_owner_revocation_atomically_disables_reviewer_scope(
     client: TestClient,
 ) -> None:
