@@ -102,7 +102,7 @@ def _valid_checkpoint_and_metadata():
         "threshold_selection_partition": "validation_only",
         "experiment_config": config,
         "experiment_config_sha256": digest,
-        "manifest_sha256": "manifest-digest",
+        "manifest_sha256": "a" * 64,
     }
     metadata = {
         "architecture": "mobilenet_v3",
@@ -115,7 +115,7 @@ def _valid_checkpoint_and_metadata():
             "mean": [0.485, 0.456, 0.406],
             "std": [0.229, 0.224, 0.225],
         },
-        "manifest_sha256": "manifest-digest",
+        "manifest_sha256": "a" * 64,
         "experiment_config_sha256": digest,
         "calibration_temperature": 1.2,
         "abstention_threshold": 0.65,
@@ -139,6 +139,25 @@ def test_checkpoint_metadata_validation_returns_inference_settings() -> None:
         "temperature": 1.2,
         "minimum_confidence": 0.65,
     }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("missing", "missing required fields"),
+        ("malformed", "lowercase SHA-256 hex digest"),
+    ],
+)
+def test_checkpoint_validation_requires_valid_manifest_digest(mutation, message) -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    if mutation == "missing":
+        checkpoint.pop("manifest_sha256")
+    else:
+        checkpoint["manifest_sha256"] = "not-a-sha256"
+    with pytest.raises(ValueError, match=message):
+        validate_skin_checkpoint(checkpoint, metadata)
 
 
 def test_checkpoint_validation_rejects_wrong_class_index_mapping() -> None:
