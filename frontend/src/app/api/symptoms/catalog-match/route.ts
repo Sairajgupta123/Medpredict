@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJson } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 import { readBoundedJsonBody } from "@/lib/bounded-json";
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
-    const result = await upstream.json().catch(() => null);
+    const result = await readBoundedJson(upstream, 128 * 1024);
     return NextResponse.json(
       result ?? { detail: "The catalog matching service returned an invalid response." },
       { status: upstream.status, headers: { "Cache-Control": "no-store, max-age=0" } },
