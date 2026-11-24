@@ -162,8 +162,10 @@ following:
       account recovery, email verification,
       and a reviewed token refresh/revocation design.
 - [ ] If image intake is enabled, configure a private encrypted object bucket, public
-      access blocking, least-privilege IAM, retention/deletion jobs, lifecycle policy,
-      backups, and access audit monitoring.
+      access blocking, least-privilege IAM, `SKIN_IMAGE_RETENTION_DAYS` (1–3650),
+      retention/deletion jobs, lifecycle policy, backups, and access audit monitoring.
+      Production startup fails when a bucket is configured without an explicit retention
+      period; intake records expiry per image and discloses the period before consent.
 - [ ] Verify that logs, traces, analytics and error reporting never capture passwords,
       bearer tokens, symptom text, image bytes, object keys or other sensitive payloads.
 - [ ] Complete security, privacy, accessibility and operational reviews; document incident
