@@ -102,9 +102,9 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
             .order_by(CatalogReviewerScope.id)
             .with_for_update()
         ).all())
-        images_by_prediction = {image.prediction_id: image for image in images}
+        images_by_prediction = {str(image.prediction_id): image for image in images}
         for scope in scopes:
-            image = images_by_prediction.get(UUID(scope.scope_key))
+            image = images_by_prediction.get(scope.scope_key)
             if image is not None and image.assigned_reviewer_id == scope.reviewer_id:
                 previous_reviewer_id = image.assigned_reviewer_id
                 image.assigned_reviewer_id = None
