@@ -327,6 +327,7 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
         ])
         db.commit()
         prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
         reviewer_id = reviewer.id
         reviewer_token = create_access_token(reviewer.id)
     finally:
@@ -347,7 +348,7 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
     db = TestingSessionLocal()
     try:
         access_events = db.query(SkinImageReviewEvent).filter_by(
-            prediction_id=prediction_id,
+            prediction_id=prediction_uuid,
             event_type="image_accessed",
             actor_id=reviewer_id,
         ).all()
