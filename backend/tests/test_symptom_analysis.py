@@ -59,6 +59,7 @@ def test_normalize_flags_negated_mentions_separately() -> None:
         "I am not experiencing a fever.",
         "I do not experience a headache.",
         "I don't experience a fever.",
+        "Not experiencing a headache.",
     ],
 )
 def test_normalize_flags_additional_negation_phrases(text: str) -> None:
