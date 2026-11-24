@@ -512,6 +512,9 @@ def list_skin_image_review_queue(
             ),
         )
         .order_by(SkinImageAnalysis.assigned_at.asc(), SkinImageAnalysis.id.asc())
+        # Keep queue visibility consistent with consent revocation, assignment,
+        # and reviewer deactivation, all of which serialize on the image row.
+        .with_for_update(of=SkinImageAnalysis)
     )
     if user.role != "admin":
         statement = statement.where(SkinImageAnalysis.assigned_reviewer_id == user.id)
