@@ -91,6 +91,27 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
     # Revoke exact image-review scopes before attempting external object deletion.
     # This closes reviewer access immediately, including when storage is unavailable.
     image_scope_keys = {str(image.prediction_id) for image in images}
+    access_changed = False
+    # Clear every assignment on owned images, even if its original scope was
+    # already revoked or is missing due to legacy data.
+    for image in images:
+        if image.assigned_reviewer_id is None:
+            continue
+        previous_reviewer_id = image.assigned_reviewer_id
+        image.assigned_reviewer_id = None
+        image.assigned_by = None
+        image.assigned_at = None
+        image.review_status = "pending"
+        db.add(SkinImageReviewEvent(
+            prediction_id=image.prediction_id,
+            image_analysis_id=image.id,
+            event_type="unassigned",
+            actor_id=user.id,
+            assigned_reviewer_id=previous_reviewer_id,
+            reason="Assignment cleared because the owner requested account deletion.",
+        ))
+        access_changed = True
+
     if image_scope_keys:
         scopes = list(db.scalars(
             select(CatalogReviewerScope)
@@ -102,23 +123,7 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
             .order_by(CatalogReviewerScope.id)
             .with_for_update()
         ).all())
-        images_by_prediction = {str(image.prediction_id): image for image in images}
         for scope in scopes:
-            image = images_by_prediction.get(scope.scope_key)
-            if image is not None and image.assigned_reviewer_id == scope.reviewer_id:
-                previous_reviewer_id = image.assigned_reviewer_id
-                image.assigned_reviewer_id = None
-                image.assigned_by = None
-                image.assigned_at = None
-                image.review_status = "pending"
-                db.add(SkinImageReviewEvent(
-                    prediction_id=image.prediction_id,
-                    image_analysis_id=image.id,
-                    event_type="unassigned",
-                    actor_id=user.id,
-                    assigned_reviewer_id=previous_reviewer_id,
-                    reason="Assignment cleared because the owner requested account deletion.",
-                ))
             scope.revoked_by = user.id
             scope.revoked_at = datetime.now(timezone.utc)
             scope.revoke_reason = "Owner requested account deletion."
@@ -131,8 +136,9 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
                 operator_id=user.id,
                 reason="Owner requested account deletion.",
             ))
-        if scopes:
-            db.commit()
+            access_changed = True
+    if access_changed:
+        db.commit()
 
     for image in images:
         if image.storage_status == "deleted":
