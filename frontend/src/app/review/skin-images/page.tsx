@@ -6,6 +6,7 @@ import {
   API_BASE_URL,
   getSessionUser,
   SESSION_COOKIE,
+  readBoundedJson,
 } from "@/lib/auth-proxy";
 
 type ReviewQueueItem = {
@@ -60,7 +61,7 @@ async function requireReviewerToken() {
   if (!response.ok) redirect("/login");
   let user: { role?: string };
   try {
-    const payload: unknown = await response.json();
+    const payload: unknown = await readBoundedJson(response, 64 * 1024);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       redirect("/review/skin-images?error=unavailable");
     }
@@ -105,7 +106,7 @@ async function assignImage(formData: FormData) {
     redirect("/review/skin-images?error=scope");
   }
   if (scopeResponse.status === 201) {
-    const scopePayload: unknown = await scopeResponse.json().catch(() => null);
+    const scopePayload: unknown = await readBoundedJson(scopeResponse, 16 * 1024);
     if (
       !scopePayload ||
       typeof scopePayload !== "object" ||
@@ -214,7 +215,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
     });
     if (!response.ok) queueError = "The skin-image review queue could not be loaded.";
     else {
-      const payload: unknown = await response.json();
+      const payload: unknown = await readBoundedJson(response, 512 * 1024);
       if (Array.isArray(payload) && payload.every(isReviewQueueItem)) queue = payload;
       else queueError = "The review queue returned an unexpected response.";
     }
@@ -231,7 +232,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
         signal: AbortSignal.timeout(8_000),
       });
       if (response.ok) {
-        const payload: unknown = await response.json();
+        const payload: unknown = await readBoundedJson(response, 128 * 1024);
         if (Array.isArray(payload) && payload.every(isEligibleReviewer)) reviewers = payload;
       }
     } catch {
