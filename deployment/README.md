@@ -43,6 +43,16 @@ Set `DATABASE_URL` and the backend settings from the root `.env.example`. Set
 When the frontend and backend use separate container networks, set
 `MEDIPREDICT_API_INTERNAL_URL` to the backend's private service URL.
 
+## PostgreSQL backup and restore
+
+See [`postgres-backup-restore.md`](postgres-backup-restore.md) for the operator runbook and guarded scripts:
+
+- `bash deployment/postgres-backup.sh` creates a custom-format backup and SHA-256 checksum with bounded local retention.
+- `bash deployment/postgres-restore.sh` verifies the checksum and restores only after an explicit `ALLOW_DATABASE_RESTORE=YES` acknowledgement. Use a newly provisioned, isolated, empty database; never target production.
+- Both scripts require a protected `PGPASSFILE` and reject inline URL passwords. Backups remain local until an operator copies them to separately encrypted storage.
+
+These scripts do not replace managed PostgreSQL point-in-time recovery, off-site encrypted storage, scheduled execution, or a successful restore drill. Keep the production gate blocked until those controls are configured and tested.
+
 ## Database connection and migration operations
 
 The API uses SQLAlchemy connection pre-ping, a bounded connection pool, a 30-second pool wait limit, a 30-minute connection recycle interval, and a 5-second PostgreSQL connection timeout by default. Tune these settings to the managed database connection limit and number of API replicas. The combined maximum is approximately `replicas × (DATABASE_POOL_SIZE + DATABASE_MAX_OVERFLOW)`. Keep that total below the database application connection budget, leaving capacity for migrations, workers, monitoring, and administration.
