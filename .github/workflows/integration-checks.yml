@@ -1,0 +1,99 @@
+name: Frontend-backend integration
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/integration-checks.yml"
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/integration-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medipredict
+          POSTGRES_PASSWORD: medipredict_ci_password
+          POSTGRES_DB: medipredict_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medipredict -d medipredict_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://medipredict:medipredict_ci_password@localhost:5432/medipredict_ci
+      APP_SECRET_KEY: integration-ci-only-secret-key-123456789
+      MEDIPREDICT_API_INTERNAL_URL: http://127.0.0.1:8000/api/v1
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000/api/v1
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Apply migrations
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Start backend
+        working-directory: backend
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/medipredict-api.log 2>&1 &
+          echo $! > /tmp/medipredict-api.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/v1/health/ready > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/medipredict-api.log
+          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install frontend
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm run typecheck
+          npm run build
+      - name: Start frontend
+        working-directory: frontend
+        run: |
+          npm run start -- --hostname 0.0.0.0 > /tmp/medipredict-next.log 2>&1 &
+          echo $! > /tmp/medipredict-next.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/ > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/medipredict-next.log
+          exit 1
+      - name: Verify frontend to backend integration
+        working-directory: frontend
+        run: node scripts/integration-smoke-test.mjs
+      - name: Stop application processes
+        if: always()
+        run: |
+          if [ -f /tmp/medipredict-next.pid ]; then kill "$(cat /tmp/medipredict-next.pid)" || true; fi
+          if [ -f /tmp/medipredict-api.pid ]; then kill "$(cat /tmp/medipredict-api.pid)" || true; fi
