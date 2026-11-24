@@ -128,11 +128,13 @@ def delete_user_history_item(
                     "blocked until private object-storage cleanup is configured."
                 ),
             )
-        if image_record.storage_status not in {"stored", "deletion_pending", "deleted"}:
+        if image_record.storage_status not in {
+            "pending_upload", "failed", "stored", "deletion_pending", "deleted"
+        }:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "The image storage state is not verified. The item is retained "
+                    "The image storage state is unknown. The item is retained "
                     "for safe manual reconciliation."
                 ),
             )
