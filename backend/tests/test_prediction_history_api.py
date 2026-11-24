@@ -1387,6 +1387,42 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
         db.close()
 
 
+def test_repeated_image_history_consent_revocation_does_not_duplicate_audit_event(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import predictions
+
+    token, user = _register(client, "image-revoke-repeat@example.com")
+    item, key, _ = _stored_image_for_user(user.id)
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+
+    first = client.post(
+        f"/api/v1/predictions/history/{item.id}/revoke-consent",
+        headers=_headers(token),
+    )
+    second = client.post(
+        f"/api/v1/predictions/history/{item.id}/revoke-consent",
+        headers=_headers(token),
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert key not in storage.objects
+    db = TestingSessionLocal()
+    try:
+        events = list(db.scalars(
+            select(PredictionConsentEvent).where(
+                PredictionConsentEvent.prediction_id == item.id,
+                PredictionConsentEvent.purpose == "skin_image_history",
+            ).order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+        ).all())
+        assert [event.action for event in events] == ["granted", "revoked"]
+    finally:
+        db.close()
+
+
 def test_image_history_consent_revocation_keeps_consent_active_until_delete_succeeds(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
