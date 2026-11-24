@@ -67,6 +67,7 @@ export default async function SkinImageAuditPage({ searchParams }: PageProps) {
       {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       },
     );
     if (response.ok) {
