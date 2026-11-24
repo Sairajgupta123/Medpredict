@@ -506,6 +506,11 @@ def purge_expired_skin_image_records(
         image_record.deletion_requested_at = (
             image_record.deletion_requested_at or datetime.now(timezone.utc)
         )
+        owner_id = db.scalar(
+            select(Prediction.user_id).where(Prediction.id == image_record.prediction_id)
+        )
+        if owner_id is None:
+            raise RuntimeError("Expired image has no owning prediction.")
 
         # Retention expiry ends reviewer assignment as well as storage access.
         # Preserve the outgoing reviewer in the append-only image audit trail.
@@ -522,7 +527,7 @@ def purge_expired_skin_image_records(
                 prediction_id=image_record.prediction_id,
                 image_analysis_id=image_record.id,
                 event_type="unassigned",
-                actor_id=None,
+                actor_id=owner_id,
                 assigned_reviewer_id=previous_reviewer_id,
                 reason="Assignment cleared because the image retention period expired.",
             ))
@@ -539,11 +544,6 @@ def purge_expired_skin_image_records(
             )
             .with_for_update()
         ).all()
-        owner_id = db.scalar(
-            select(Prediction.user_id).where(Prediction.id == image_record.prediction_id)
-        )
-        if owner_id is None:
-            raise RuntimeError("Expired image has no owning prediction.")
         revoked_at = datetime.now(timezone.utc)
         revoke_reason = "Image retention expired; reviewer access revoked."
         for scope in active_scopes:
