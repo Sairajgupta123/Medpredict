@@ -68,7 +68,7 @@ for (const attribute of ["HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=0"]) {
     throw new Error(`logout cookie: expected ${attribute} in "${clearedCookie}"`);
   }
 }
-process.stdout.write("PASS logout clears the session with secure cookie attributes\\n");
+process.stdout.write("PASS logout clears the session with secure cookie attributes\n");
 
 const path = "/api/symptoms/normalize";
 await check(
