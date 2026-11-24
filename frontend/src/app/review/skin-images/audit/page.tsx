@@ -6,7 +6,7 @@ import { API_BASE_URL, getSessionUser, SESSION_COOKIE } from "@/lib/auth-proxy";
 type AuditEvent = {
   event_id: string;
   prediction_id: string;
-  event_type: "assigned" | "reassigned" | "image_accessed" | "reviewed";
+  event_type: "assigned" | "unassigned" | "reassigned" | "image_accessed" | "reviewed";
   actor_id: string;
   actor_identity: string;
   actor_role: string;
@@ -22,7 +22,7 @@ function isAuditEvent(value: unknown): value is AuditEvent {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return typeof event.event_id === "string" && uuid.test(event.event_id)
     && typeof event.prediction_id === "string" && uuid.test(event.prediction_id)
-    && ["assigned", "reassigned", "image_accessed", "reviewed"].includes(String(event.event_type))
+    && ["assigned", "unassigned", "reassigned", "image_accessed", "reviewed"].includes(String(event.event_type))
     && typeof event.actor_id === "string" && uuid.test(event.actor_id)
     && typeof event.actor_identity === "string" && event.actor_identity.length <= 320
     && typeof event.actor_role === "string" && ["admin", "reviewer"].includes(event.actor_role)
@@ -36,6 +36,7 @@ const PAGE_SIZE = 200;
 
 const EVENT_LABELS: Record<AuditEvent["event_type"], string> = {
   assigned: "Image assigned",
+  unassigned: "Image assignment cleared",
   reassigned: "Image reassigned",
   image_accessed: "Private image accessed",
   reviewed: "Technical review submitted",
@@ -88,7 +89,7 @@ export default async function SkinImageAuditPage({ searchParams }: PageProps) {
           <Link className="back-link" href="/review/skin-images">← Back to skin-image queue</Link>
           <div className="eyebrow"><span className="eyebrow-dot" /> SKIN IMAGE GOVERNANCE</div>
           <h1>Access and review <em>audit trail.</em></h1>
-          <p>Every recorded assignment, reassignment, private image retrieval and technical review is shown with the actor identity and timestamp. This page contains audit metadata only, never image content or storage keys.</p>
+          <p>Every recorded assignment, unassignment, reassignment, private image retrieval and technical review is shown with the actor identity and timestamp. This page contains audit metadata only, never image content or storage keys.</p>
           <div className="review-summary">
             <div><strong>{events.length.toString().padStart(2, "0")}</strong><span>EVENTS IN THIS VIEW</span></div>
             <div><strong>{user.role === "admin" ? "All image reviews" : "Your review activity"}</strong><span>AUTHORIZED AUDIT SCOPE</span></div>
