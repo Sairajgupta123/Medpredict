@@ -81,10 +81,27 @@ def _valid_checkpoint_and_metadata():
     import hashlib
     import json
 
+    governance = {
+        "dataset_id": "approved-skin-set-v1",
+        "source_url": "https://example.org/skin-dataset",
+        "version": "1.0",
+        "license": "CC-BY-4.0",
+        "image_domain": "dermoscopy",
+        "approval_status": "research_only_approved",
+        "governance_reviews": {
+            "license_review": "approved",
+            "permitted_use_review": "approved",
+            "privacy_review": "approved",
+            "label_review": "approved",
+            "clinical_reviewer_signoff": "approved",
+        },
+        "registry_sha256": "b" * 64,
+    }
     config = {
         "architecture": "mobilenet_v3",
         "variant": "large",
         "image_size": 224,
+        "dataset_governance": governance,
     }
     digest = hashlib.sha256(
         json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -120,10 +137,34 @@ def _valid_checkpoint_and_metadata():
         "calibration_temperature": 1.2,
         "abstention_threshold": 0.65,
         "threshold_selection_partition": "validation_only",
+        "dataset_governance": governance,
         "clinical_validation": False,
         "intended_use": "offline_research_only",
     }
     return checkpoint, metadata
+
+
+def test_checkpoint_validation_rejects_unapproved_dataset_provenance() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint["experiment_config"]["dataset_governance"]["approval_status"] = "not_approved"
+    import hashlib
+    import json
+    checkpoint["experiment_config_sha256"] = hashlib.sha256(
+        json.dumps(checkpoint["experiment_config"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(ValueError, match="governance provenance"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
+def test_checkpoint_validation_rejects_metadata_governance_mismatch() -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    metadata["dataset_governance"]["dataset_id"] = "different-dataset"
+    with pytest.raises(ValueError, match="dataset_governance"):
+        validate_skin_checkpoint(checkpoint, metadata)
 
 
 def test_checkpoint_metadata_validation_returns_inference_settings() -> None:
