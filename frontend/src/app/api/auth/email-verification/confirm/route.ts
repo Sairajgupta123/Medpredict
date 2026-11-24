@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { API_BASE_URL } from "@/lib/auth-proxy";
+import { API_BASE_URL, readBoundedJson } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 import { readBoundedJsonBody } from "@/lib/bounded-json";
 
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-    const result = await upstream.json().catch(() => null);
+    const result = await readBoundedJson(upstream, 16 * 1024);
     return noStoreJson(result ?? { detail: "Unable to verify this email." }, {
       status: upstream.status,
     });
