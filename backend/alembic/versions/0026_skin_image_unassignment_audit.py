@@ -1,6 +1,6 @@
 """Audit reviewer assignment removal during account deactivation.
 
-Revision ID: 0026_skin_image_unassignment_audit
+Revision ID: 0026_skin_unassign
 Revises: 0025_account_deletion_requests
 Create Date: 2026-11-24
 """
@@ -9,7 +9,7 @@ from typing import Sequence, Union
 from alembic import op
 
 
-revision: str = "0026_skin_image_unassignment_audit"
+revision: str = "0026_skin_unassign"
 down_revision: Union[str, None] = "0025_account_deletion_requests"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
