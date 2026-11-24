@@ -47,7 +47,10 @@ export function SkinImageIntake() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/skin-images/model-status", { cache: "no-store" })
+    fetch("/api/skin-images/model-status", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error("Status unavailable");
         const payload = await response.json() as Partial<ModelStatus>;
