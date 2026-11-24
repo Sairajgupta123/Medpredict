@@ -33,7 +33,10 @@ def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before
                 AccountDeletionRequest.status == "pending",
                 and_(
                     AccountDeletionRequest.status == "processing",
-                    AccountDeletionRequest.last_attempt_at < stale_before,
+                    or_(
+                        AccountDeletionRequest.last_attempt_at < stale_before,
+                        AccountDeletionRequest.last_attempt_at.is_(None),
+                    ),
                 ),
             ),
         )
@@ -135,7 +138,10 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
                 AccountDeletionRequest.status == "pending",
                 and_(
                     AccountDeletionRequest.status == "processing",
-                    AccountDeletionRequest.last_attempt_at < stale_processing_before,
+                    or_(
+                        AccountDeletionRequest.last_attempt_at < stale_processing_before,
+                        AccountDeletionRequest.last_attempt_at.is_(None),
+                    ),
                 ),
             ))
             .order_by(AccountDeletionRequest.requested_at, AccountDeletionRequest.id)
