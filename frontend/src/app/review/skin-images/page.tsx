@@ -23,6 +23,27 @@ type EligibleReviewer = {
   display_name: string | null;
 };
 
+function isReviewQueueItem(value: unknown): value is ReviewQueueItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  if (typeof item.prediction_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.prediction_id)) return false;
+  if (item.review_status !== "pending" && item.review_status !== "assigned") return false;
+  if (typeof item.quality_status !== "string" || item.quality_status.length > 80) return false;
+  if (typeof item.created_at !== "string" || !Number.isFinite(Date.parse(item.created_at))) return false;
+  if (!(item.assigned_at === null || (typeof item.assigned_at === "string" && Number.isFinite(Date.parse(item.assigned_at))))) return false;
+  return item.image_endpoint === `/api/v1/skin-images/review/${item.prediction_id}/image`;
+}
+
+function isEligibleReviewer(value: unknown): value is EligibleReviewer {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const reviewer = value as Record<string, unknown>;
+  return typeof reviewer.id === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reviewer.id)
+    && typeof reviewer.email === "string"
+    && reviewer.email.length <= 320
+    && (reviewer.display_name === null || typeof reviewer.display_name === "string");
+}
+
 async function requireReviewerToken() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) redirect("/login");
@@ -170,7 +191,11 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
       cache: "no-store",
     });
     if (!response.ok) queueError = "The skin-image review queue could not be loaded.";
-    else queue = await response.json() as ReviewQueueItem[];
+    else {
+      const payload: unknown = await response.json();
+      if (Array.isArray(payload) && payload.every(isReviewQueueItem)) queue = payload;
+      else queueError = "The review queue returned an unexpected response.";
+    }
   } catch {
     queueError = "The MediPredict server is unavailable.";
   }
@@ -182,7 +207,10 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
       });
-      if (response.ok) reviewers = await response.json() as EligibleReviewer[];
+      if (response.ok) {
+        const payload: unknown = await response.json();
+        if (Array.isArray(payload) && payload.every(isEligibleReviewer)) reviewers = payload;
+      }
     } catch {
       // The queue remains useful even if reviewer choices cannot be loaded.
     }
