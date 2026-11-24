@@ -518,10 +518,15 @@ def purge_expired_skin_image_records(
             )
             .with_for_update()
         ).all()
+        owner_id = db.scalar(
+            select(Prediction.user_id).where(Prediction.id == image_record.prediction_id)
+        )
+        if owner_id is None:
+            raise RuntimeError("Expired image has no owning prediction.")
         revoked_at = datetime.now(timezone.utc)
         revoke_reason = "Image retention expired; reviewer access revoked."
         for scope in active_scopes:
-            scope.revoked_by = image_record.prediction.user_id
+            scope.revoked_by = owner_id
             scope.revoked_at = revoked_at
             scope.revoke_reason = revoke_reason
             db.add(CatalogReviewerScopeEvent(
@@ -530,7 +535,7 @@ def purge_expired_skin_image_records(
                 event_type="revoked",
                 scope_type=scope.scope_type,
                 scope_key=scope.scope_key,
-                operator_id=image_record.prediction.user_id,
+                operator_id=owner_id,
                 reason=revoke_reason,
             ))
         db.commit()
