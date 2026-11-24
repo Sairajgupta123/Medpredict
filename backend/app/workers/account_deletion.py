@@ -3,11 +3,11 @@
 Run with: python -m app.workers.account_deletion
 Schedule frequently (for example, every 15 minutes) while deletion requests exist.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import secrets
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select, update
 
 from app.core.security import hash_password
 from app.db.session import SessionLocal
@@ -17,26 +17,32 @@ from app.models.user import User
 from app.services.skin_image_storage_factory import build_skin_image_storage
 
 
+def _release_for_retry(request: AccountDeletionRequest, error_code: str) -> None:
+    """Make a claimed request available for a later retry."""
+    request.status = "pending"
+    request.last_error_code = error_code
+
+
 def process_deletion_request(db, request_id: UUID, storage) -> bool:
-    """Erase one patient account; retain only a non-identifying audit tombstone."""
+    """Erase one claimed patient account; retain a non-identifying audit tombstone."""
     request = db.scalar(
         select(AccountDeletionRequest)
-        .where(AccountDeletionRequest.id == request_id, AccountDeletionRequest.status == "pending")
+        .where(
+            AccountDeletionRequest.id == request_id,
+            AccountDeletionRequest.status == "processing",
+        )
         .with_for_update(skip_locked=True)
     )
     if request is None:
         return False
+
     user = db.scalar(select(User).where(User.id == request.user_id).with_for_update())
     if user is None or user.role != "patient" or user.is_active:
+        request.status = "failed"
         request.last_error_code = "account_state_requires_manual_review"
-        request.attempts += 1
-        request.last_attempt_at = datetime.now(timezone.utc)
         db.commit()
         return False
 
-    request.attempts += 1
-    request.last_attempt_at = datetime.now(timezone.utc)
-    db.commit()
     predictions = list(db.scalars(
         select(Prediction).where(Prediction.user_id == user.id).order_by(Prediction.id)
     ).all())
@@ -53,7 +59,7 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
         if image.storage_status == "deleted":
             continue
         if image.storage_status not in {"stored", "deletion_pending"}:
-            request.last_error_code = "image_storage_state_requires_reconciliation"
+            _release_for_retry(request, "image_storage_state_requires_reconciliation")
             db.commit()
             return False
         image.storage_status = "deletion_pending"
@@ -62,7 +68,7 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
         try:
             storage.delete_private(image.object_key)
         except Exception:
-            request.last_error_code = "private_image_deletion_failed"
+            _release_for_retry(request, "private_image_deletion_failed")
             db.commit()
             return False
         image.storage_status = "deleted"
@@ -90,20 +96,53 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
 
 
 def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
-    """Process a bounded batch and expose aggregate counts only."""
+    """Atomically claim a bounded batch and expose aggregate counts only."""
     if not 1 <= limit <= 100:
         raise ValueError("Deletion batch limit must be between 1 and 100.")
     storage = build_skin_image_storage()
     db = SessionLocal()
     try:
-        request_ids = list(db.scalars(
+        now = datetime.now(timezone.utc)
+        stale_processing_before = now - timedelta(hours=2)
+        candidate_ids = list(db.scalars(
             select(AccountDeletionRequest.id)
-            .where(AccountDeletionRequest.status == "pending")
+            .where(or_(
+                AccountDeletionRequest.status == "pending",
+                and_(
+                    AccountDeletionRequest.status == "processing",
+                    AccountDeletionRequest.last_attempt_at < stale_processing_before,
+                ),
+            ))
             .order_by(AccountDeletionRequest.requested_at, AccountDeletionRequest.id)
             .limit(limit)
         ).all())
         summary = {"processed": 0, "completed": 0, "failed": 0}
-        for request_id in request_ids:
+        for request_id in candidate_ids:
+            # Conditional UPDATE is the cross-worker claim. A competing worker
+            # cannot claim the same pending row after this transaction commits.
+            claimed_id = db.scalar(
+                update(AccountDeletionRequest)
+                .where(
+                    AccountDeletionRequest.id == request_id,
+                    or_(
+                        AccountDeletionRequest.status == "pending",
+                        and_(
+                            AccountDeletionRequest.status == "processing",
+                            AccountDeletionRequest.last_attempt_at < stale_processing_before,
+                        ),
+                    ),
+                )
+                .values(
+                    status="processing",
+                    attempts=AccountDeletionRequest.attempts + 1,
+                    last_attempt_at=now,
+                )
+                .returning(AccountDeletionRequest.id)
+            )
+            db.commit()
+            if claimed_id is None:
+                continue
+
             summary["processed"] += 1
             try:
                 if process_deletion_request(db, request_id, storage):
@@ -113,10 +152,8 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
             except Exception:
                 db.rollback()
                 row = db.get(AccountDeletionRequest, request_id)
-                if row is not None and row.status == "pending":
-                    row.attempts += 1
-                    row.last_attempt_at = datetime.now(timezone.utc)
-                    row.last_error_code = "unexpected_processing_error"
+                if row is not None and row.status == "processing":
+                    _release_for_retry(row, "unexpected_processing_error")
                     db.commit()
                 summary["failed"] += 1
         return summary
