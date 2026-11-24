@@ -100,6 +100,10 @@ following:
       least-privilege credentials.
 - [ ] Set a unique random `APP_SECRET_KEY` (at least 32 characters); rotate any secret
       that may have been used outside local development.
+- [ ] Set `REQUIRE_VERIFIED_EMAIL=true`, configure working SMTP host/sender with STARTTLS,
+      and verify the full registration → email verification → login flow. Production API
+      startup now fails closed when email verification, PostgreSQL, HTTPS origins or SMTP
+      requirements are missing.
 - [ ] Set exact production `CORS_ORIGINS` and `FRONTEND_BASE_URL`; do not use wildcards
       with credentialed requests.
 - [ ] Configure secure cookie behavior for the actual frontend/API topology and verify
