@@ -162,6 +162,7 @@ def test_account_deletion_erases_text_history_and_keeps_non_login_tombstone() ->
             password_hash="test-only-password-hash",
             role="patient",
             is_active=False,
+            last_login_at=datetime.now(timezone.utc),
         )
         db.add(user)
         db.flush()
@@ -184,6 +185,7 @@ def test_account_deletion_erases_text_history_and_keeps_non_login_tombstone() ->
         assert tombstone.is_active is False
         assert tombstone.email == f"deleted+{user_id.hex}@invalid.local"
         assert tombstone.display_name is None
+        assert tombstone.last_login_at is None
         assert db.get(Prediction, prediction.id) is None
         assert stored_request is not None and stored_request.status == "completed"
     finally:
