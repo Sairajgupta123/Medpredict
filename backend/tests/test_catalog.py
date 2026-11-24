@@ -851,7 +851,9 @@ def test_admin_deactivation_revokes_reviewer_scopes_and_sessions(
 
     db = TestingSessionLocal()
     try:
-        reviewer = db.query(User).filter_by(id=reviewer_id).one()
+        reviewer = db.query(User).filter_by(
+            email="reviewer-deactivate-reviewer-target@example.com"
+        ).one()
         scopes = db.query(CatalogReviewerScope).filter_by(
             reviewer_id=reviewer.id
         ).all()
