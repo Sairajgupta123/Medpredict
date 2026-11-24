@@ -43,6 +43,28 @@ Set `DATABASE_URL` and the backend settings from the root `.env.example`. Set
 When the frontend and backend use separate container networks, set
 `MEDIPREDICT_API_INTERNAL_URL` to the backend's private service URL.
 
+## Database connection and migration operations
+
+The API uses SQLAlchemy connection pre-ping, a bounded connection pool, a 30-second pool wait limit, a 30-minute connection recycle interval, and a 5-second PostgreSQL connection timeout by default. Tune these settings to the managed database connection limit and number of API replicas. The combined maximum is approximately `replicas × (DATABASE_POOL_SIZE + DATABASE_MAX_OVERFLOW)`. Keep that total below the database application connection budget, leaving capacity for migrations, workers, monitoring, and administration.
+
+Configure these environment variables per deployment:
+
+- `DATABASE_POOL_SIZE` (default 5; allowed 1–50)
+- `DATABASE_MAX_OVERFLOW` (default 10; allowed 0–100)
+- `DATABASE_POOL_TIMEOUT_SECONDS` (default 30; allowed 1–120)
+- `DATABASE_POOL_RECYCLE_SECONDS` (default 1800; allowed 60–86400)
+- `DATABASE_CONNECT_TIMEOUT_SECONDS` (default 5; allowed 1–30)
+
+Run migrations as a one-off release step, not independently in every API replica:
+
+```bash
+cd backend
+alembic upgrade head
+alembic current
+```
+
+Do not start or route traffic to the new API release until migrations succeed and readiness returns HTTP 200. Prefer backward-compatible expand/contract migrations. A failed migration requires operator review; do not blindly downgrade production schema or automatically roll back data changes. Restore a verified backup into an isolated environment before attempting recovery.
+
 Verify the public, non-sensitive endpoints:
 
 ```bash
