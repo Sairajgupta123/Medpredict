@@ -25,7 +25,9 @@ function isAuditEvent(value: unknown): value is AuditEvent {
     && ["assigned", "unassigned", "reassigned", "image_accessed", "reviewed"].includes(String(event.event_type))
     && typeof event.actor_id === "string" && uuid.test(event.actor_id)
     && typeof event.actor_identity === "string" && event.actor_identity.length <= 320
-    && typeof event.actor_role === "string" && ["admin", "reviewer"].includes(event.actor_role)
+    // Audit events can be performed by patients (for example, consent withdrawal),
+    // and a reviewer account may later be deactivated back to the patient role.
+    && typeof event.actor_role === "string" && ["admin", "reviewer", "patient"].includes(event.actor_role)
     && (event.assigned_reviewer_id === null || (typeof event.assigned_reviewer_id === "string" && uuid.test(event.assigned_reviewer_id)))
     && (event.outcome === null || (typeof event.outcome === "string" && event.outcome.length <= 80))
     && typeof event.reason === "string" && event.reason.length <= 1000
