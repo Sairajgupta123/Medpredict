@@ -25,3 +25,4 @@ jobs:
         run: |
           bash -n deployment/postgres-backup.sh
           bash -n deployment/postgres-restore.sh
+          bash deployment/tests/test-postgres-operations.sh
