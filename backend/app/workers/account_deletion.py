@@ -7,11 +7,13 @@ from datetime import datetime, timedelta, timezone
 import secrets
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.account_deletion import AccountDeletionRequest
+from app.models.email_verification import EmailVerificationToken
+from app.models.password_reset import PasswordResetToken
 from app.models.prediction import (
     Prediction,
     SkinImageAnalysis,
@@ -75,6 +77,16 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
         request.last_error_code = "account_state_requires_manual_review"
         db.commit()
         return False
+
+    # Remove outstanding recovery/verification credentials as soon as erasure
+    # starts; they are not governance records and must not survive as user data.
+    db.execute(
+        delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+    )
+    db.execute(
+        delete(EmailVerificationToken).where(EmailVerificationToken.user_id == user.id)
+    )
+    db.commit()
 
     predictions = list(db.scalars(
         select(Prediction).where(Prediction.user_id == user.id).order_by(Prediction.id)
