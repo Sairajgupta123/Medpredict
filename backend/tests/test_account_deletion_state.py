@@ -1,7 +1,5 @@
 """State-reconciliation tests for the account deletion worker."""
 
-from datetime import datetime, timedelta, timezone
-
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
