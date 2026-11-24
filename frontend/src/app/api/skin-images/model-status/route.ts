@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { API_BASE_URL } from "@/lib/auth-proxy";
+import { API_BASE_URL, readBoundedJson } from "@/lib/auth-proxy";
 
 export async function GET() {
   try {
@@ -9,7 +9,7 @@ export async function GET() {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-    const payload = await upstream.json().catch(() => null);
+    const payload = await readBoundedJson(upstream, 16 * 1024);
     return NextResponse.json(
       payload ?? { detail: "The skin-image capability service returned an invalid response." },
       {
