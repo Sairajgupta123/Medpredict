@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -41,12 +43,13 @@ def test_only_one_worker_can_claim_a_pending_deletion_request() -> None:
         now = datetime.now(timezone.utc)
         stale_before = now - timedelta(hours=2)
 
-        assert _claim_deletion_request(
+        first_token = _claim_deletion_request(
             first, request_id, now=now, stale_before=stale_before
-        ) is True
+        )
+        assert first_token is not None
         assert _claim_deletion_request(
             second, request_id, now=now, stale_before=stale_before
-        ) is False
+        ) is None
 
         stored = second.scalar(
             select(AccountDeletionRequest).where(
@@ -84,12 +87,14 @@ def test_abandoned_processing_request_can_be_reclaimed() -> None:
         db.add(request)
         db.commit()
 
-        assert _claim_deletion_request(
+        token = _claim_deletion_request(
             db,
             request.id,
             now=now,
             stale_before=now - timedelta(hours=2),
-        ) is True
+        )
+        assert token is not None
+        assert request.claim_token == token
         db.refresh(request)
         assert request.status == "processing"
         assert request.attempts == 2
@@ -98,6 +103,45 @@ def test_abandoned_processing_request_can_be_reclaimed() -> None:
         db.close()
         Base.metadata.drop_all(bind=engine)
 
+
+
+def test_reclaimed_deletion_request_rejects_previous_worker_token() -> None:
+    from app.workers.account_deletion import DeletionClaimLost, _lock_owned_request
+
+    Base.metadata.create_all(bind=engine)
+    db = Session()
+    try:
+        user = User(
+            email="fenced-claim-test@example.com",
+            password_hash="not-a-real-password-hash",
+            role="patient",
+            is_active=False,
+        )
+        db.add(user)
+        db.flush()
+        now = datetime.now(timezone.utc)
+        request = AccountDeletionRequest(user_id=user.id)
+        db.add(request)
+        db.commit()
+
+        old_token = _claim_deletion_request(
+            db, request.id, now=now, stale_before=now - timedelta(hours=2)
+        )
+        assert old_token is not None
+        new_token = _claim_deletion_request(
+            db,
+            request.id,
+            now=now + timedelta(hours=3),
+            stale_before=now + timedelta(hours=1),
+        )
+        assert new_token is not None and new_token != old_token
+
+        with pytest.raises(DeletionClaimLost):
+            _lock_owned_request(db, request.id, old_token)
+        assert _lock_owned_request(db, request.id, new_token) is not None
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
 
 
 def test_processing_request_without_attempt_timestamp_is_recovered() -> None:
