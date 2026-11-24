@@ -24,7 +24,14 @@ export async function GET() {
     );
   }
 
-  // Account exports can be larger than ordinary API responses, but must remain bounded.\n  const body = await readBoundedJson(upstream, 10 * 1024 * 1024);\n  if (body === null) {\n    return NextResponse.json(\n      { detail: "The account export response was invalid or exceeded the allowed size." },\n      { status: 502, headers: { "Cache-Control": "private, no-store, max-age=0" } },\n    );\n  }
+  // Account exports can be larger than ordinary API responses, but must remain bounded.
+  const body = await readBoundedJson(upstream, 10 * 1024 * 1024);
+  if (body === null) {
+    return NextResponse.json(
+      { detail: "The account export response was invalid or exceeded the allowed size." },
+      { status: 502, headers: { "Cache-Control": "private, no-store, max-age=0" } },
+    );
+  }
   if (!upstream.ok) {
     return NextResponse.json(
       body ?? { detail: "The account export could not be generated." },
