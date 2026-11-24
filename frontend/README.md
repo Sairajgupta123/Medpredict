@@ -77,6 +77,7 @@ flows backed by the FastAPI authentication endpoints.
 - The dashboard resolves the signed-in profile server-side.
 - Logout revokes the backend session and clears the browser cookie.
 - Login, registration, email-verification and logout POST routes validate the request Origin.
+- Password recovery is available at `/reset-password`; its same-origin proxy routes enforce request-origin checks, bounded JSON bodies and upstream timeouts. The backend issues single-use, 30-minute reset tokens, applies per-email rate limits and revokes existing access tokens after a successful password change.
 
 For local development, run the FastAPI backend at http://localhost:8000 and the Next.js
 frontend at http://localhost:3000. Configure `NEXT_PUBLIC_API_BASE_URL` in `.env.local`.
