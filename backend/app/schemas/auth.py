@@ -54,6 +54,12 @@ class PasswordResetRequest(BaseModel):
         return value.strip().lower()
 
 
+class EmailVerificationConfirmRequest(BaseModel):
+    """Confirm an email address using its one-time verification token."""
+
+    token: str = Field(min_length=32, max_length=256)
+
+
 class PasswordResetConfirmRequest(BaseModel):
     """Confirm a password reset using the emailed one-time token."""
 

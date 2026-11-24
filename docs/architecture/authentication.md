@@ -61,6 +61,20 @@ The request accepts a trimmed non-empty display name, or explicit `null` to clea
 payloads and whitespace-only names are rejected. Email, account status, verification state, and
 password hash are not writable through this endpoint.
 
+## Email verification
+
+The API provides POST /api/v1/auth/email-verification/request and
+POST /api/v1/auth/email-verification/confirm. Verification tokens are random, expire after
+30 minutes, are stored only as SHA-256 digests, and are single-use. Re-requesting a link
+invalidates earlier unused links. The request endpoint returns the same HTTP 202 response for
+unknown, inactive, and already verified accounts. SMTP failures invalidate the undelivered
+token and do not reveal account existence.
+
+Set REQUIRE_VERIFIED_EMAIL=true to reject login for unverified accounts using the same
+generic HTTP 401 response as invalid credentials. It defaults to false to preserve local
+development and existing deployments; production deployments that require verified identities
+must explicitly enable it and configure SMTP.
+
 ## Current account states
 
 - `is_active`: inactive accounts cannot log in or access protected routes.
@@ -90,7 +104,7 @@ still returns the generic response and does not log the token or recipient.
 
 The current implementation does not yet include:
 
-- Email verification or verified-email enforcement
+- Mandatory email verification unless REQUIRE_VERIFIED_EMAIL=true is configured
 - Refresh tokens and refresh-token rotation
 - Per-device session management; logout currently revokes all account access tokens
 - IP/network-level login and registration rate limiting, distributed abuse detection, and alerting

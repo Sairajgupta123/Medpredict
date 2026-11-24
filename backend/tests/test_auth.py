@@ -957,3 +957,132 @@ def test_rate_limit_cleanup_deletes_only_old_rows_in_bounded_batches(client: Tes
         )
     finally:
         db.close()
+
+
+
+def test_email_verification_request_is_generic_and_sends_only_for_unverified(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "verify-me@example.com", "password": "StrongPass123!"},
+    )
+    delivered = {}
+
+    def capture_delivery(recipient: str, raw_token: str) -> None:
+        delivered.update(recipient=recipient, token=raw_token)
+
+    monkeypatch.setattr(auth, "send_email_verification_email", capture_delivery)
+    response = client.post(
+        "/api/v1/auth/email-verification/request",
+        json={"email": "VERIFY-ME@example.com"},
+    )
+    assert response.status_code == 202
+    assert delivered["recipient"] == "verify-me@example.com"
+    assert delivered["token"] not in response.text
+
+    unknown = client.post(
+        "/api/v1/auth/email-verification/request",
+        json={"email": "unknown-verification@example.com"},
+    )
+    assert unknown.status_code == 202
+    assert unknown.json() == response.json()
+
+
+def test_email_verification_consumes_token_once_and_marks_user_verified(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+    from app.models.email_verification import EmailVerificationToken
+    from app.models.user import User
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "verified@example.com", "password": "StrongPass123!"},
+    )
+    delivered = {}
+    monkeypatch.setattr(
+        auth,
+        "send_email_verification_email",
+        lambda recipient, raw_token: delivered.update(token=raw_token),
+    )
+    client.post(
+        "/api/v1/auth/email-verification/request",
+        json={"email": "verified@example.com"},
+    )
+    raw_token = delivered["token"]
+    db = TestingSessionLocal()
+    try:
+        token_row = db.query(EmailVerificationToken).one()
+        assert token_row.token_hash != raw_token
+    finally:
+        db.close()
+
+    confirmed = client.post(
+        "/api/v1/auth/email-verification/confirm",
+        json={"token": raw_token},
+    )
+    assert confirmed.status_code == 200
+    replay = client.post(
+        "/api/v1/auth/email-verification/confirm",
+        json={"token": raw_token},
+    )
+    assert replay.status_code == 400
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="verified@example.com").one()
+        assert user.email_verified is True
+    finally:
+        db.close()
+
+
+def test_email_verification_delivery_failure_invalidates_token(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "verify-failure@example.com", "password": "StrongPass123!"},
+    )
+    captured = {}
+
+    def fail_delivery(recipient, raw_token):
+        captured["token"] = raw_token
+        raise RuntimeError("SMTP unavailable")
+
+    monkeypatch.setattr(auth, "send_email_verification_email", fail_delivery)
+    response = client.post(
+        "/api/v1/auth/email-verification/request",
+        json={"email": "verify-failure@example.com"},
+    )
+    assert response.status_code == 202
+    rejected = client.post(
+        "/api/v1/auth/email-verification/confirm",
+        json={"token": captured["token"]},
+    )
+    assert rejected.status_code == 400
+
+
+def test_login_can_require_verified_email_without_account_enumeration(
+    client: TestClient, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+
+    from app.api.v1 import auth
+
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "must-verify@example.com", "password": "StrongPass123!"},
+    )
+    monkeypatch.setattr(
+        auth, "get_settings", lambda: SimpleNamespace(require_verified_email=True)
+    )
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "must-verify@example.com", "password": "StrongPass123!"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password."

@@ -9,8 +9,13 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.config import get_settings
-from app.core.email import send_password_reset_email
+from app.core.email import send_email_verification_email, send_password_reset_email
 from app.core.auth_rate_limit import enforce_auth_rate_limit
+from app.core.email_verification import (
+    consume_email_verification_token,
+    invalidate_email_verification_token,
+    issue_email_verification_token,
+)
 from app.core.password_reset import (
     consume_password_reset_token,
     invalidate_password_reset_token,
@@ -24,6 +29,7 @@ from app.core.security import (
 )
 from app.models.user import User
 from app.schemas.auth import (
+    EmailVerificationConfirmRequest,
     LoginRequest,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
@@ -93,7 +99,12 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     stored_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, stored_hash)
 
-    if user is None or not password_valid or not user.is_active:
+    if (
+        user is None
+        or not password_valid
+        or not user.is_active
+        or (get_settings().require_verified_email and not user.email_verified)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -104,6 +115,71 @@ def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     db.commit()
     db.refresh(user)
     return _token_response(user)
+
+
+
+
+@router.post(
+    "/email-verification/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request an email verification link",
+)
+def request_email_verification(
+    payload: PasswordResetRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    """Send a generic response whether or not an unverified account exists."""
+    enforce_auth_rate_limit(
+        db, "email_verification", payload.email, limit=3, window_seconds=3600
+    )
+    generic_response = {
+        "message": "If the account needs verification, instructions will be sent."
+    }
+    user = db.scalar(select(User).where(User.email == payload.email))
+    if user is None or not user.is_active or user.email_verified:
+        return generic_response
+
+    try:
+        raw_token = issue_email_verification_token(db, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Email verification token creation failed.")
+        return generic_response
+
+    try:
+        send_email_verification_email(user.email, raw_token)
+    except Exception:
+        try:
+            invalidate_email_verification_token(db, raw_token)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Undelivered email verification token cleanup failed.")
+        logger.warning("Email verification delivery failed.")
+    return generic_response
+
+
+@router.post(
+    "/email-verification/confirm",
+    status_code=status.HTTP_200_OK,
+    summary="Verify an account email address",
+)
+def confirm_email_verification(
+    payload: EmailVerificationConfirmRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    """Consume a valid single-use token and mark its account as verified."""
+    user = consume_email_verification_token(db, payload.token)
+    if user is None:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The email verification link is invalid or has expired.",
+        )
+    user.email_verified = True
+    db.commit()
+    return {"message": "Your email address has been verified."}
 
 
 @router.post(

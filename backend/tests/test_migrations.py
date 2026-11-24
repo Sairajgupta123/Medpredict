@@ -40,6 +40,7 @@ def test_migration_files_exist() -> None:
         "0021_skin_image_access_audit.py",
         "0022_skin_image_review_consent.py",
         "0023_auth_rate_limit_buckets.py",
+        "0024_email_verification_tokens.py",
     ):
         assert (versions / name).is_file()
 
@@ -51,8 +52,8 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0023_auth_rate_limit_buckets"
-    assert heads[0].down_revision == "0022_skin_image_review_consent"
+    assert heads[0].revision == "0024_email_verification_tokens"
+    assert heads[0].down_revision == "0023_auth_rate_limit_buckets"
 
     merge_head = script.get_revision("0015_merge_ref_reset_heads")
     assert merge_head is not None
@@ -114,6 +115,7 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0021_skin_image_access_audit",
         "0022_skin_image_review_consent",
         "0023_auth_rate_limit_buckets",
+        "0024_email_verification_tokens",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
