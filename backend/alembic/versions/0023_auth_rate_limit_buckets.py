@@ -1,7 +1,7 @@
 """Add persistent authentication rate-limit buckets.
 
-Revision ID: 0012_auth_rate_limit_buckets
-Revises: 0011_catalog_audit_constraints
+Revision ID: 0023_auth_rate_limit_buckets
+Revises: 0022_skin_image_review_consent
 Create Date: 2026-11-24
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0012_auth_rate_limit_buckets"
-down_revision: Union[str, None] = "0011_catalog_audit_constraints"
+revision: str = "0023_auth_rate_limit_buckets"
+down_revision: Union[str, None] = "0022_skin_image_review_consent"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
