@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
+import { readBoundedJsonBody } from "@/lib/bounded-json";
 
 const API_BASE_URL =
   process.env.MEDIPREDICT_API_INTERNAL_URL?.replace(/\/$/, "") ??
@@ -14,15 +15,14 @@ export async function POST(request: Request) {
     );
   }
 
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
+  const parsed = await readBoundedJsonBody(request, 4_096);
+  if (!parsed.ok) {
     return NextResponse.json(
-      { detail: "Please provide valid JSON." },
-      { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } },
+      { detail: parsed.status === 413 ? "Request is too large." : "Please provide valid JSON." },
+      { status: parsed.status, headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   }
+  const payload = parsed.value;
 
   if (
     !payload ||
