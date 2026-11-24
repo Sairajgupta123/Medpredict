@@ -133,6 +133,10 @@ def _scope_status(normalized_text: str, start: int) -> str:
         r"\bno$",
         r"\bwithout$",
         r"\b(?:deny|denies|denied)$",
+        r"\bnot$",
+        r"\bnot\s+(?:have|having)(?:\s+(?:any|a|an))?$",
+        r"\b(?:am|is|are|was|were)\s+not"
+        r"(?:\s+(?:have|having))?(?:\s+(?:any|a|an))?$",
         r"\b(?:do not|does not|did not|dont|doesnt|didnt)\s+"
         r"(?:have)?(?:\s+(?:any|a|an))?$",
     )
