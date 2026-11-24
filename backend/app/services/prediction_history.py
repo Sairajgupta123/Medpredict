@@ -18,6 +18,35 @@ from app.models.prediction import (
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
 
+def _clear_reviewer_assignment(
+    db: Session,
+    image_record: SkinImageAnalysis,
+    *,
+    actor_id: UUID,
+    reason: str,
+) -> bool:
+    """Clear an active image assignment and preserve its outgoing reviewer in audit."""
+    if (
+        image_record.review_status != "assigned"
+        or image_record.assigned_reviewer_id is None
+    ):
+        return False
+    previous_reviewer_id = image_record.assigned_reviewer_id
+    image_record.assigned_reviewer_id = None
+    image_record.assigned_by = None
+    image_record.assigned_at = None
+    image_record.review_status = "pending"
+    db.add(SkinImageReviewEvent(
+        prediction_id=image_record.prediction_id,
+        image_analysis_id=image_record.id,
+        event_type="unassigned",
+        actor_id=actor_id,
+        assigned_reviewer_id=previous_reviewer_id,
+        reason=reason,
+    ))
+    return True
+
+
 def list_user_history(
     db: Session, user_id: UUID, *, limit: int, offset: int
 ) -> tuple[list[Prediction], int]:
@@ -140,6 +169,13 @@ def delete_user_history_item(
                     "for safe manual reconciliation."
                 ),
             )
+
+        # Clear any outstanding assignment and preserve the reviewer in
+        # the audit trail before deleting the owner's history.
+        _clear_reviewer_assignment(
+            db, image_record, actor_id=user_id,
+            reason="Assignment cleared because the owner deleted image history.",
+        )
 
         # Deleting owner history revokes every exact reviewer grant before
         # storage cleanup begins. The revocation and deletion-pending marker
@@ -410,6 +446,11 @@ def revoke_skin_image_history_consent(
             detail="The image storage state cannot be safely reconciled; manual review is required.",
         )
 
+    _clear_reviewer_assignment(
+        db, image_record, actor_id=user_id,
+        reason="Assignment cleared because the owner revoked image-history consent.",
+    )
+
     # History-consent withdrawal removes the image from owner retention.
     # Revoke exact reviewer grants before storage cleanup, so a failed delete
     # cannot leave stale reviewer permissions active during reconciliation.
@@ -513,24 +554,10 @@ def purge_expired_skin_image_records(
             raise RuntimeError("Expired image has no owning prediction.")
 
         # Retention expiry ends reviewer assignment as well as storage access.
-        # Preserve the outgoing reviewer in the append-only image audit trail.
-        if (
-            image_record.review_status == "assigned"
-            and image_record.assigned_reviewer_id is not None
-        ):
-            previous_reviewer_id = image_record.assigned_reviewer_id
-            image_record.assigned_reviewer_id = None
-            image_record.assigned_by = None
-            image_record.assigned_at = None
-            image_record.review_status = "pending"
-            db.add(SkinImageReviewEvent(
-                prediction_id=image_record.prediction_id,
-                image_analysis_id=image_record.id,
-                event_type="unassigned",
-                actor_id=owner_id,
-                assigned_reviewer_id=previous_reviewer_id,
-                reason="Assignment cleared because the image retention period expired.",
-            ))
+        _clear_reviewer_assignment(
+            db, image_record, actor_id=owner_id,
+            reason="Assignment cleared because the image retention period expired.",
+        )
 
         # Expiry is also an owner-authorized end to image retention. Revoke
         # exact reviewer scopes in the same durable transaction as the pending
