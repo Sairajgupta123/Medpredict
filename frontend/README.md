@@ -6,7 +6,7 @@ Responsive Next.js application foundation for the MediPredict academic project.
 
 - Node.js 20.9 or newer
 - npm 10 or newer
-- MediPredict FastAPI backend (only required for future API-connected workflows)
+- MediPredict FastAPI backend (required for authentication and API-connected workflows)
 
 ## Setup
 
@@ -65,16 +65,18 @@ The API helper is a foundation for non-sensitive typed requests. Do not store be
 
 ## Authentication flow
 
-The frontend includes login and registration pages backed by the API's `/auth/login`,
-`/auth/register`, and `/auth/me` endpoints.
+The frontend includes registration, email verification, login, profile lookup and logout
+flows backed by the FastAPI authentication endpoints.
 
 - Browser credentials are posted to same-origin Next.js route handlers.
 - The route handlers call the FastAPI authentication endpoints server-to-server.
-- The returned access token is stored in an HttpOnly, SameSite=Lax cookie; client-side
-  JavaScript cannot read it.
+- Registration creates the account and requests a verification email, but does not establish
+  a browser session or expose the backend access token to client JavaScript.
+- The user verifies the email and then signs in. Only a successful login sets the
+  HttpOnly, SameSite=Lax session cookie.
 - The dashboard resolves the signed-in profile server-side.
-- Logout clears the session cookie.
-- Login, registration and logout POST routes validate the request Origin.
+- Logout revokes the backend session and clears the browser cookie.
+- Login, registration, email-verification and logout POST routes validate the request Origin.
 
 For local development, run the FastAPI backend at http://localhost:8000 and the Next.js
 frontend at http://localhost:3000. Configure `NEXT_PUBLIC_API_BASE_URL` in `.env.local`.
@@ -82,8 +84,10 @@ If the frontend and API use separate container networks, set
 `MEDIPREDICT_API_INTERNAL_URL` to the private backend URL for server-side requests.
 
 The current session cookie contains the backend's short-lived bearer access token. A production
-deployment still needs HTTPS, secret rotation, rate limiting and abuse monitoring, email
-verification and account recovery, security review, and a deliberate refresh/revocation strategy.
+deployment still needs HTTPS, secret rotation, operational email-delivery verification, account
+recovery UX, abuse monitoring, security review, and a deliberate refresh/revocation strategy.
+Production configuration requires verified email before authenticated API access; configure and
+test the SMTP provider before opening registration.
 Do not treat the current authentication foundation as a completed production identity system.
 
 
