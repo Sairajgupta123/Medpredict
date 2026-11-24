@@ -31,7 +31,7 @@ export async function readBoundedJson(
   const declaredLength = response.headers.get("content-length");
   if (
     declaredLength !== null &&
-    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
   ) {
     await response.body?.cancel().catch(() => undefined);
     return null;
