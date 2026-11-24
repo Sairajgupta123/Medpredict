@@ -18,6 +18,15 @@ import numpy as np
 import pandas as pd
 
 
+def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash an artifact incrementally to keep peak memory bounded."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def ensure_skin_artifacts_do_not_exist(
     output_dir: Path, filenames: list[str]
 ) -> None:
@@ -152,6 +161,8 @@ def train_skin_model(
         ],
     )
 
+    # Hash the exact manifest artifact before training; never load the full CSV bytes into RAM.
+    manifest_digest = _sha256_file(manifest_path)
     manifest = pd.read_csv(manifest_path)
     required = {"image_path", "label", "patient_id"}
     missing = required - set(manifest.columns)
@@ -279,7 +290,6 @@ def train_skin_model(
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     experiment_config = {
         "architecture": architecture,
         "variant": variant,
@@ -494,9 +504,9 @@ def train_skin_model(
     artifact_manifest = {
         "purpose": "offline_research_only",
         "checkpoint_file": checkpoint_path.name,
-        "checkpoint_sha256": hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
+        "checkpoint_sha256": _sha256_file(checkpoint_path),
         "metadata_file": metadata_path.name,
-        "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+        "metadata_sha256": _sha256_file(metadata_path),
         "note": "SHA-256 checks byte consistency only; it is not a digital signature or proof of artifact authenticity.",
     }
     (output_dir / "artifact_manifest.json").write_text(
