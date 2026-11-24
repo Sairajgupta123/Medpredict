@@ -163,3 +163,48 @@ def test_verification_email_places_token_in_url_fragment(monkeypatch):
     assert "https://app.example.test/verify-email#token=opaque-token-value" in body
     assert "verify-email?token=" not in body
     assert captured["tls"] is True
+
+def test_password_reset_email_places_token_in_url_fragment(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core import email
+
+    captured = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            captured.update(host=host, port=port, timeout=timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            captured["tls"] = True
+
+        def send_message(self, message):
+            captured["message"] = message
+
+    monkeypatch.setattr(
+        email,
+        "get_settings",
+        lambda: SimpleNamespace(
+            smtp_host="smtp.example.test",
+            smtp_sender_email="noreply@example.test",
+            smtp_port=587,
+            smtp_use_tls=True,
+            smtp_username=None,
+            smtp_password=None,
+            frontend_base_url="https://app.example.test",
+        ),
+    )
+    monkeypatch.setattr(email.smtplib, "SMTP", FakeSMTP)
+
+    email.send_password_reset_email("person@example.test", "opaque-token-value")
+
+    body = captured["message"].get_content()
+    assert "https://app.example.test/reset-password#token=opaque-token-value" in body
+    assert "reset-password?token=" not in body
+    assert captured["tls"] is True
