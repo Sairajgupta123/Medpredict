@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 
 from app.api.dependencies import Administrator, CurrentUser, DbSession
+from app.core.config import get_settings
 from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
 from app.models.user import User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
@@ -105,13 +106,23 @@ class SkinImageModelStatusResponse(BaseModel):
     disease_prediction_performed: bool = False
     clinical_validation_status: str = "not_established"
     human_review_required: bool = True
+    image_intake_configured: bool = False
+    image_retention_days: int | None = None
     message: str
 
 
 @router.get("/model-status", response_model=SkinImageModelStatusResponse)
 def read_skin_image_model_status() -> SkinImageModelStatusResponse:
     """Expose the current safe capability state without loading model artifacts."""
+    settings = get_settings()
+    intake_configured = bool(
+        settings.skin_image_s3_bucket
+        and settings.skin_image_s3_region
+        and settings.skin_image_retention_days is not None
+    )
     return SkinImageModelStatusResponse(
+        image_intake_configured=intake_configured,
+        image_retention_days=(settings.skin_image_retention_days if intake_configured else None),
         message=(
             "Skin-image classification is not configured. Image intake and "
             "technical quality checks do not produce a disease prediction."
@@ -145,6 +156,13 @@ def intake_skin_image(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="All three consent policy versions are required.",
+        )
+
+    settings = get_settings()
+    if settings.skin_image_retention_days is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="A reviewed image-retention period is not configured; the image was not accepted.",
         )
 
     raw_content = image.file.read(MAX_IMAGE_BYTES + 1)
@@ -194,6 +212,8 @@ def intake_skin_image(
         content_type=validated.content_type,
         image_sha256=hashlib.sha256(validated.content).hexdigest(),
         storage_status="pending_upload",
+        retention_expires_at=datetime.now(timezone.utc) + timedelta(days=settings.skin_image_retention_days),
+        retention_policy_version="image-retention-v1",
         quality_status=(
             "advisory_warnings" if quality.warnings else "no_advisory_warnings"
         ),
