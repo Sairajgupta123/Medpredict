@@ -19,6 +19,7 @@ from app.models.catalog_reference import CatalogReferenceEvent
 from app.models.knowledge import MedicalReference, MedicalReferenceEvent
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -913,6 +914,85 @@ def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
     assert sorted(event["event_type"] for event in history.json()) == sorted([
         "granted", "revoked", "granted"
     ])
+
+
+def test_skin_image_scope_grant_requires_stored_image_and_active_consents(
+    client: TestClient,
+) -> None:
+    admin_headers = _user_headers("admin", email_suffix="image-scope-admin")
+    reviewer_headers = _user_headers(
+        "reviewer", grant_scopes=False, email_suffix="image-scope-reviewer"
+    )
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(
+            email="reviewer-image-scope-reviewer@example.com"
+        ).one()
+        reviewer.email_verified = True
+        owner = User(
+            email="image-scope-owner@example.com",
+            password_hash="test-only-not-used",
+            role="patient",
+        )
+        db.add(owner)
+        db.flush()
+        prediction = Prediction(user_id=owner.id, modality="skin_image")
+        db.add(prediction)
+        db.flush()
+        db.add(SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="skin-images/test-image-scope.jpg",
+            content_type="image/jpeg",
+            image_sha256="a" * 64,
+            storage_status="stored",
+        ))
+        db.commit()
+        reviewer_id = str(reviewer.id)
+        prediction_id = str(prediction.id)
+    finally:
+        db.close()
+
+    payload = {
+        "reviewer_id": reviewer_id,
+        "scope_type": "skin_image",
+        "scope_key": prediction_id,
+        "reason": "Assign exact image review responsibility.",
+    }
+    no_consent = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json=payload,
+    )
+    assert no_consent.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        db.add_all([
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="image-processing-v1",
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="image-review-v1",
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    granted = client.post(
+        "/api/v1/admin/reviewer-scopes",
+        headers=admin_headers,
+        json=payload,
+    )
+    assert granted.status_code == 201, granted.text
+    assert granted.json()["scope_type"] == "skin_image"
+    assert granted.json()["scope_key"] == prediction_id
 
 
 def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
