@@ -15,12 +15,12 @@ export function PasswordResetForm() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const candidate = params.get("token");
+    const fragment = window.location.hash;
+    if (!fragment) return;
+    const candidate = new URLSearchParams(fragment.slice(1)).get("token");
     if (candidate) setToken(candidate);
-    if (candidate) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
+    // Remove the one-time token from the visible URL and browser history.
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, []);
 
   async function requestReset(event: FormEvent<HTMLFormElement>) {
