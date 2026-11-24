@@ -1378,6 +1378,8 @@ def test_owner_review_status_is_minimal_and_never_exposes_reviewer_or_storage_da
 def test_skin_image_history_delete_removes_private_object_and_preserves_review_audit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api.v1 import predictions
     token, user = _register(client, "image-delete-success@example.com")
+    reviewer_token, reviewer = _register(client, "image-delete-reviewer@example.com")
+    _set_account_role(reviewer.id, "reviewer")
     item, key, _ = _stored_image_for_user(user.id)
     db = TestingSessionLocal()
     try:
@@ -1386,7 +1388,15 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
         db.add(SkinImageReviewEvent(
             prediction_id=item.id, image_analysis_id=image.id,
             event_type="assigned", actor_id=user.id,
+            assigned_reviewer_id=reviewer.id,
             reason="Assignment recorded for audit.",
+        ))
+        db.add(CatalogReviewerScope(
+            reviewer_id=reviewer.id,
+            scope_type="skin_image",
+            scope_key=str(item.id),
+            granted_by=user.id,
+            grant_reason="Owner approved exact image review access.",
         ))
         db.commit()
     finally:
@@ -1402,6 +1412,18 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
         assert db.get(Prediction, item.id) is None
         events = list(db.scalars(select(SkinImageReviewEvent).where(SkinImageReviewEvent.prediction_id == item.id)).all())
         assert len(events) == 1 and events[0].event_type == "assigned"
+        scope = db.scalar(select(CatalogReviewerScope).where(
+            CatalogReviewerScope.reviewer_id == reviewer.id,
+            CatalogReviewerScope.scope_type == "skin_image",
+            CatalogReviewerScope.scope_key == str(item.id),
+        ))
+        assert scope is not None and scope.revoked_at is not None
+        assert scope.revoked_by == user.id
+        scope_event = db.scalar(select(CatalogReviewerScopeEvent).where(
+            CatalogReviewerScopeEvent.scope_id == scope.id,
+            CatalogReviewerScopeEvent.event_type == "revoked",
+        ))
+        assert scope_event is not None and scope_event.operator_id == user.id
     finally:
         db.close()
 
