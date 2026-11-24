@@ -15,6 +15,17 @@ from PIL import Image
 from ml.skin_image.quality import ImageQualityPolicy, inspect_image_quality
 
 
+def _sha256_file(path: "Path", chunk_size: int = 1024 * 1024) -> str:
+    """Hash a model artifact incrementally to bound peak memory usage."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 
 def validate_skin_checkpoint(
     checkpoint: dict[str, Any],
@@ -212,7 +223,7 @@ def load_skin_research_model(checkpoint_path: str | "Path", *, device: str = "cp
             char not in "0123456789abcdef" for char in expected
         ):
             raise ValueError(f"Skin artifact {label} digest is invalid")
-        actual = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        actual = _sha256_file(file_path)
         if actual != expected:
             raise ValueError(f"Skin artifact {label} digest mismatch")
 
