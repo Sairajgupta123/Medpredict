@@ -1,13 +1,13 @@
 # MediPredict
 
-**AI-Powered Disease Prediction and Healthcare Assistance System**
+**AI-Assisted Health Information and Assessment Prototype**
 
-MediPredict is an academic major project exploring two complementary AI-assisted analysis workflows in one web application:
+MediPredict is an academic major project exploring privacy-conscious health-information workflows in one web application:
 
-1. **Text-based symptom analysis** — users enter symptoms in text or through a guided symptom interface. A machine-learning pipeline estimates possible conditions from a defined and evaluated dataset.
-2. **Skin-image analysis** — users upload a skin image for classification among explicitly supported dataset classes using a separately trained and evaluated image model.
+1. **Text-based symptom input** — users can select supported symptom labels or submit a short description for conservative phrase matching. The current implementation does not estimate disease probability or provide a diagnosis.
+2. **Skin-image intake and review** — users can submit images only through consent-gated private storage and technical capture-quality review. Skin-image disease classification is disabled because no dataset/model has completed the required approval and clinical validation.
 
-Both workflows connect to a shared, curated health-information and care-guidance layer. The application is intended as an educational decision-support prototype, not a substitute for a qualified healthcare professional or a clinical diagnosis.
+The application is an educational research prototype, not a diagnostic service, triage tool, or substitute for a qualified healthcare professional.
 
 ## Project principles
 
@@ -38,12 +38,12 @@ The exact framework versions and interfaces will be documented as implementation
 
 ## Current status
 
-The repository foundation, FastAPI backend, SQLAlchemy schema, initial Alembic migration, authentication endpoints, profile management, read-only medical catalog APIs, and a research-only text classification baseline have been added on `develop`.
+The repository foundation, FastAPI backend, SQLAlchemy schema and migrations, authentication and account-management endpoints, read-only medical catalog APIs, consent-gated private skin-image intake/review controls, and a research-only text-model experimentation pipeline have been added on `develop`.
 
-The text baseline includes dataset validation, group-aware three-way train/validation/test splitting, class-aware evaluation, Logistic Regression/Random Forest/optional XGBoost comparison with validation-only model selection, validation-fitted temperature calibration and coverage-based abstention thresholding. No approved dataset has been used for training, the text model is not connected to the public prediction API, and no clinical performance claims are made.
+The text-model research pipeline includes dataset validation, group-aware train/validation/test splitting, class-aware evaluation, model comparison, validation-only model selection, calibration helpers and coverage-based abstention. No approved dataset has been used for training, the text model is not connected to the public symptom API, and no clinical performance claims are made.
 
-An initial English symptom phrase-normalization vocabulary and conservative matcher have also been added. It flags a limited set of obvious negation, historical and uncertainty contexts for review; it is not a clinically validated NLP system and is not connected to the prediction API. Skin-image work now includes dataset assessment, manifest auditing, patient-grouped splits, preprocessing, MobileNetV3/ResNet50/EfficientNet-B0 model factories, training-only class weighting, per-class sensitivity/specificity metrics, reproducible experiment metadata, an architecture comparison runner, heuristic image-quality screening, confidence-based abstention, calibration helpers and safety-gated research inference. No skin dataset has been approved and no model has been trained or evaluated. Reviewed dataset ingestion, recommendation content, clinician-reviewed safety rules, and frontend workflows remain under development. Features listed above are planned scope unless explicitly identified as implemented.
+An initial English symptom phrase-normalization vocabulary and conservative matcher have also been added. It flags a limited set of obvious negation, historical and uncertainty contexts for review; it is not clinically validated and is not a diagnostic NLP system. Skin-image research utilities include dataset assessment, manifest auditing, patient-grouped split helpers, preprocessing, model factories, evaluation metrics, experiment metadata, image-quality screening, abstention and calibration helpers. These are research utilities only: no skin dataset has been approved, no model has been trained or clinically evaluated, and production inference remains disabled. A limited set of symptom normalization and approved-catalog overlap endpoints is available for research display only. Recommendation content, clinician-reviewed safety rules and broader clinical workflows remain under development.
 
 ## Safety notice
 
-MediPredict is an academic prototype. Its outputs must not be used to self-diagnose, delay urgent care, or start, stop, or change treatment. Skin-image classification is limited to the classes and image conditions supported by the validated model. If symptoms are severe or urgent, seek immediate professional medical care.
+MediPredict is an academic prototype. Its outputs must not be used to self-diagnose, delay urgent care, or start, stop, or change treatment. Symptom phrase matches and catalog overlap are not disease probabilities or risk scores. Skin-image disease classification is currently disabled; image review is restricted to technical capture quality. If symptoms are severe or urgent, seek immediate professional medical care.
