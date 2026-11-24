@@ -27,6 +27,63 @@ def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     return digest.hexdigest()
 
 
+def require_research_dataset_approval(
+    registry_path: Path, dataset_id: str
+) -> dict[str, Any]:
+    """Require explicit source-specific governance sign-off before model training."""
+    from ml.datasets.registry import validate_dataset_record
+
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("A non-empty dataset_id is required for training")
+    if not registry_path.is_file():
+        raise FileNotFoundError("An approved dataset registry file is required for training")
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Dataset registry is unreadable; training is blocked") from exc
+    if not isinstance(registry, dict) or not isinstance(registry.get("datasets"), list):
+        raise ValueError("Dataset registry must contain a datasets array")
+
+    matches = [
+        record for record in registry["datasets"]
+        if isinstance(record, dict) and record.get("dataset_id") == dataset_id
+    ]
+    if len(matches) != 1:
+        raise ValueError("Dataset ID must match exactly one registry record")
+    record = matches[0]
+    validation = validate_dataset_record(record)
+    if not validation["record_complete"]:
+        raise ValueError("Dataset registry record is incomplete or invalid; training is blocked")
+
+    required_approvals = (
+        "license_review", "permitted_use_review", "privacy_review", "label_review",
+        "clinical_reviewer_signoff",
+    )
+    if any(record.get(field) != "approved" for field in required_approvals):
+        raise ValueError("All dataset governance reviews and clinical sign-off must be approved")
+    if record.get("approval_status") != "research_only_approved":
+        raise ValueError("Dataset must be explicitly approved for research-only use")
+    if record.get("modality") != "image" or record.get("image_domain") not in {
+        "dermoscopy", "clinical_phone_photo", "mixed"
+    }:
+        raise ValueError("Dataset registry record is not approved for skin-image training")
+    if str(record.get("license", "")).strip().lower() in {
+        "unknown", "unknown_pending_source_review", "none", "n/a", "not reviewed"
+    }:
+        raise ValueError("A specific reviewed dataset license is required for training")
+
+    return {
+        "dataset_id": dataset_id,
+        "source_url": record["source_url"],
+        "version": record["version"],
+        "license": record["license"],
+        "image_domain": record["image_domain"],
+        "approval_status": record["approval_status"],
+        "governance_reviews": {field: record[field] for field in required_approvals},
+        "registry_sha256": _sha256_file(registry_path),
+    }
+
+
 def ensure_skin_artifacts_do_not_exist(
     output_dir: Path, filenames: list[str]
 ) -> None:
@@ -112,6 +169,8 @@ def train_skin_model(
     num_workers: int = 0,
     architecture: str = "mobilenet_v3",
     target_validation_coverage: float = 0.90,
+    dataset_registry_path: Path | None = None,
+    dataset_id: str | None = None,
 ) -> dict[str, Any]:
     """Train a supported image architecture using identical split and evaluation rules."""
     integer_parameters = {
@@ -190,6 +249,14 @@ def train_skin_model(
             "Skin dataset failed technical intake checks; training is blocked: "
             f"{reasons}"
         )
+    if dataset_registry_path is None or dataset_id is None:
+        raise ValueError(
+            "An approved dataset registry and dataset_id are required; technical checks alone "
+            "do not authorize training"
+        )
+    dataset_governance = require_research_dataset_approval(
+        dataset_registry_path, dataset_id
+    )
 
     from ml.skin_image.splits import patient_grouped_split
 
@@ -313,6 +380,7 @@ def train_skin_model(
         "all_classes_required_in_each_partition": True,
         "target_validation_coverage": target_validation_coverage,
         "manifest_sha256": manifest_digest,
+        "dataset_governance": dataset_governance,
     }
     config_json = json.dumps(experiment_config, sort_keys=True, separators=(",", ":"))
     config_digest = hashlib.sha256(config_json.encode("utf-8")).hexdigest()
@@ -464,6 +532,7 @@ def train_skin_model(
             "test": class_support(test_frame),
         },
         "manifest_sha256": manifest_digest,
+        "dataset_governance": dataset_governance,
         "experiment_config": experiment_config,
         "experiment_config_sha256": config_digest,
         "history": history,
@@ -491,6 +560,7 @@ def train_skin_model(
         },
         "manifest_file_name": manifest_path.name,
         "manifest_sha256": manifest_digest,
+        "dataset_governance": dataset_governance,
         "experiment_config_sha256": config_digest,
         "runtime_versions": runtime_versions,
         "checkpoint_file": checkpoint_path.name,
@@ -528,6 +598,8 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--image-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--dataset-registry", type=Path, required=True)
+    parser.add_argument("--dataset-id", required=True)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
@@ -561,6 +633,8 @@ def main() -> None:
         architecture=args.architecture,
         num_workers=args.num_workers,
         target_validation_coverage=args.target_validation_coverage,
+        dataset_registry_path=args.dataset_registry,
+        dataset_id=args.dataset_id,
     )
     print(
         json.dumps(
