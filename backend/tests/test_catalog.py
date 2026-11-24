@@ -19,7 +19,7 @@ from app.models.catalog_reference import CatalogReferenceEvent
 from app.models.knowledge import MedicalReference, MedicalReferenceEvent
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
-from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis
+from app.models.prediction import Prediction, PredictionConsentEvent, SkinImageAnalysis, SkinImageReviewEvent
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -809,6 +809,27 @@ def test_admin_deactivation_revokes_reviewer_scopes_and_sessions(
             email="reviewer-deactivate-reviewer-target@example.com"
         ).one()
         reviewer.email_verified = True
+        owner = User(
+            email="deactivate-reviewer-owner@example.com",
+            password_hash="test-only-not-used",
+            role="patient",
+        )
+        db.add(owner)
+        db.flush()
+        prediction = Prediction(user_id=owner.id, modality="skin_image")
+        db.add(prediction)
+        db.flush()
+        image_record = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="skin-images/deactivate-reviewer.jpg",
+            content_type="image/jpeg",
+            image_sha256="b" * 64,
+            storage_status="stored",
+            review_status="assigned",
+            assigned_reviewer_id=reviewer.id,
+            assigned_by=reviewer.id,
+        )
+        db.add(image_record)
         db.add_all([
             CatalogReviewerScope(
                 reviewer_id=reviewer.id,
@@ -842,6 +863,7 @@ def test_admin_deactivation_revokes_reviewer_scopes_and_sessions(
     assert deactivated.json()["account_status"] == "inactive"
     assert deactivated.json()["new_role"] == "patient"
     assert deactivated.json()["revoked_scope_count"] == 2
+    assert deactivated.json()["returned_assignment_count"] == 1
 
     stale_session = client.get(
         "/api/v1/auth/me",
@@ -864,6 +886,18 @@ def test_admin_deactivation_revokes_reviewer_scopes_and_sessions(
         role_event = db.query(RoleProvisioningEvent).filter_by(
             target_user_id=reviewer.id
         ).one()
+        returned_image = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction.id
+        ).one()
+        unassignment_event = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction.id,
+            event_type="unassigned",
+        ).one()
+        assert returned_image.review_status == "pending"
+        assert returned_image.assigned_reviewer_id is None
+        assert returned_image.assigned_by is None
+        assert returned_image.assigned_at is None
+        assert unassignment_event.assigned_reviewer_id == reviewer.id
         assert reviewer.is_active is False
         assert reviewer.role == "patient"
         assert reviewer.token_version == 1
