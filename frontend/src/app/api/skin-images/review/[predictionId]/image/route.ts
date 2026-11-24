@@ -81,6 +81,12 @@ export async function GET(_request: Request, context: RouteContext) {
     return privateJson({ detail: "Review image could not be retrieved completely." }, { status: 502 });
   }
 
+  // Reject empty or truncated upstream responses instead of serving a
+  // nominally successful image response with incomplete bytes.
+  if (totalBytes === 0 || (declaredLength !== null && Number(declaredLength) !== totalBytes)) {
+    return privateJson({ detail: "Review image response failed its length check." }, { status: 502 });
+  }
+
   const imageBytes = new Uint8Array(totalBytes);
   let offset = 0;
   for (const chunk of chunks) {
