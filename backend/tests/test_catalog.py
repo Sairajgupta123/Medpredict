@@ -1109,6 +1109,39 @@ def test_skin_image_scope_grant_requires_stored_image_and_active_consents(
     assert granted.json()["scope_type"] == "skin_image"
     assert granted.json()["scope_key"] == prediction_id
 
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction.id
+        ).one()
+        image_record.review_status = "assigned"
+        image_record.assigned_reviewer_id = reviewer.id
+        image_record.assigned_by = reviewer.id
+        db.commit()
+    finally:
+        db.close()
+
+    revoked = client.post(
+        f"/api/v1/admin/reviewer-scopes/{granted.json()['id']}/revoke",
+        headers=admin_headers,
+        json={"reason": "Reviewer assignment is no longer authorized."},
+    )
+    assert revoked.status_code == 200, revoked.text
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction.id
+        ).one()
+        event = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction.id,
+            event_type="unassigned",
+        ).one()
+        assert image_record.review_status == "pending"
+        assert image_record.assigned_reviewer_id is None
+        assert event.assigned_reviewer_id == reviewer.id
+    finally:
+        db.close()
+
 
 def test_only_admin_can_manage_reviewer_scopes_and_verified_reviewers_are_required(
     client: TestClient,
