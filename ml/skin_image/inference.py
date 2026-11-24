@@ -42,11 +42,19 @@ def validate_skin_checkpoint(
         "model_variant", "image_size", "normalization",
         "calibration_temperature", "abstention_threshold",
         "threshold_selection_partition", "experiment_config",
-        "experiment_config_sha256",
+        "experiment_config_sha256", "manifest_sha256",
     }
     missing = required - set(checkpoint)
     if missing:
         raise ValueError(f"Checkpoint is missing required fields: {sorted(missing)}")
+
+    manifest_digest = checkpoint["manifest_sha256"]
+    if (
+        not isinstance(manifest_digest, str)
+        or len(manifest_digest) != 64
+        or any(char not in "0123456789abcdef" for char in manifest_digest)
+    ):
+        raise ValueError("Checkpoint manifest_sha256 must be a lowercase SHA-256 hex digest")
 
     state_dict = checkpoint["model_state_dict"]
     if not isinstance(state_dict, Mapping) or not state_dict:
