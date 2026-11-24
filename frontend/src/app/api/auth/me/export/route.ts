@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { API_BASE_URL, getSessionToken } from "@/lib/auth-proxy";
+import { API_BASE_URL, getSessionToken, readBoundedJson } from "@/lib/auth-proxy";
 
 export async function GET() {
   const token = await getSessionToken();
@@ -24,7 +24,7 @@ export async function GET() {
     );
   }
 
-  const body = await upstream.json().catch(() => null);
+  // Account exports can be larger than ordinary API responses, but must remain bounded.\n  const body = await readBoundedJson(upstream, 10 * 1024 * 1024);\n  if (body === null) {\n    return NextResponse.json(\n      { detail: "The account export response was invalid or exceeded the allowed size." },\n      { status: 502, headers: { "Cache-Control": "private, no-store, max-age=0" } },\n    );\n  }
   if (!upstream.ok) {
     return NextResponse.json(
       body ?? { detail: "The account export could not be generated." },
