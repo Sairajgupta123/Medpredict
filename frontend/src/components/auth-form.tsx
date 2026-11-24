@@ -21,6 +21,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [verificationPending, setVerificationPending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,13 +45,22 @@ export function AuthForm({ mode }: AuthFormProps) {
         return;
       }
       if (isRegister) {
-        await fetch("/api/auth/email-verification/request", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ email: email.trim() }),
-          signal: AbortSignal.timeout(10_000),
-        }).catch(() => null);
-        window.location.assign("/verify-email?sent=1");
+        setVerificationPending(true);
+        try {
+          const verificationResponse = await fetch("/api/auth/email-verification/request", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ email: email.trim() }),
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!verificationResponse.ok) {
+            setError("Your account was created, but we could not start email verification. Open the verification page and request a new link.");
+            return;
+          }
+          window.location.assign("/verify-email?sent=1");
+        } catch {
+          setError("Your account was created, but the verification request could not reach the server. Open the verification page and request a new link.");
+        }
         return;
       }
       window.location.assign("/dashboard");
@@ -115,6 +125,7 @@ export function AuthForm({ mode }: AuthFormProps) {
           <span aria-hidden="true">→</span>
         </button>
       </form>
+      {verificationPending && <p className="auth-switch"><Link href="/verify-email">Continue to email verification</Link></p>}
       {!isRegister ? <p className="auth-switch"><Link href="/reset-password">Forgot your password?</Link></p> : null}
       <p className="auth-switch">
         {isRegister ? "Already have an account?" : "New to MediPredict?"}{" "}
