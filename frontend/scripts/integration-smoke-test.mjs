@@ -54,7 +54,9 @@ if (
   model.model_configured !== false ||
   model.disease_prediction_performed !== false ||
   model.clinical_validation_status !== "not_established" ||
-  model.human_review_required !== true
+  model.human_review_required !== true ||
+  model.image_intake_configured !== false ||
+  model.image_retention_days !== null
 ) {
   throw new Error("Skin model status did not preserve the disabled/non-clinical capability contract");
 }
