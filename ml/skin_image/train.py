@@ -37,6 +37,7 @@ def require_research_dataset_approval(
         raise ValueError("A non-empty dataset_id is required for training")
     if not registry_path.is_file():
         raise FileNotFoundError("An approved dataset registry file is required for training")
+    registry_digest = _sha256_file(registry_path)
     try:
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -72,6 +73,9 @@ def require_research_dataset_approval(
     }:
         raise ValueError("A specific reviewed dataset license is required for training")
 
+    if _sha256_file(registry_path) != registry_digest:
+        raise ValueError("Dataset registry changed during approval checks; training is blocked")
+
     return {
         "dataset_id": dataset_id,
         "source_url": record["source_url"],
@@ -80,7 +84,7 @@ def require_research_dataset_approval(
         "image_domain": record["image_domain"],
         "approval_status": record["approval_status"],
         "governance_reviews": {field: record[field] for field in required_approvals},
-        "registry_sha256": _sha256_file(registry_path),
+        "registry_sha256": registry_digest,
     }
 
 
