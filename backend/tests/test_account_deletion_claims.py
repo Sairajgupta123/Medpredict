@@ -93,7 +93,7 @@ def test_abandoned_processing_request_can_be_reclaimed() -> None:
         db.refresh(request)
         assert request.status == "processing"
         assert request.attempts == 2
-        assert request.last_attempt_at == now
+        assert request.last_attempt_at.replace(tzinfo=timezone.utc) == now
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
