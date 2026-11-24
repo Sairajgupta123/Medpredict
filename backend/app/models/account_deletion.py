@@ -17,6 +17,7 @@ class AccountDeletionRequest(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    claim_token: Mapped[UUID | None] = mapped_column(nullable=True)
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
