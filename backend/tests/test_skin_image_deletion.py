@@ -452,6 +452,86 @@ def test_retention_purge_revokes_history_consent_and_keeps_audit_rows(
     assert len(events) == 2
 
 
+def test_retention_expiry_clears_assignment_and_audits_reviewer_access(
+    db_session: Session,
+) -> None:
+    from app.models.prediction import SkinImageReviewEvent
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+    from app.services.prediction_history import (
+        purge_expired_skin_image_records,
+        record_skin_image_consent_decision,
+        set_skin_image_retention_expiry,
+    )
+
+    owner, prediction = _owned_image_history(db_session)
+    reviewer = User(
+        id=uuid4(),
+        email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-password-hash",
+        role="reviewer",
+        is_active=True,
+        email_verified=True,
+    )
+    db_session.add(reviewer)
+    db_session.flush()
+    record_skin_image_consent_decision(
+        db_session, owner.id, prediction.id,
+        purpose="skin_image_history", action="granted",
+        policy_version="image-history-v1",
+    )
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=1)
+    image = set_skin_image_retention_expiry(
+        db_session, owner.id, prediction.id,
+        expires_at=expiry, policy_version="retention-policy-v2",
+    )
+    image.review_status = "assigned"
+    image.assigned_reviewer_id = reviewer.id
+    image.assigned_by = owner.id
+    image.assigned_at = datetime.now(timezone.utc)
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id,
+        scope_type="skin_image",
+        scope_key=str(prediction.id),
+        granted_by=owner.id,
+        grant_reason="Owner authorized this exact image review.",
+    )
+    db_session.add(scope)
+    db_session.commit()
+
+    summary = purge_expired_skin_image_records(
+        db_session,
+        image_storage=FakePrivateStorage(),
+        as_of=expiry + timedelta(seconds=1),
+    )
+
+    assert summary == {"processed": 1, "deleted": 1, "failed": 0}
+    db_session.refresh(image)
+    db_session.refresh(scope)
+    assert image.storage_status == "deleted"
+    assert image.review_status == "pending"
+    assert image.assigned_reviewer_id is None
+    assert image.assigned_by is None
+    assert image.assigned_at is None
+    assert scope.revoked_at is not None
+    unassignment = db_session.scalar(
+        select(SkinImageReviewEvent).where(
+            SkinImageReviewEvent.prediction_id == prediction.id,
+            SkinImageReviewEvent.event_type == "unassigned",
+            SkinImageReviewEvent.assigned_reviewer_id == reviewer.id,
+        )
+    )
+    assert unassignment is not None
+    assert unassignment.actor_id == owner.id
+    assert "retention period expired" in unassignment.reason
+    scope_event = db_session.scalar(
+        select(CatalogReviewerScopeEvent).where(
+            CatalogReviewerScopeEvent.scope_id == scope.id,
+            CatalogReviewerScopeEvent.event_type == "revoked",
+        )
+    )
+    assert scope_event is not None
+
+
 def test_retention_purge_does_not_revoke_consent_when_object_delete_fails(
     db_session: Session,
 ) -> None:
