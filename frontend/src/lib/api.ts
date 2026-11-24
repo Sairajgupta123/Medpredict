@@ -1,3 +1,4 @@
+import { readBoundedJsonResponse } from "@/lib/bounded-json";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
   "http://localhost:8000/api/v1";
@@ -26,12 +27,22 @@ export async function apiRequest<T>(
     signal: init.signal ?? AbortSignal.timeout(15_000),
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new ApiError(body?.detail ?? "The request could not be completed.", response.status);
+  let body: unknown;
+  try {
+    body = await readBoundedJsonResponse(response, 2 * 1024 * 1024);
+  } catch {
+    throw new ApiError("The API returned an invalid or oversized response.", response.status || 502);
   }
 
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    const detail = body && typeof body === "object" && "detail" in body &&
+      typeof body.detail === "string"
+      ? body.detail
+      : "The request could not be completed.";
+    throw new ApiError(detail, response.status);
+  }
+
+  return body as T;
 }
 
 export type HealthResponse = {
