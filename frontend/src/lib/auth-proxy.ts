@@ -24,11 +24,14 @@ type BackendTokenResponse = {
 
 const MAX_AUTH_RESPONSE_BYTES = 64 * 1024;
 
-async function readBoundedJson(response: Response): Promise<unknown | null> {
+export async function readBoundedJson(
+  response: Response,
+  maxBytes = MAX_AUTH_RESPONSE_BYTES,
+): Promise<unknown | null> {
   const declaredLength = response.headers.get("content-length");
   if (
     declaredLength !== null &&
-    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > MAX_AUTH_RESPONSE_BYTES)
+    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
   ) {
     await response.body?.cancel().catch(() => undefined);
     return null;
@@ -43,7 +46,7 @@ async function readBoundedJson(response: Response): Promise<unknown | null> {
       const { done, value } = await reader.read();
       if (done) break;
       totalBytes += value.byteLength;
-      if (totalBytes > MAX_AUTH_RESPONSE_BYTES) {
+      if (totalBytes > maxBytes) {
         await reader.cancel();
         return null;
       }
