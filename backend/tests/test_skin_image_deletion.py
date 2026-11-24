@@ -419,6 +419,32 @@ def test_image_history_consent_remains_active_until_failed_delete_is_retried(
         action="granted",
         policy_version="image-history-v1",
     )
+    from app.models.prediction import SkinImageReviewEvent
+    from app.models.reviewer_scope import CatalogReviewerScope
+
+    reviewer = User(
+        id=uuid4(), email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-password-hash", role="reviewer",
+        is_active=True, email_verified=True,
+    )
+    db_session.add(reviewer)
+    db_session.flush()
+    image = db_session.scalar(select(SkinImageAnalysis).where(
+        SkinImageAnalysis.prediction_id == prediction.id
+    ))
+    assert image is not None
+    image.review_status = "assigned"
+    image.assigned_reviewer_id = reviewer.id
+    image.assigned_by = user.id
+    image.assigned_at = datetime.now(timezone.utc)
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id, scope_type="skin_image",
+        scope_key=str(prediction.id), granted_by=user.id,
+        grant_reason="Owner authorized exact image review.",
+    )
+    db_session.add(scope)
+    db_session.commit()
+
     storage = FakePrivateStorage(fail_once=True)
     with pytest.raises(HTTPException) as error:
         revoke_skin_image_history_consent(
@@ -438,6 +464,18 @@ def test_image_history_consent_remains_active_until_failed_delete_is_retried(
         )
     )
     assert image is not None and image.storage_status == "deletion_pending"
+    assert image.review_status == "pending"
+    assert image.assigned_reviewer_id is None
+    assert image.assigned_by is None
+    assert image.assigned_at is None
+    db_session.refresh(scope)
+    assert scope.revoked_at is not None
+    unassigned = db_session.scalar(select(SkinImageReviewEvent).where(
+        SkinImageReviewEvent.prediction_id == prediction.id,
+        SkinImageReviewEvent.event_type == "unassigned",
+        SkinImageReviewEvent.assigned_reviewer_id == reviewer.id,
+    ))
+    assert unassigned is not None and unassigned.actor_id == user.id
 
     revoke_skin_image_history_consent(
         db_session,
