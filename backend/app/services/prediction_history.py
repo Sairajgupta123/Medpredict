@@ -505,6 +505,36 @@ def purge_expired_skin_image_records(
         image_record.deletion_requested_at = (
             image_record.deletion_requested_at or datetime.now(timezone.utc)
         )
+
+        # Expiry is also an owner-authorized end to image retention. Revoke
+        # exact reviewer scopes in the same durable transaction as the pending
+        # marker, including when object storage is temporarily unavailable.
+        active_scopes = db.scalars(
+            select(CatalogReviewerScope)
+            .where(
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(image_record.prediction_id),
+                CatalogReviewerScope.revoked_at.is_(None),
+            )
+            .with_for_update()
+        ).all()
+        revoked_at = datetime.now(timezone.utc)
+        revoke_reason = "Image retention expired; reviewer access revoked."
+        for scope in active_scopes:
+            scope.revoked_by = image_record.prediction.user_id
+            scope.revoked_at = revoked_at
+            scope.revoke_reason = revoke_reason
+            db.add(CatalogReviewerScopeEvent(
+                scope_id=scope.id,
+                reviewer_id=scope.reviewer_id,
+                event_type="revoked",
+                scope_type=scope.scope_type,
+                scope_key=scope.scope_key,
+                operator_id=image_record.prediction.user_id,
+                reason=revoke_reason,
+            ))
+        db.commit()
+
         try:
             image_storage.delete_private(image_record.object_key)
         except Exception:
