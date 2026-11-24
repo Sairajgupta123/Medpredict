@@ -35,6 +35,8 @@ def compare_architectures(
     pretrained: bool = False,
     num_workers: int = 0,
     target_validation_coverage: float = 0.90,
+    dataset_registry_path: Path | None = None,
+    dataset_id: str | None = None,
 ) -> dict[str, Any]:
     """Train candidates with shared settings and rank only by validation macro-F1."""
     if not candidates:
@@ -59,6 +61,8 @@ def compare_architectures(
             num_workers=num_workers,
             architecture=architecture,
             target_validation_coverage=target_validation_coverage,
+            dataset_registry_path=dataset_registry_path,
+            dataset_id=dataset_id,
         )
         experiments.append(
             {
@@ -110,6 +114,8 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--image-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--dataset-registry", type=Path, required=True)
+    parser.add_argument("--dataset-id", required=True)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
@@ -130,6 +136,8 @@ def main() -> None:
         pretrained=args.pretrained,
         num_workers=args.num_workers,
         target_validation_coverage=args.target_validation_coverage,
+        dataset_registry_path=args.dataset_registry,
+        dataset_id=args.dataset_id,
     )
     print(
         json.dumps(
