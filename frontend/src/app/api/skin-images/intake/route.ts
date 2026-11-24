@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
+import { API_BASE_URL, SESSION_COOKIE, readBoundedJson } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
       cache: "no-store",
       signal: AbortSignal.timeout(30_000),
     });
-    const body = await upstream.json().catch(() => null);
+    const body = await readBoundedJson(upstream, 32 * 1024);
     return privateJson(
       body ?? { detail: "The image service returned an invalid response." },
       { status: upstream.status, headers: { "Cache-Control": "private, no-store" } },
