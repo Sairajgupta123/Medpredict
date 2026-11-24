@@ -761,7 +761,7 @@ def test_admin_can_recover_pending_image_after_reviewer_deactivation(
     db = TestingSessionLocal()
     try:
         image_record = db.query(SkinImageAnalysis).filter_by(
-            prediction_id=prediction_id,
+            prediction_id=UUID(prediction_id),
         ).one()
         assert image_record.review_status == "assigned"
         assert image_record.assigned_reviewer_id == UUID(reviewer_id)
