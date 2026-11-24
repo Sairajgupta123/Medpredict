@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 import { API_BASE_URL } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
+import { readBoundedJsonBody } from "@/lib/bounded-json";
 
 export async function POST(request: Request) {
   if (!hasSameRequestOrigin(request)) {
     return NextResponse.json({ detail: "Invalid request origin." }, { status: 403 });
   }
 
-  let payload: unknown;
-  try {
-    const raw = await request.text();
-    if (raw.length > 4096) {
-      return NextResponse.json({ detail: "Request is too large." }, { status: 413 });
-    }
-    payload = JSON.parse(raw);
-  } catch {
-    return NextResponse.json({ detail: "Please provide valid JSON." }, { status: 400 });
+  const parsed = await readBoundedJsonBody(request);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { detail: parsed.status === 413 ? "Request is too large." : "Please provide valid JSON." },
+      { status: parsed.status },
+    );
   }
+  const payload = parsed.value;
   if (
     !payload ||
     typeof payload !== "object" ||

@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
-type Props = { initialToken?: string };
-
-export function EmailVerificationForm({ initialToken = "" }: Props) {
+export function EmailVerificationForm() {
   const [email, setEmail] = useState("");
-  const [token, setToken] = useState(initialToken);
+  const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const fragment = window.location.hash;
+    if (!fragment) return;
+    const candidate = new URLSearchParams(fragment.slice(1)).get("token");
+    if (candidate) setToken(candidate);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
 
   async function requestLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
