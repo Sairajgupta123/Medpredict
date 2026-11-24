@@ -143,7 +143,7 @@ following:
 
 - [ ] Deploy frontend and API behind HTTPS with trusted certificates.
 - [ ] Configure a managed PostgreSQL database, backups, restore test, migrations and
-      least-privilege credentials.
+      least-privilege credentials, TLS-enforced connections (sslmode=require or stronger), and verified backups.
 - [ ] Set a unique random `APP_SECRET_KEY` (at least 32 characters); rotate any secret
       that may have been used outside local development.
 - [ ] Set `REQUIRE_VERIFIED_EMAIL=true`, configure working SMTP host/sender with STARTTLS,
