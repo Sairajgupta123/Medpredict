@@ -758,6 +758,20 @@ def test_admin_can_recover_pending_image_after_reviewer_deactivation(
     assert response.json()["reviewer_id"] == reviewer_id
     assert response.json()["review_status"] == "assigned"
 
+    replacement_reviewer_headers = {
+        "Authorization": f"Bearer {create_access_token(UUID(reviewer_id))}"
+    }
+    replacement_queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=replacement_reviewer_headers,
+    )
+    assert replacement_queue.status_code == 200, replacement_queue.text
+    assert any(
+        item["prediction_id"] == prediction_id
+        and item["review_status"] == "assigned"
+        for item in replacement_queue.json()
+    )
+
     db = TestingSessionLocal()
     try:
         image_record = db.query(SkinImageAnalysis).filter_by(
