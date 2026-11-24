@@ -93,6 +93,26 @@ await check(
   { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: ["HEADACHE"] }) } },
   403,
 );
+await check(
+  "reject malformed catalog-match identifiers",
+  { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: ["not-a-valid-id"] }) } },
+  422,
+);
+await check(
+  "reject duplicate catalog-match identifiers",
+  { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: ["HEADACHE", "HEADACHE"] }) } },
+  422,
+);
+await check(
+  "return controlled unavailable response for symptom catalog",
+  { path: "/api/symptoms/catalog", init: { method: "GET" } },
+  503,
+);
+await check(
+  "return controlled unavailable response for skin model status",
+  { path: "/api/skin-images/model-status", init: { method: "GET" } },
+  503,
+);
 
 const skinIntakePath = "/api/skin-images/intake";
 await check(
