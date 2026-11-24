@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     skin_image_s3_endpoint_url: str | None = None
     skin_image_s3_encryption: str = "AES256"
     skin_image_s3_kms_key_id: str | None = None
+    skin_image_retention_days: int | None = Field(default=None, ge=1, le=3650)
     skin_research_checkpoint_path: str | None = None
     text_research_artifact_path: str | None = None
     database_pool_size: int = Field(default=5, ge=1, le=50)
@@ -88,6 +89,8 @@ class Settings(BaseSettings):
                 raise ValueError("SMTP_USE_TLS must be enabled in production.")
             if bool(self.smtp_username) != bool(self.smtp_password):
                 raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together.")
+            if self.skin_image_s3_bucket and self.skin_image_retention_days is None:
+                raise ValueError("SKIN_IMAGE_RETENTION_DAYS is required when private skin-image storage is enabled.")
         if self.access_token_expire_minutes < 5:
             raise ValueError("Access token lifetime must be at least 5 minutes.")
 
