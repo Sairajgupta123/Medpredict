@@ -1288,8 +1288,8 @@ def test_account_deletion_worker_retries_image_storage_failure(client: TestClien
 @pytest.mark.parametrize(
     ("existing_status", "expected_status", "expected_http_status"),
     [
-        ("pending", "pending", 200),
-        ("processing", "processing", 200),
+        ("pending", "pending", 202),
+        ("processing", "processing", 202),
         ("completed", None, 409),
         ("failed", None, 409),
     ],
