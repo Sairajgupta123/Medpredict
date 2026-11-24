@@ -580,6 +580,16 @@ def assign_skin_image_review(
         )
     previous_reviewer_id = image_record.assigned_reviewer_id
     if previous_reviewer_id is not None and previous_reviewer_id != reviewer.id:
+        # Keep the outgoing reviewer explicit in image-level audit history before
+        # recording the incoming assignment below.
+        db.add(SkinImageReviewEvent(
+            prediction_id=prediction.id,
+            image_analysis_id=image_record.id,
+            event_type="unassigned",
+            actor_id=administrator.id,
+            assigned_reviewer_id=previous_reviewer_id,
+            reason="Assignment cleared because the image was reassigned.",
+        ))
         previous_scope = db.scalar(
             select(CatalogReviewerScope)
             .where(
