@@ -358,6 +358,14 @@ def retrieve_skin_image(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Image history item not found.",
         )
+    # Serialize owner retrieval with history-consent revocation and deletion.
+    # Re-check consent only after taking the same image-row lock used by the
+    # revocation path, so a stale pre-lock grant cannot authorize a new read.
+    image_record = db.scalar(
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
+    )
     if not has_active_skin_image_consent(
         db, prediction.id, purpose="skin_image_history"
     ):
@@ -365,12 +373,6 @@ def retrieve_skin_image(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Active image-history consent is required to retrieve this image.",
         )
-
-    image_record = db.scalar(
-        select(SkinImageAnalysis).where(
-            SkinImageAnalysis.prediction_id == prediction.id
-        )
-    )
     if image_record is None or image_record.storage_status != "stored":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
