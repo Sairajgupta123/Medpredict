@@ -483,6 +483,7 @@ def test_owner_can_retrieve_image_with_active_history_consent(
     assert response.headers["content-type"] == "image/png"
     assert response.headers["cache-control"] == "private, no-store, max-age=0"
     assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
     assert "object_key" not in response.headers
 
 
