@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
+import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 function privateJson(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -14,6 +15,10 @@ function privateJson(body: unknown, init: ResponseInit = {}) {
 type RouteContext = { params: Promise<{ predictionId: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
+  if (!hasSameRequestOrigin(request)) {
+    return privateJson({ detail: "Invalid request origin." }, { status: 403 });
+  }
+
   if (!hasSameRequestOrigin(request)) {
     return privateJson({ detail: "Invalid request origin." }, { status: 403 });
   }
