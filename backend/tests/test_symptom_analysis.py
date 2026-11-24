@@ -1,6 +1,6 @@
 """Tests for the non-diagnostic symptom phrase endpoint and structured context."""
 
-from fastapi.testclient import TestClient
+import pytest\n\nfrom fastapi.testclient import TestClient
 
 from app.main import app
 
@@ -46,6 +46,28 @@ def test_normalize_flags_negated_mentions_separately() -> None:
     assert [item["id"] for item in body["matched_symptoms"]] == ["SYM_COUGH"]
     assert body["contextual_mentions"][0]["id"] == "SYM_FEVER"
     assert body["contextual_mentions"][0]["context_flag"] == "negated_or_denied_context"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Not fever, but I have a cough.",
+        "I am not having a fever but I have a cough.",
+        "I was not having a headache yesterday.",
+    ],
+)
+def test_normalize_flags_additional_negation_phrases(text: str) -> None:
+    response = client.post(
+        "/api/v1/symptoms/normalize",
+        json=request_payload(text),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    fever_or_headache = next(
+        item for item in body["contextual_mentions"]
+        if item["id"] in {"SYM_FEVER", "SYM_HEADACHE"}
+    )
+    assert fever_or_headache["context_flag"] == "negated_or_denied_context"
 
 
 def test_normalize_flags_unrecognized_words_even_when_symptoms_match() -> None:
