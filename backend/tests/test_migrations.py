@@ -42,7 +42,7 @@ def test_migration_files_exist() -> None:
         "0023_auth_rate_limit_buckets.py",
         "0024_email_verification_tokens.py",
         "0025_account_deletion_requests.py",
-        "0026_skin_unassignment_audit.py",
+        "0026_skin_image_unassignment_audit.py",
     ):
         assert (versions / name).is_file()
 
