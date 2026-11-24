@@ -136,3 +136,108 @@ def test_processing_request_without_attempt_timestamp_is_recovered() -> None:
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
+
+
+
+class _FakePrivateStorage:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.deleted: list[str] = []
+
+    def delete_private(self, object_key: str) -> None:
+        if self.fail:
+            raise OSError("storage unavailable")
+        self.deleted.append(object_key)
+
+
+def test_account_deletion_erases_text_history_and_keeps_non_login_tombstone() -> None:
+    from app.models.prediction import Prediction
+    from app.workers.account_deletion import process_deletion_request
+
+    Base.metadata.create_all(bind=engine)
+    db = Session()
+    try:
+        user = User(
+            email="erase-text@example.test",
+            password_hash="test-only-password-hash",
+            role="patient",
+            is_active=False,
+        )
+        db.add(user)
+        db.flush()
+        prediction = Prediction(
+            user_id=user.id,
+            modality="text",
+            status="completed",
+        )
+        request = AccountDeletionRequest(user_id=user.id, status="processing")
+        db.add_all([prediction, request])
+        db.commit()
+        user_id = user.id
+        request_id = request.id
+
+        assert process_deletion_request(db, request_id, _FakePrivateStorage()) is True
+        db.expire_all()
+        tombstone = db.get(User, user_id)
+        stored_request = db.get(AccountDeletionRequest, request_id)
+        assert tombstone is not None
+        assert tombstone.is_active is False
+        assert tombstone.email == f"deleted+{user_id.hex}@invalid.local"
+        assert tombstone.display_name is None
+        assert db.get(Prediction, prediction.id) is None
+        assert stored_request is not None and stored_request.status == "completed"
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+
+
+def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
+    from app.models.prediction import Prediction, SkinImageAnalysis
+    from app.workers.account_deletion import process_deletion_request
+
+    Base.metadata.create_all(bind=engine)
+    db = Session()
+    try:
+        user = User(
+            email="erase-image@example.test",
+            password_hash="test-only-password-hash",
+            role="patient",
+            is_active=False,
+        )
+        db.add(user)
+        db.flush()
+        prediction = Prediction(
+            user_id=user.id,
+            modality="skin_image",
+            status="review_required",
+        )
+        request = AccountDeletionRequest(user_id=user.id, status="processing")
+        db.add_all([prediction, request])
+        db.flush()
+        image = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="private/opaque-image.jpg",
+            content_type="image/jpeg",
+            image_sha256="c" * 64,
+            storage_status="stored",
+        )
+        db.add(image)
+        db.commit()
+        request_id = request.id
+        prediction_id = prediction.id
+        image_id = image.id
+
+        assert process_deletion_request(
+            db, request_id, _FakePrivateStorage(fail=True)
+        ) is False
+        db.expire_all()
+        stored_request = db.get(AccountDeletionRequest, request_id)
+        retained_prediction = db.get(Prediction, prediction_id)
+        retained_image = db.get(SkinImageAnalysis, image_id)
+        assert stored_request is not None and stored_request.status == "pending"
+        assert retained_prediction is not None
+        assert retained_image is not None
+        assert retained_image.storage_status == "deletion_pending"
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
