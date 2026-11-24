@@ -24,8 +24,13 @@ async function attachSourceAction(formData: FormData) {
   const key = String(formData.get("target_key") ?? "");
   const referenceId = String(formData.get("reference_id") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
-  if (!type || !key || !referenceId || reason.length < 8 || reason.length > 1000) {
-    redirect(`/review/entry?type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}&source_error=invalid`);
+  if (
+    !["disease", "symptom", "disease_symptom"].includes(type) ||
+    !key || key.length > 200 ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(referenceId) ||
+    reason.length < 8 || reason.length > 1000
+  ) {
+    redirect(`/review/entry?type=${encodeURIComponent(type.slice(0, 32))}&key=${encodeURIComponent(key.slice(0, 200))}&source_error=invalid`);
   }
   const result = await attachCatalogReference(type, key, referenceId, reason);
   if (result.error) {
@@ -41,8 +46,13 @@ async function removeSourceAction(formData: FormData) {
   const key = String(formData.get("target_key") ?? "");
   const linkId = String(formData.get("link_id") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
-  if (!linkId || reason.length < 8 || reason.length > 1000) {
-    redirect(`/review/entry?type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}&source_error=invalid`);
+  if (
+    !["disease", "symptom", "disease_symptom"].includes(type) ||
+    !key || key.length > 200 ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(linkId) ||
+    reason.length < 8 || reason.length > 1000
+  ) {
+    redirect(`/review/entry?type=${encodeURIComponent(type.slice(0, 32))}&key=${encodeURIComponent(key.slice(0, 200))}&source_error=invalid`);
   }
   const result = await removeCatalogReference(linkId, reason);
   if (result.error) {
