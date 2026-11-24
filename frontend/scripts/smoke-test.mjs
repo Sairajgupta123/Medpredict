@@ -135,6 +135,16 @@ await check(
   { path: skinIntakePath, init: { method: "POST", headers: { Origin: requestOrigin } } },
   401,
 );
+await check(
+  "reject oversized declared skin-image upload before parsing",
+  { path: skinIntakePath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Length": String(8 * 1024 * 1024 + 64 * 1024 + 1) } } },
+  413,
+);
+await check(
+  "reject malformed skin-image upload size header",
+  { path: skinIntakePath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Length": "not-a-number" } } },
+  400,
+);
 
 
 const deletionRequestPath = "/api/auth/me/deletion-request";
