@@ -1353,3 +1353,87 @@ def test_account_deletion_request_reports_existing_job_state(
             assert "detail" in response.json()
     finally:
         db.close()
+
+
+def test_account_export_is_private_owner_scoped_and_excludes_storage_secrets(
+    client: TestClient,
+) -> None:
+    from app.models.prediction import (
+        Prediction,
+        PredictionConsentEvent,
+        SkinImageAnalysis,
+    )
+    from app.models.user import User
+
+    owner_registration = client.post("/api/v1/auth/register", json={
+        "email": "export-owner@example.com", "password": "StrongPass123!"
+    })
+    other_registration = client.post("/api/v1/auth/register", json={
+        "email": "export-other@example.com", "password": "StrongPass123!"
+    })
+    assert owner_registration.status_code == 201
+    assert other_registration.status_code == 201
+
+    db = TestingSessionLocal()
+    try:
+        owner = db.query(User).filter_by(email="export-owner@example.com").one()
+        other = db.query(User).filter_by(email="export-other@example.com").one()
+        own_prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="review_required",
+            input_text="A private symptom description",
+        )
+        other_prediction = Prediction(
+            user_id=other.id,
+            modality="text",
+            status="completed",
+            input_text="Other user's private text",
+        )
+        db.add_all([own_prediction, other_prediction])
+        db.flush()
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=own_prediction.id,
+                object_key="skin-images/" + "a" * 32 + ".jpg",
+                content_type="image/jpeg",
+                image_sha256="b" * 64,
+                storage_status="stored",
+                review_required=True,
+            ),
+            PredictionConsentEvent(
+                prediction_id=own_prediction.id,
+                purpose="skin_image_history",
+                action="granted",
+                policy_version="history-v1",
+            ),
+        ])
+        db.commit()
+        own_id = str(own_prediction.id)
+        other_id = str(other_prediction.id)
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/v1/auth/me/export",
+        headers={"Authorization": f"Bearer {owner_registration.json()['access_token']}"},
+    )
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert "attachment; filename=" in response.headers["content-disposition"]
+    body = response.json()
+    assert body["account"]["email"] == "export-owner@example.com"
+    assert [item["id"] for item in body["predictions"]] == [own_id]
+    exported = body["predictions"][0]
+    assert exported["input_text"] == "A private symptom description"
+    assert exported["image_metadata"]["storage_status"] == "stored"
+    assert exported["consent_events"][0]["purpose"] == "skin_image_history"
+    serialized = response.text
+    assert other_id not in serialized
+    assert "Other user's private text" not in serialized
+    assert "skin-images/" not in serialized
+    assert "password_hash" not in serialized
+    assert "access_token" not in serialized
+
+    unauthenticated = client.get("/api/v1/auth/me/export")
+    assert unauthenticated.status_code == 401
