@@ -34,7 +34,7 @@ registrations. A conflicting insert is rolled back and returned as HTTP 409.
 1. Normalize the submitted email.
 2. Fetch the account by email.
 3. Verify the password hash.
-4. Reject missing, inactive, or invalid accounts with the same HTTP 401 message.
+4. Reject missing, inactive, invalid, or (when `REQUIRE_VERIFIED_EMAIL=true`) unverified accounts with the same HTTP 401 message.
 5. Update the last-login timestamp.
 6. Issue a short-lived JWT.
 
@@ -65,8 +65,8 @@ password hash are not writable through this endpoint.
 
 ## Email verification
 
-The API provides POST /api/v1/auth/email-verification/request and
-POST /api/v1/auth/email-verification/confirm. Verification tokens are random, expire after
+The API provides POST `/api/v1/auth/email-verification/request` and
+POST `/api/v1/auth/email-verification/confirm`. Verification tokens are random, expire after
 30 minutes, are stored only as SHA-256 digests, and are single-use. Re-requesting a link
 invalidates earlier unused links. The request endpoint returns the same HTTP 202 response for
 unknown, inactive, and already verified accounts. SMTP failures invalidate the undelivered
@@ -76,6 +76,14 @@ Set REQUIRE_VERIFIED_EMAIL=true to reject login for unverified accounts using th
 generic HTTP 401 response as invalid credentials. It defaults to false to preserve local
 development and existing deployments; production deployments that require verified identities
 must explicitly enable it and configure SMTP.
+
+## Roles and authorization
+
+Accounts use three roles: `patient`, `reviewer`, and `admin`. Patient accounts cannot
+access governance operations. Reviewer routes require the reviewer role and, for catalog or
+skin-image work, an active scope grant for the relevant item. Administrative governance and
+reviewer-scope management routes require the admin role. Role changes are separately recorded
+in role-provisioning events; public profile updates cannot change a user's role.
 
 ## Current account states
 
@@ -105,12 +113,10 @@ still returns the generic response and does not log the token or recipient.
 
 The current implementation does not yet include:
 
-- Mandatory email verification unless REQUIRE_VERIFIED_EMAIL=true is configured
 - Refresh tokens and refresh-token rotation
 - Per-device session management; logout currently revokes all account access tokens
 - IP/network-level login and registration rate limiting, distributed abuse detection, and alerting
 - Multi-factor authentication
-- Admin roles and role-based access control
 - Account export/deletion workflow and associated prediction-data retention handling
 - Security event audit logging
 
@@ -123,8 +129,7 @@ outside local development.
 ## Privacy notes
 
 Do not include passwords, tokens, raw symptom descriptions, or private image object keys in logs.
-A user's authentication identity must not be treated as permission to access every prediction:
-resource ownership checks must be added to each history/report endpoint when those features are built.
+Prediction-history endpoints enforce owner-scoped access and omit retained health inputs from list responses. Any new history, report, export, or image endpoint must apply an equivalent ownership check before reading or mutating a user's data.
 
 
 ## Authentication request throttling
