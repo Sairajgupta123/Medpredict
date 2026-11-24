@@ -14,6 +14,7 @@ from app.models.prediction import (
     PredictionResult,
     SkinImageAnalysis,
 )
+from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
 
 def list_user_history(
@@ -138,6 +139,35 @@ def delete_user_history_item(
                     "for safe manual reconciliation."
                 ),
             )
+
+        # Deleting owner history revokes every exact reviewer grant before
+        # storage cleanup begins. The revocation and deletion-pending marker
+        # commit together, so a failed object deletion cannot leave reviewer
+        # access active while the owner is retrying cleanup.
+        active_scopes = db.scalars(
+            select(CatalogReviewerScope)
+            .where(
+                CatalogReviewerScope.scope_type == "skin_image",
+                CatalogReviewerScope.scope_key == str(prediction.id),
+                CatalogReviewerScope.revoked_at.is_(None),
+            )
+            .with_for_update()
+        ).all()
+        revocation_time = datetime.now(timezone.utc)
+        revocation_reason = "Owner deleted image history; reviewer access revoked."
+        for scope in active_scopes:
+            scope.revoked_by = user_id
+            scope.revoked_at = revocation_time
+            scope.revoke_reason = revocation_reason
+            db.add(CatalogReviewerScopeEvent(
+                scope_id=scope.id,
+                reviewer_id=scope.reviewer_id,
+                event_type="revoked",
+                scope_type=scope.scope_type,
+                scope_key=scope.scope_key,
+                operator_id=user_id,
+                reason=revocation_reason,
+            ))
 
         if image_record.storage_status != "deleted":
             image_record.storage_status = "deletion_pending"
