@@ -178,6 +178,11 @@ def train_skin_model(
     from ml.datasets.audit_skin_manifest import audit_skin_manifest
 
     intake_report = audit_skin_manifest(manifest_path, image_root, inspect_images=True)
+    # The manifest is read more than once during preflight. Refuse to continue if
+    # it changed after the digest was captured, so the checkpoint cannot claim
+    # provenance for a different manifest than the one that was audited.
+    if _sha256_file(manifest_path) != manifest_digest:
+        raise ValueError("Training manifest changed during dataset preflight; training is blocked")
     readiness = intake_report["training_readiness"]
     if not readiness["ready_for_reviewer_signoff"]:
         reasons = ", ".join(readiness["blocking_reasons"])
