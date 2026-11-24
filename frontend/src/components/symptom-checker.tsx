@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { readBoundedJson } from "@/lib/auth-proxy";
 
 type Duration = "less_than_24_hours" | "one_to_three_days" | "four_to_seven_days" | "more_than_one_week" | "not_sure";
 type Severity = "mild" | "moderate" | "severe" | "not_sure";
@@ -85,7 +86,8 @@ export function SymptomChecker() {
     let active = true;
     fetch("/api/symptoms/catalog", { headers: { Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(6_000) })
       .then(async (response) => {
-        const body = await response.json() as SymptomCatalog & { detail?: string };
+        const parsed = await readBoundedJson(response, 256 * 1024);
+        const body = (parsed && typeof parsed === "object" ? parsed : {}) as SymptomCatalog & { detail?: string };
         if (!response.ok) throw new Error(body.detail ?? "Could not load the symptom list.");
         if (
           typeof body.taxonomy_version !== "string" || body.taxonomy_version.trim().length === 0 ||
@@ -145,7 +147,8 @@ export function SymptomChecker() {
         cache: "no-store",
         signal: AbortSignal.timeout(12_000),
       });
-      const body = await response.json() as CatalogMatchResult & { detail?: string };
+      const parsed = await readBoundedJson(response, 128 * 1024);
+      const body = (parsed && typeof parsed === "object" ? parsed : {}) as CatalogMatchResult & { detail?: string };
       if (!response.ok) {
         setMatchError(typeof body.detail === "string" && body.detail.trim() ? body.detail.slice(0, 240) : "The approved catalog could not be compared.");
         return;
@@ -196,7 +199,8 @@ export function SymptomChecker() {
         }),
         signal: AbortSignal.timeout(15_000),
       });
-      const body = await response.json() as NormalizeResult & { detail?: string };
+      const parsed = await readBoundedJson(response, 64 * 1024);
+      const body = (parsed && typeof parsed === "object" ? parsed : {}) as NormalizeResult & { detail?: string };
       if (!response.ok) {
         setError(typeof body.detail === "string" && body.detail.trim() ? body.detail.slice(0, 240) : "We could not process this information. Please try again.");
         return;
