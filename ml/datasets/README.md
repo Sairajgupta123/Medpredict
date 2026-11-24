@@ -84,8 +84,14 @@ aggregate `training_readiness` section that blocks reviewer sign-off when patien
 missing, any class has fewer than three distinct patients, files are invalid, or exact duplicate
 image content is present. Its JSON output excludes raw image paths and group identifiers. A passing
 technical audit is not automatic training approval and does not verify source authenticity, license,
-diagnostic labels, skin-tone coverage or clinical suitability. Keep the manifest and all images in approved
-local/private storage; do not commit them to Git.
+diagnostic labels, skin-tone coverage or clinical suitability. Training is separately blocked unless
+`ml/skin_image.train` receives a private registry file and exact dataset ID with approved license,
+permitted-use, privacy, label and clinical reviewer sign-off fields, plus explicit
+`research_only_approved` status. The registry digest and approval summary are embedded in the
+experiment configuration, metadata and report; checkpoint loading validates the same provenance.
+Architecture comparisons use this identical gate. These controls do not replace source-specific legal
+review or clinical validation. Keep the manifest, registry and all images in approved local/private
+storage; do not commit them to Git.
 
 ## Symptom-text intake audit
 
