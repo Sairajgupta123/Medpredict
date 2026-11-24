@@ -117,3 +117,49 @@ def test_inactive_account_cannot_receive_reset_token(db_session) -> None:
 def test_blank_or_oversized_reset_token_is_rejected(db_session) -> None:
     assert consume_password_reset_token(db_session, "") is None
     assert consume_password_reset_token(db_session, "x" * 257) is None
+
+
+def test_verification_email_places_token_in_url_fragment(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core import email
+
+    captured = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            captured.update(host=host, port=port, timeout=timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            captured["tls"] = True
+
+        def send_message(self, message):
+            captured["message"] = message
+
+    monkeypatch.setattr(
+        email,
+        "get_settings",
+        lambda: SimpleNamespace(
+            smtp_host="smtp.example.test",
+            smtp_sender_email="noreply@example.test",
+            smtp_port=587,
+            smtp_use_tls=True,
+            smtp_username=None,
+            smtp_password=None,
+            frontend_base_url="https://app.example.test",
+        ),
+    )
+    monkeypatch.setattr(email.smtplib, "SMTP", FakeSMTP)
+
+    email.send_email_verification_email("person@example.test", "opaque-token-value")
+
+    body = captured["message"].get_content()
+    assert "https://app.example.test/verify-email#token=opaque-token-value" in body
+    assert "verify-email?token=" not in body
+    assert captured["tls"] is True

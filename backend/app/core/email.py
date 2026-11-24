@@ -45,7 +45,7 @@ def send_email_verification_email(recipient: str, raw_token: str) -> None:
     if not settings.smtp_host or not settings.smtp_sender_email:
         raise RuntimeError("Email verification delivery is not configured.")
     query = urlencode({"token": raw_token})
-    verify_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email?{query}"
+    verify_url = f"{settings.frontend_base_url.rstrip('/')}/verify-email#{query}"
     message = EmailMessage()
     message["Subject"] = "Verify your MediPredict email"
     message["From"] = settings.smtp_sender_email
