@@ -1825,3 +1825,60 @@ def test_account_data_export_is_owner_scoped_and_excludes_internal_secrets(clien
 
 def test_account_data_export_requires_authentication(client: TestClient) -> None:
     assert client.get("/api/v1/auth/me/export").status_code == 401
+
+def test_deleted_image_is_excluded_from_queue_and_rejects_assignment_and_decision(
+    client: TestClient,
+) -> None:
+    """A stale assignment cannot revive a deleted private image."""
+    admin_token, admin = _register(client, "deleted-review-admin@example.com")
+    reviewer_token, reviewer = _register(client, "deleted-review-reviewer@example.com")
+    owner_token, owner = _register(client, "deleted-review-owner@example.com")
+    _set_account_role(admin.id, "admin")
+    _set_account_role(reviewer.id, "reviewer")
+    prediction, _, _ = _prepare_skin_review_item(owner.id)
+    _grant_skin_image_review_scope(reviewer.id, prediction.id, admin.id)
+
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(
+            select(SkinImageAnalysis).where(
+                SkinImageAnalysis.prediction_id == prediction.id
+            )
+        )
+        assert image is not None
+        image.storage_status = "deleted"
+        image.deleted_at = datetime.now(timezone.utc)
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        image.assigned_by = admin.id
+        db.commit()
+    finally:
+        db.close()
+
+    queue = client.get(
+        "/api/v1/skin-images/review/queue",
+        headers=_headers(reviewer_token),
+    )
+    assert queue.status_code == 200
+    assert all(row["prediction_id"] != str(prediction.id) for row in queue.json())
+
+    assignment = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/assign",
+        headers=_headers(admin_token),
+        json={
+            "reviewer_id": str(reviewer.id),
+            "reason": "Deleted image must not be reassigned.",
+        },
+    )
+    assert assignment.status_code == 409
+
+    decision = client.post(
+        f"/api/v1/skin-images/review/{prediction.id}/decision",
+        headers=_headers(reviewer_token),
+        json={
+            "outcome": "capture_adequate",
+            "reason": "Deleted image cannot receive a review decision.",
+        },
+    )
+    assert decision.status_code == 409
+
