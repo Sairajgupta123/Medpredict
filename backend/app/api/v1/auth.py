@@ -27,10 +27,12 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.models.account_deletion import AccountDeletionRequest
 from app.models.user import User
 from app.models.prediction import Prediction, PredictionConsentEvent, PredictionResult, SkinImageAnalysis
 from app.models.catalog import Disease
 from app.schemas.auth import (
+    AccountDeletionRequestPayload,
     EmailVerificationConfirmRequest,
     LoginRequest,
     PasswordResetConfirmRequest,
@@ -293,6 +295,49 @@ def update_current_user(
     db.commit()
     db.refresh(user)
     return UserRead.model_validate(user)
+
+
+
+@router.post(
+    "/me/deletion-request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request deletion of the authenticated patient account",
+)
+def request_account_deletion(
+    payload: AccountDeletionRequestPayload,
+    user: CurrentUser,
+    db: DbSession,
+) -> dict[str, str]:
+    """Revoke access immediately and queue safe asynchronous account erasure."""
+    if user.role != "patient":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-service deletion is currently available for patient accounts only.",
+        )
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    existing = db.scalar(
+        select(AccountDeletionRequest).where(AccountDeletionRequest.user_id == user.id)
+    )
+    if existing is not None:
+        if existing.status == "pending":
+            return {"status": "pending", "message": "Your deletion request is already queued."}
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This account has already completed its deletion request.",
+        )
+    db.add(AccountDeletionRequest(user_id=user.id))
+    user.is_active = False
+    user.token_version += 1
+    db.commit()
+    return {
+        "status": "pending",
+        "message": "Your account is disabled. Personal data erasure is queued and may require storage retry.",
+    }
 
 
 @router.get("/me/export", summary="Export the authenticated user's account data")

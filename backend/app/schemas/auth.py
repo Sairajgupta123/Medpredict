@@ -105,3 +105,9 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserRead
+
+
+class AccountDeletionRequestPayload(BaseModel):
+    """Confirm a self-service account deletion request with the current password."""
+
+    password: str = Field(min_length=1, max_length=128)

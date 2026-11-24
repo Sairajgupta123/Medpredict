@@ -1156,3 +1156,130 @@ def test_email_verification_cleanup_removes_only_stale_rows_in_bounded_batches(
         assert any(row.token_hash == "c" * 64 for row in remaining)
     finally:
         db.close()
+
+
+def test_patient_account_deletion_request_revokes_session_and_queues_work(client: TestClient) -> None:
+    from sqlalchemy import select
+    from app.models.account_deletion import AccountDeletionRequest
+    from app.models.user import User
+
+    registration = client.post("/api/v1/auth/register", json={
+        "email": "delete-patient@example.com", "password": "StrongPass123!"
+    })
+    token = registration.json()["access_token"]
+    response = client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "StrongPass123!"},
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending"
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == "delete-patient@example.com"))
+        request = db.scalar(select(AccountDeletionRequest))
+        assert user is not None and user.is_active is False and user.token_version == 1
+        assert request is not None and request.status == "pending"
+    finally:
+        db.close()
+
+
+def test_account_deletion_requires_current_password_and_patient_role(client: TestClient) -> None:
+    from app.models.user import User
+
+    registration = client.post("/api/v1/auth/register", json={
+        "email": "delete-guard@example.com", "password": "StrongPass123!"
+    })
+    token = registration.json()["access_token"]
+    wrong = client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "WrongPassword123!"},
+    )
+    assert wrong.status_code == 401
+    assert client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="delete-guard@example.com").one()
+        user.role = "reviewer"
+        db.commit()
+    finally:
+        db.close()
+    forbidden = client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "StrongPass123!"},
+    )
+    assert forbidden.status_code == 403
+
+
+def test_account_deletion_worker_retries_image_storage_failure(client: TestClient, monkeypatch) -> None:
+    from app.models.account_deletion import AccountDeletionRequest
+    from app.models.prediction import Prediction, SkinImageAnalysis
+    from app.models.user import User
+    from app.workers import account_deletion
+
+    registration = client.post("/api/v1/auth/register", json={
+        "email": "delete-retry@example.com", "password": "StrongPass123!"
+    })
+    token = registration.json()["access_token"]
+    client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "StrongPass123!"},
+    )
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="delete-retry@example.com").one()
+        prediction = Prediction(user_id=user.id, modality="skin_image", status="completed")
+        db.add(prediction)
+        db.flush()
+        db.add(SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="skin-images/" + "c" * 32 + ".jpg",
+            content_type="image/jpeg", image_sha256="d" * 64, storage_status="stored",
+        ))
+        db.commit()
+        prediction_id = prediction.id
+    finally:
+        db.close()
+
+    class FlakyStorage:
+        def __init__(self):
+            self.fail = True
+            self.deleted = []
+        def delete_private(self, key):
+            if self.fail:
+                raise OSError("storage unavailable")
+            self.deleted.append(key)
+
+    storage = FlakyStorage()
+    monkeypatch.setattr(account_deletion, "build_skin_image_storage", lambda: storage)
+    monkeypatch.setattr(account_deletion, "SessionLocal", TestingSessionLocal)
+    first = account_deletion.run_deletion_batch()
+    assert first == {"processed": 1, "completed": 0, "failed": 1}
+    db = TestingSessionLocal()
+    try:
+        request = db.query(AccountDeletionRequest).one()
+        image = db.query(SkinImageAnalysis).one()
+        assert request.status == "pending"
+        assert request.last_error_code == "private_image_deletion_failed"
+        assert image.storage_status == "deletion_pending"
+        assert db.get(Prediction, prediction_id) is not None
+    finally:
+        db.close()
+
+    storage.fail = False
+    second = account_deletion.run_deletion_batch()
+    assert second == {"processed": 1, "completed": 1, "failed": 0}
+    db = TestingSessionLocal()
+    try:
+        request = db.query(AccountDeletionRequest).one()
+        user = db.query(User).filter(User.email.like("deleted+%@invalid.local")).one()
+        assert request.status == "completed"
+        assert user.display_name is None and user.is_active is False
+        assert db.get(Prediction, prediction_id) is None
+        assert storage.deleted == ["skin-images/" + "c" * 32 + ".jpg"]
+    finally:
+        db.close()

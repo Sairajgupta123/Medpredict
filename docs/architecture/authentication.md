@@ -15,6 +15,7 @@ project foundation, not a production security certification.
 | GET | `/api/v1/auth/me` | Bearer token | Return the authenticated account profile |
 | PATCH | `/api/v1/auth/me` | Bearer token | Update or clear the account display name |
 | GET | `/api/v1/auth/me/export` | Bearer token | Download a private JSON export of the account's data |
+| POST | `/api/v1/auth/me/deletion-request` | Patient bearer token + current password | Disable account immediately and queue personal-data erasure |
 
 Registration and login accept JSON bodies. Login does not use OAuth form fields.
 
@@ -220,3 +221,30 @@ separate assignment transfer and audit-retention handling; they must not be sile
 anonymized or deleted through the patient self-service path. Until that workflow,
 storage reconciliation, and tests are complete, account deletion must be treated as
 unsupported rather than implying that deactivation is erasure.
+
+
+## Patient account deletion request
+
+An authenticated patient can submit `POST /api/v1/auth/me/deletion-request` with the
+current password. The API rejects reviewer/admin roles, validates the password, marks
+the account inactive, increments its token version, and persists a unique pending
+request in the same transaction. The existing session is therefore revoked immediately.
+Repeated requests while pending return the same queued state.
+
+Run `python -m app.workers.account_deletion` from a scheduled worker (recommended
+every 15 minutes while requests are pending). Each batch is bounded to 25 requests.
+The worker deletes each private image object before deleting the associated prediction
+records. Only storage states `stored`, `deletion_pending`, and `deleted` are eligible;
+unknown, failed, and pending-upload states remain queued for manual reconciliation.
+Storage failures retain the request and retry marker; aggregate output contains no
+account identifiers or health information.
+
+After all image objects are confirmed deleted, prediction-owned database rows are
+removed. The user row is retained as a non-login audit tombstone because immutable
+review/governance records use restrictive actor foreign keys. Its email is replaced
+with a unique invalid-domain address, display name is cleared, password hash is
+rotated to an unreturned random value, verification is cleared, and access tokens
+are revoked. This is pseudonymization plus removal of account-owned health records,
+not a promise to erase legally/operationally retained audit events or backups.
+Reviewer and administrator accounts remain ineligible for self-service deletion
+until assignment transfer and governance retention are separately implemented.
