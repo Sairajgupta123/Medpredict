@@ -43,6 +43,16 @@ export function AuthForm({ mode }: AuthFormProps) {
         setError(result?.detail ?? "We could not complete your request. Please try again.");
         return;
       }
+      if (isRegister) {
+        await fetch("/api/auth/email-verification/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => null);
+        window.location.assign("/verify-email?sent=1");
+        return;
+      }
       window.location.assign("/dashboard");
     } catch {
       setError("Unable to reach MediPredict. Check your connection and try again.");
