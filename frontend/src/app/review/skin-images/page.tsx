@@ -46,35 +46,84 @@ async function assignImage(formData: FormData) {
   if (!/^[0-9a-f-]{36}$/i.test(predictionId) || !/^[0-9a-f-]{36}$/i.test(reviewerId) || reason.length < 8 || reason.length > 1000) {
     redirect("/review/skin-images?error=invalid");
   }
-  const scopeResponse = await fetch(`${API_BASE_URL}/admin/reviewer-scopes`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      reviewer_id: reviewerId,
-      scope_type: "skin_image",
-      scope_key: predictionId,
-      reason: `Skin image assignment: ${reason}`.slice(0, 1000),
-    }),
-    cache: "no-store",
-  });
-  if (!scopeResponse.ok && scopeResponse.status !== 409) {
+  let provisionalScopeId: string | null = null;
+  let scopeResponse: Response;
+  try {
+    scopeResponse = await fetch(`${API_BASE_URL}/admin/reviewer-scopes`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        reviewer_id: reviewerId,
+        scope_type: "skin_image",
+        scope_key: predictionId,
+        reason: `Skin image assignment: ${reason}`.slice(0, 1000),
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
     redirect("/review/skin-images?error=scope");
   }
-  const response = await fetch(`${API_BASE_URL}/skin-images/review/${encodeURIComponent(predictionId)}/assign`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ reviewer_id: reviewerId, reason }),
-    cache: "no-store",
-  });
-  if (!response.ok) redirect(`/review/skin-images?error=${response.status === 409 ? "conflict" : "save"}`);
+  if (scopeResponse.status === 201) {
+    const scopePayload: unknown = await scopeResponse.json().catch(() => null);
+    if (
+      !scopePayload ||
+      typeof scopePayload !== "object" ||
+      !("id" in scopePayload) ||
+      typeof scopePayload.id !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(scopePayload.id)
+    ) {
+      redirect("/review/skin-images?error=scope");
+    }
+    provisionalScopeId = scopePayload.id;
+  } else if (scopeResponse.status !== 409) {
+    redirect("/review/skin-images?error=scope");
+  }
+
+  let assignmentResponse: Response | null = null;
+  try {
+    assignmentResponse = await fetch(`${API_BASE_URL}/skin-images/review/${encodeURIComponent(predictionId)}/assign`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ reviewer_id: reviewerId, reason }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // A newly created scope is provisional until the image assignment commits.
+  }
+
+  if (!assignmentResponse?.ok) {
+    if (provisionalScopeId) {
+      try {
+        await fetch(`${API_BASE_URL}/admin/reviewer-scopes/${encodeURIComponent(provisionalScopeId)}/revoke`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            reason: "Image assignment failed; provisional image access was revoked.",
+          }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch {
+        // Backend assignment still checks consent, storage state and exact scope.
+        // Keep the primary failure visible; the scope audit remains available.
+      }
+    }
+    redirect(`/review/skin-images?error=${assignmentResponse?.status === 409 ? "conflict" : "save"}`);
+  }
   revalidatePath("/review/skin-images");
   redirect("/review/skin-images?updated=assigned");
 }
