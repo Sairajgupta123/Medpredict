@@ -1,7 +1,11 @@
 """Regression tests for static skin-image review routes."""
 
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from io import BytesIO
 from uuid import uuid4
+
+from PIL import Image
 
 import pytest
 from fastapi.testclient import TestClient
@@ -239,6 +243,118 @@ def test_revoked_review_consent_blocks_reviewer_image_even_with_stale_scope(
     assert decision.status_code == 403
     assert "consent" in decision.json()["detail"].lower()
 
+
+
+def test_assigned_reviewer_image_retrieval_is_private_and_audited(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful image read requires active consent and creates an audit event."""
+    from app.api.v1 import skin_images
+
+    output = BytesIO()
+    with Image.new("RGB", (256, 256), (110, 80, 70)) as source:
+        source.save(output, format="PNG")
+    image_bytes = output.getvalue()
+
+    class FakePrivateStorage:
+        def get_private(self, object_key: str) -> bytes:
+            assert object_key == "private/reviewer-fetch-test"
+            return image_bytes
+
+    monkeypatch.setattr(
+        skin_images,
+        "build_skin_image_storage",
+        lambda: FakePrivateStorage(),
+    )
+
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-fetch-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        reviewer = User(
+            email=f"skin-fetch-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([owner, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        image_record = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="private/reviewer-fetch-test",
+            content_type="image/png",
+            image_sha256=sha256(image_bytes).hexdigest(),
+            storage_status="stored",
+            review_status="assigned",
+            assigned_reviewer_id=reviewer.id,
+        )
+        db.add_all([
+            image_record,
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=owner.id,
+                grant_reason="Owner approved this exact image review.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        reviewer_id = reviewer.id
+        reviewer_token = create_access_token(reviewer.id)
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/image",
+        headers={"Authorization": f"Bearer {reviewer_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == image_bytes
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "private, no-store, max-age=0"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in response.headers["content-security-policy"]
+
+    db = TestingSessionLocal()
+    try:
+        access_events = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_id,
+            event_type="image_accessed",
+            actor_id=reviewer_id,
+        ).all()
+        assert len(access_events) == 1
+        assert access_events[0].reason == "Authorized private image retrieval completed."
+    finally:
+        db.close()
 
 
 def test_owner_revocation_atomically_disables_reviewer_scope(
