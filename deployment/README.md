@@ -109,14 +109,7 @@ Each job deletes a bounded batch and prints aggregate counts only. Schedule repe
 runs if a backlog exceeds one batch.
 
 
-```bash
-python -m app.workers.auth_rate_limit_cleanup
-```
-
-Each run deletes at most 500 throttle rows older than 48 hours and prints only an aggregate
-count. Schedule repeated runs if the backlog exceeds one batch. Also configure IP/network-level
-limits at the trusted ingress (API gateway, reverse proxy, or WAF); the application-level
-per-email limits are not a replacement for edge protection.
+Also configure IP/network-level limits at the trusted ingress (API gateway, reverse proxy, or WAF); the application-level per-email limits are not a replacement for edge protection.
 
 When private skin-image storage is deliberately enabled, also schedule the bounded image
 retention worker from the backend environment (for example, once daily):
