@@ -22,6 +22,46 @@ type BackendTokenResponse = {
   user: unknown;
 };
 
+const MAX_AUTH_RESPONSE_BYTES = 64 * 1024;
+
+async function readBoundedJson(response: Response): Promise<unknown | null> {
+  const declaredLength = response.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > MAX_AUTH_RESPONSE_BYTES)
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_AUTH_RESPONSE_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return null;
+  }
+}
+
 export async function proxyCredentials(
   request: Request,
   endpoint: "login" | "register",
@@ -91,7 +131,7 @@ export async function proxyCredentials(
     );
   }
 
-  const result = await backendResponse.json().catch(() => null) as
+  const result = await readBoundedJson(backendResponse) as
     | BackendTokenResponse
     | { detail?: string }
     | null;
