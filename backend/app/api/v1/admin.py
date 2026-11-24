@@ -400,8 +400,8 @@ def revoke_reviewer_scope(
                 status_code=409,
                 detail="The image reviewer scope has an invalid target.",
             )
-        db.scalar(
-            select(SkinImageAnalysis.id)
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
             .where(SkinImageAnalysis.prediction_id == image_prediction_id)
             .with_for_update()
         )
@@ -416,6 +416,25 @@ def revoke_reviewer_scope(
         raise HTTPException(status_code=409, detail="This reviewer scope is already revoked.")
 
     target = db.get(User, scope.reviewer_id)
+    if (
+        scope.scope_type == "skin_image"
+        and image_record is not None
+        and image_record.assigned_reviewer_id == scope.reviewer_id
+        and image_record.review_status == "assigned"
+    ):
+        previous_reviewer_id = image_record.assigned_reviewer_id
+        image_record.assigned_reviewer_id = None
+        image_record.assigned_by = None
+        image_record.assigned_at = None
+        image_record.review_status = "pending"
+        db.add(SkinImageReviewEvent(
+            prediction_id=image_record.prediction_id,
+            image_analysis_id=image_record.id,
+            event_type="unassigned",
+            actor_id=administrator.id,
+            assigned_reviewer_id=previous_reviewer_id,
+            reason="Assignment cleared because its image scope was revoked.",
+        ))
     scope.revoked_by = administrator.id
     scope.revoked_at = datetime.now(timezone.utc)
     scope.revoke_reason = payload.reason
