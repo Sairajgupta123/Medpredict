@@ -129,13 +129,17 @@ export async function proxyCredentials(
     user: result.user,
     expires_in: result.expires_in,
   });
-  response.cookies.set(SESSION_COOKIE, result.access_token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: result.expires_in,
-  });
+  // Registration must not create a browser session before email verification.
+  // Only an explicit login may establish the HttpOnly session cookie.
+  if (endpoint === "login") {
+    response.cookies.set(SESSION_COOKIE, result.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: result.expires_in,
+    });
+  }
   return response;
 }
 
