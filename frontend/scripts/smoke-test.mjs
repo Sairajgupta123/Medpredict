@@ -61,6 +61,16 @@ await check(
   { path: "/api/auth/email-verification/confirm", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ token: "short" }) } },
   422,
 );
+await check(
+  "reject oversized email verification request body",
+  { path: "/api/auth/email-verification/request", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ email: "x".repeat(33 * 1024) }) } },
+  413,
+);
+await check(
+  "reject oversized email verification token",
+  { path: "/api/auth/email-verification/confirm", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ token: "x".repeat(257) }) } },
+  422,
+);
 
 for (const action of ["request", "confirm"]) {
   const verificationPath = `/api/auth/email-verification/${action}`;
