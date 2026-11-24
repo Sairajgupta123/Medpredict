@@ -178,6 +178,11 @@ await check(
   422,
 );
 await check(
+  "reject more than 20 catalog-match identifiers",
+  { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: Array.from({ length: 21 }, (_, index) => `SYM_${index}`) }) } },
+  422,
+);
+await check(
   "return controlled unavailable response for symptom catalog",
   { path: "/api/symptoms/catalog", init: { method: "GET" } },
   503,
