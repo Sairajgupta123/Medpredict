@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { API_BASE_URL, SESSION_COOKIE } from "@/lib/auth-proxy";
+import { API_BASE_URL, SESSION_COOKIE, readBoundedJson } from "@/lib/auth-proxy";
 import { hasSameRequestOrigin } from "@/lib/request-origin";
 
 function privateJson(body: unknown, init: ResponseInit = {}) {
@@ -37,7 +37,7 @@ export async function POST(request: Request, context: RouteContext) {
         signal: AbortSignal.timeout(8_000),
       },
     );
-    const body = await upstream.json().catch(() => null);
+    const body = await readBoundedJson(upstream, 16 * 1024);
     return privateJson(
       body ?? { detail: "The consent service returned an invalid response." },
       { status: upstream.status, headers: { "Cache-Control": "private, no-store" } },
