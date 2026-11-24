@@ -1382,13 +1382,13 @@ def test_account_export_is_private_owner_scoped_and_excludes_storage_secrets(
             user_id=owner.id,
             modality="skin_image",
             status="review_required",
-            input_text="A private symptom description",
         )
         other_prediction = Prediction(
             user_id=other.id,
             modality="text",
             status="completed",
             input_text="Other user's private text",
+            input_storage_consent=True,
         )
         db.add_all([own_prediction, other_prediction])
         db.flush()
@@ -1404,6 +1404,12 @@ def test_account_export_is_private_owner_scoped_and_excludes_storage_secrets(
             PredictionConsentEvent(
                 prediction_id=own_prediction.id,
                 purpose="skin_image_history",
+                action="granted",
+                policy_version="history-v1",
+            ),
+            PredictionConsentEvent(
+                prediction_id=other_prediction.id,
+                purpose="prediction_history",
                 action="granted",
                 policy_version="history-v1",
             ),
@@ -1425,7 +1431,7 @@ def test_account_export_is_private_owner_scoped_and_excludes_storage_secrets(
     assert body["account"]["email"] == "export-owner@example.com"
     assert [item["id"] for item in body["predictions"]] == [own_id]
     exported = body["predictions"][0]
-    assert exported["input_text"] == "A private symptom description"
+    assert exported["input_text"] is None
     assert exported["image_metadata"]["storage_status"] == "stored"
     assert exported["consent_events"][0]["purpose"] == "skin_image_history"
     serialized = response.text
