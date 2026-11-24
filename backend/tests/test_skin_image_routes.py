@@ -666,6 +666,19 @@ def test_reassignment_revokes_previous_reviewers_access(
         assert old_scope.revoke_reason
         assert old_scope_event.reason
         assert current_image.assigned_reviewer_id == new_id
+        assignment_events = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_uuid,
+        ).order_by(SkinImageReviewEvent.created_at.asc()).all()
+        assert any(
+            event.event_type == "unassigned"
+            and event.assigned_reviewer_id == previous_id
+            for event in assignment_events
+        )
+        assert any(
+            event.event_type == "reassigned"
+            and event.assigned_reviewer_id == new_id
+            for event in assignment_events
+        )
     finally:
         db.close()
 
