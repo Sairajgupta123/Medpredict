@@ -41,8 +41,9 @@ async function grantReviewerScope(formData: FormData) {
   const scopeKey = String(formData.get("scope_key") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim();
   if (
-    !reviewerId ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reviewerId) ||
     !["disease", "symptom", "disease_symptom"].includes(scopeType) ||
+    scopeKey.length > 200 ||
     reason.length < 8 ||
     reason.length > 1000
   ) redirect("/admin?scope_error=invalid");
@@ -81,7 +82,24 @@ async function createMedicalReference(formData: FormData) {
   const nextReviewDue = String(formData.get("next_review_due") ?? "").trim();
   const licenseName = String(formData.get("license_name") ?? "").trim();
   const contentHash = String(formData.get("content_sha256") ?? "").trim();
-  if (title.length < 3 || publisher.length < 2 || !url || evidenceType.length < 2 || !version) {
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (
+    title.length < 3 || title.length > 300 ||
+    publisher.length < 2 || publisher.length > 200 ||
+    !url || url.length > 1000 ||
+    evidenceType.length < 2 || evidenceType.length > 80 ||
+    version.length < 1 || version.length > 80 ||
+    licenseName.length > 200 ||
+    reason.length < 8 || reason.length > 1000
+  ) {
+    redirect("/admin?reference_error=invalid");
+  }
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+      redirect("/admin?reference_error=invalid");
+    }
+  } catch {
     redirect("/admin?reference_error=invalid");
   }
   if (contentHash && !/^[a-fA-F0-9]{64}$/.test(contentHash)) {
@@ -101,7 +119,7 @@ async function createMedicalReference(formData: FormData) {
       next_review_due: nextReviewDue || null,
       license_name: licenseName || null,
       content_sha256: contentHash || null,
-      reason: String(formData.get("reason") ?? "").trim(),
+      reason,
     }),
     cache: "no-store",
   });
@@ -118,7 +136,7 @@ async function reviewMedicalReference(formData: FormData) {
   const expectedStatus = String(formData.get("expected_status") ?? "");
   const status = String(formData.get("status") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
-  if (!referenceId || !["draft", "in_review", "approved", "retired"].includes(expectedStatus) || !["draft", "in_review", "approved", "retired"].includes(status) || reason.length < 8 || reason.length > 1000) redirect("/admin?reference_error=invalid");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(referenceId) || !["draft", "in_review", "approved", "retired"].includes(expectedStatus) || !["draft", "in_review", "approved", "retired"].includes(status) || reason.length < 8 || reason.length > 1000) redirect("/admin?reference_error=invalid");
   const response = await fetch(`${API_BASE_URL}/admin/medical-references/${encodeURIComponent(referenceId)}/review`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
@@ -135,7 +153,7 @@ async function revokeReviewerScope(formData: FormData) {
   const token = await requireAdminToken();
   const scopeId = String(formData.get("scope_id") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
-  if (!scopeId || reason.length < 8 || reason.length > 1000) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scopeId) || reason.length < 8 || reason.length > 1000) {
     redirect("/admin?scope_error=invalid");
   }
   const response = await fetch(
