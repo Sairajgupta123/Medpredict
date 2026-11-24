@@ -129,7 +129,7 @@ def test_training_dataset_gate_rejects_registry_changed_during_approval(tmp_path
         digest = original_hash(path)
         calls += 1
         if calls == 1:
-            registry.write_text(registry.read_text(encoding="utf-8") + "\\n", encoding="utf-8")
+            registry.write_text(registry.read_text(encoding="utf-8") + "\n", encoding="utf-8")
         return digest
 
     monkeypatch.setattr(train_module, "_sha256_file", mutate_after_initial_hash)
