@@ -343,7 +343,29 @@ def request_account_deletion(
     db.add(AccountDeletionRequest(user_id=user.id))
     user.is_active = False
     user.token_version += 1
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A second request can race between the existence check and insert.
+        # The unique user_id constraint is the final concurrency guard; return
+        # the already-created job state instead of leaking a 500 response.
+        db.rollback()
+        existing = db.scalar(
+            select(AccountDeletionRequest).where(
+                AccountDeletionRequest.user_id == user.id
+            )
+        )
+        if existing is not None and existing.status in {"pending", "processing"}:
+            message = (
+                "Your deletion request is being processed."
+                if existing.status == "processing"
+                else "Your deletion request is already queued."
+            )
+            return {"status": existing.status, "message": message}
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A deletion request could not be created safely. Please retry or contact support.",
+        ) from None
     return {
         "status": "pending",
         "message": "Your account is disabled. Personal data erasure is queued and may require storage retry.",
