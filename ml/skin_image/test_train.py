@@ -23,6 +23,30 @@ def test_training_artifact_hash_uses_streaming_reads(tmp_path, monkeypatch) -> N
     assert _sha256_file(artifact) == hashlib.sha256(payload).hexdigest()
 
 
+def test_training_rejects_manifest_modified_during_dataset_audit(tmp_path, monkeypatch) -> None:
+    from ml.datasets import audit_skin_manifest as audit_module
+
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_id": ["image-1", "image-2"],
+            "image_path": ["one.png", "two.png"],
+            "label": ["class_a", "class_b"],
+            "patient_id": ["patient-1", "patient-2"],
+        }
+    ).to_csv(manifest, index=False)
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+
+    def mutate_manifest(*args, **kwargs):
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\\n", encoding="utf-8")
+        return {"training_readiness": {"ready_for_reviewer_signoff": True, "blocking_reasons": []}}
+
+    monkeypatch.setattr(audit_module, "audit_skin_manifest", mutate_manifest)
+    with pytest.raises(ValueError, match="changed during dataset preflight"):
+        train_skin_model(manifest, image_root, tmp_path / "output")
+
+
 def test_training_rejects_missing_patient_column(tmp_path) -> None:
     manifest = tmp_path / "manifest.csv"
     pd.DataFrame(
