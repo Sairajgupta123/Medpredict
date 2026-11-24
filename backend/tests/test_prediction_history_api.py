@@ -1679,3 +1679,50 @@ def test_revoked_review_consent_blocks_reviewer_image_storage_access(
         assert access_events == []
     finally:
         db.close()
+
+
+def test_account_data_export_is_owner_scoped_and_excludes_internal_secrets(client: TestClient) -> None:
+    token, owner = _register(client, "export-owner@example.com")
+    _, other = _register(client, "export-other@example.com")
+    own = _prediction(owner.id, input_text="my private symptom narrative")
+    _prediction(other.id, input_text="someone else's private narrative")
+    db = TestingSessionLocal()
+    try:
+        disease = Disease(code="EXPORT_CONDITION", name="Export Condition", is_active=True)
+        db.add(disease)
+        db.flush()
+        db.add(PredictionResult(
+            prediction_id=own.id, disease_id=disease.id, rank=1,
+            probability=0.375, explanation="A source-backed explanation for the owner.",
+        ))
+        db.add(SkinImageAnalysis(
+            prediction_id=own.id,
+            object_key="skin-images/" + "a" * 32 + ".jpg",
+            content_type="image/jpeg", image_sha256="b" * 64,
+            storage_status="deleted", review_status="unable_to_assess",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/auth/me/export", headers=_headers(token))
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert "attachment;" in response.headers["content-disposition"]
+    payload = response.json()
+    assert payload["account"]["email"] == "export-owner@example.com"
+    assert len(payload["predictions"]) == 1
+    exported = payload["predictions"][0]
+    assert exported["id"] == str(own.id)
+    assert exported["input_text"] == "my private symptom narrative"
+    assert exported["results"][0]["disease_code"] == "EXPORT_CONDITION"
+    assert exported["image_metadata"]["content_type"] == "image/jpeg"
+    assert "object_key" not in response.text
+    assert "skin-images/" not in response.text
+    assert "password_hash" not in response.text
+    assert "access_token" not in response.text
+    assert "someone else's private narrative" not in response.text
+
+
+def test_account_data_export_requires_authentication(client: TestClient) -> None:
+    assert client.get("/api/v1/auth/me/export").status_code == 401

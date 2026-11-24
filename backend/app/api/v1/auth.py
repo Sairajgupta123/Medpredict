@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -28,6 +28,8 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
+from app.models.prediction import Prediction, PredictionConsentEvent, PredictionResult, SkinImageAnalysis
+from app.models.catalog import Disease
 from app.schemas.auth import (
     EmailVerificationConfirmRequest,
     LoginRequest,
@@ -291,3 +293,102 @@ def update_current_user(
     db.commit()
     db.refresh(user)
     return UserRead.model_validate(user)
+
+
+@router.get("/me/export", summary="Export the authenticated user's account data")
+def export_current_user_data(user: CurrentUser, db: DbSession, response: Response) -> dict:
+    """Return a private, owner-scoped JSON export without internal storage secrets."""
+    predictions = list(db.scalars(
+        select(Prediction)
+        .where(Prediction.user_id == user.id)
+        .order_by(Prediction.created_at.asc(), Prediction.id.asc())
+    ).all())
+    prediction_ids = [item.id for item in predictions]
+    result_rows = []
+    consent_rows = []
+    image_rows = []
+    if prediction_ids:
+        result_rows = db.execute(
+            select(PredictionResult, Disease.code, Disease.name)
+            .join(Disease, Disease.id == PredictionResult.disease_id)
+            .where(PredictionResult.prediction_id.in_(prediction_ids))
+            .order_by(PredictionResult.prediction_id, PredictionResult.rank)
+        ).all()
+        consent_rows = list(db.scalars(
+            select(PredictionConsentEvent)
+            .where(PredictionConsentEvent.prediction_id.in_(prediction_ids))
+            .order_by(PredictionConsentEvent.captured_at.asc(), PredictionConsentEvent.id.asc())
+        ).all())
+        image_rows = list(db.scalars(
+            select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id.in_(prediction_ids))
+        ).all())
+
+    results_by_prediction: dict[str, list[dict]] = {}
+    for result, disease_code, disease_name in result_rows:
+        results_by_prediction.setdefault(str(result.prediction_id), []).append({
+            "rank": result.rank,
+            "disease_code": disease_code,
+            "disease_name": disease_name,
+            "probability": str(result.probability),
+            "explanation": result.explanation,
+        })
+    consents_by_prediction: dict[str, list[dict]] = {}
+    for event in consent_rows:
+        consents_by_prediction.setdefault(str(event.prediction_id), []).append({
+            "purpose": event.purpose,
+            "action": event.action,
+            "policy_version": event.policy_version,
+            "captured_at": event.captured_at,
+        })
+    images_by_prediction = {
+        str(image.prediction_id): {
+            "content_type": image.content_type,
+            "storage_status": image.storage_status,
+            "quality_status": image.quality_status,
+            "review_required": image.review_required,
+            "review_status": image.review_status,
+            "review_outcome": image.review_outcome,
+            "retention_expires_at": image.retention_expires_at,
+            "deleted_at": image.deleted_at,
+        }
+        for image in image_rows
+    }
+    export_predictions = []
+    for item in predictions:
+        key = str(item.id)
+        export_predictions.append({
+            "id": key,
+            "modality": item.modality,
+            "status": item.status,
+            "input_text": item.input_text,
+            "input_storage_consent": item.input_storage_consent,
+            "model_version": item.model_version,
+            "disclaimer_version": item.disclaimer_version,
+            "created_at": item.created_at,
+            "completed_at": item.completed_at,
+            "results": results_by_prediction.get(key, []),
+            "image_metadata": images_by_prediction.get(key),
+            "consent_events": consents_by_prediction.get(key, []),
+        })
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Content-Disposition"] = 'attachment; filename="medipredict-account-export.json"'
+    return {
+        "format_version": 1,
+        "exported_at": datetime.now(timezone.utc),
+        "account": {
+            "id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "display_name": user.display_name,
+            "is_active": user.is_active,
+            "email_verified": user.email_verified,
+            "created_at": user.created_at,
+            "last_login_at": user.last_login_at,
+        },
+        "predictions": export_predictions,
+        "export_notes": [
+            "This export contains the authenticated account's database records only.",
+            "Private image bytes are not embedded; image metadata is included.",
+            "Internal object-storage keys, access tokens, password hashes, and reviewer identifiers are excluded.",
+        ],
+    }

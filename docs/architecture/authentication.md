@@ -14,6 +14,7 @@ project foundation, not a production security certification.
 | POST | `/api/v1/auth/logout` | Bearer token | Revoke all access tokens for the account |
 | GET | `/api/v1/auth/me` | Bearer token | Return the authenticated account profile |
 | PATCH | `/api/v1/auth/me` | Bearer token | Update or clear the account display name |
+| GET | `/api/v1/auth/me/export` | Bearer token | Download a private JSON export of the account's data |
 
 Registration and login accept JSON bodies. Login does not use OAuth form fields.
 
@@ -175,3 +176,15 @@ ago. Recent consumed tokens are retained briefly to support replay rejection and
 review. The worker logs aggregate deletion counts only; it never prints token digests, raw
 tokens, email addresses, or account identifiers. Run additional bounded batches if a backlog
 develops.
+
+
+## Personal data export
+
+An authenticated account owner can request `GET /api/v1/auth/me/export` to receive a
+JSON attachment containing their profile, owned prediction records, retained symptom text,
+result explanations, image metadata, and consent history. The query is scoped to the
+authenticated user ID. It deliberately excludes password hashes, access/reset/verification
+tokens, private object-storage keys, raw image bytes, and reviewer identifiers. The response
+uses `Cache-Control: private, no-store`. Image bytes remain in private object storage and are
+not embedded in the JSON export; a separate authorized image-export workflow would be needed
+if that capability is introduced.
