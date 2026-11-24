@@ -161,8 +161,14 @@ def test_checkpoint_validation_rejects_unapproved_dataset_provenance() -> None:
 def test_checkpoint_validation_rejects_metadata_governance_mismatch() -> None:
     from ml.skin_image.inference import validate_skin_checkpoint
 
+    import hashlib
+    import json
+
     checkpoint, metadata = _valid_checkpoint_and_metadata()
     metadata["dataset_governance"]["dataset_id"] = "different-dataset"
+    checkpoint["experiment_config_sha256"] = hashlib.sha256(
+        json.dumps(checkpoint["experiment_config"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     with pytest.raises(ValueError, match="dataset_governance"):
         validate_skin_checkpoint(checkpoint, metadata)
 
