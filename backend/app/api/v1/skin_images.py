@@ -543,6 +543,20 @@ def assign_skin_image_review(
     prediction = db.get(Prediction, parsed_id)
     if prediction is None or prediction.modality not in {"skin_image", "combined"}:
         raise HTTPException(status_code=404, detail="Skin image review item not found.")
+    # Match grant/deactivation lock order: reviewer account first, image second.
+    reviewer = db.scalar(
+        select(User)
+        .where(
+            User.id == reviewer_id,
+            User.role == "reviewer",
+            User.is_active.is_(True),
+            User.email_verified.is_(True),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if reviewer is None:
+        raise HTTPException(status_code=404, detail="Active verified reviewer not found.")
     image_record = db.scalar(
         select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == prediction.id).with_for_update()
     )
@@ -559,16 +573,6 @@ def assign_skin_image_review(
             status_code=403,
             detail="Active image-processing and human-review consent are required.",
         )
-    reviewer = db.scalar(
-        select(User).where(
-            User.id == reviewer_id,
-            User.role == "reviewer",
-            User.is_active.is_(True),
-            User.email_verified.is_(True),
-        )
-    )
-    if reviewer is None:
-        raise HTTPException(status_code=404, detail="Active verified reviewer not found.")
     if not _has_active_skin_image_review_scope(db, reviewer, prediction.id):
         raise HTTPException(
             status_code=403,
