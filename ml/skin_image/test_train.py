@@ -6,6 +6,23 @@ import pytest
 from ml.skin_image.train import train_skin_model
 
 
+def test_training_artifact_hash_uses_streaming_reads(tmp_path, monkeypatch) -> None:
+    import hashlib
+    from pathlib import Path
+
+    from ml.skin_image.train import _sha256_file
+
+    artifact = tmp_path / "large-manifest.csv"
+    payload = b"image_path,label,patient_id\\n" + (b"images/a.jpg,class_a,p1\\n" * 1000)
+    artifact.write_bytes(payload)
+
+    def reject_read_bytes(_self):
+        raise AssertionError("Training artifact hashing must use bounded-memory reads")
+
+    monkeypatch.setattr(Path, "read_bytes", reject_read_bytes)
+    assert _sha256_file(artifact) == hashlib.sha256(payload).hexdigest()
+
+
 def test_training_rejects_missing_patient_column(tmp_path) -> None:
     manifest = tmp_path / "manifest.csv"
     pd.DataFrame(
