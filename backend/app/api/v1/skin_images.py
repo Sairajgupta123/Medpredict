@@ -35,6 +35,29 @@ from app.services.skin_image_validation import (
 router = APIRouter(prefix="/skin-images", tags=["Skin image intake"])
 
 
+def _lock_active_reviewer_account(db: DbSession, user: User) -> User:
+    """Serialize reviewer operations with administrator account deactivation."""
+    if user.role != "reviewer":
+        return user
+    reviewer = db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if (
+        reviewer is None
+        or reviewer.role != "reviewer"
+        or not reviewer.is_active
+        or not reviewer.email_verified
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="An active, verified reviewer account is required.",
+        )
+    return reviewer
+
+
 def _has_active_skin_image_review_scope(
     db: DbSession,
     reviewer: User,
@@ -461,6 +484,7 @@ def list_skin_image_review_queue(
     """List assigned images for reviewers and pending/assigned items for admins."""
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    user = _lock_active_reviewer_account(db, user)
     statement = (
         select(SkinImageAnalysis, Prediction)
         .join(Prediction, Prediction.id == SkinImageAnalysis.prediction_id)
@@ -608,6 +632,7 @@ def submit_skin_image_review(
 
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    user = _lock_active_reviewer_account(db, user)
     try:
         parsed_id = UUID(prediction_id)
     except ValueError as exc:
