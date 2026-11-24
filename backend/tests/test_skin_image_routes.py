@@ -350,9 +350,9 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
         access_events = db.query(SkinImageReviewEvent).filter_by(
             prediction_id=prediction_uuid,
             event_type="image_accessed",
-            actor_id=reviewer_id,
         ).all()
         assert len(access_events) == 1
+        assert str(access_events[0].actor_id) == str(reviewer_id)
         assert access_events[0].reason == "Authorized private image retrieval completed."
     finally:
         db.close()
