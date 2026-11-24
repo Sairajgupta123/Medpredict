@@ -64,7 +64,28 @@ a test environment without an approved privacy and consent process.
 
 ## Scheduled operational jobs
 
-Run the authentication throttle cleanup daily from the backend environment:
+Run the account-erasure worker every 15 minutes from the backend environment:
+
+```bash
+python -m app.workers.account_deletion
+```
+
+It claims at most 25 pending or abandoned requests per run (maximum batch size 100),
+revokes reviewer access before deleting private objects, retries storage failures, and
+prints aggregate counts only. Alert on repeated failures and ensure the worker has the
+same database access and private object-store permissions as the API. Do not report an
+account as fully erased until the request reaches `completed`.
+
+Run the authentication throttle and email-verification token cleanups daily:
+
+```bash
+python -m app.workers.auth_rate_limit_cleanup
+python -m app.workers.email_verification_cleanup
+```
+
+Each job deletes a bounded batch and prints aggregate counts only. Schedule repeated
+runs if a backlog exceeds one batch.
+
 
 ```bash
 python -m app.workers.auth_rate_limit_cleanup
