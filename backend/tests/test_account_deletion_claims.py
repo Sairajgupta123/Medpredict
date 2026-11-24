@@ -97,3 +97,42 @@ def test_abandoned_processing_request_can_be_reclaimed() -> None:
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
+
+
+
+def test_processing_request_without_attempt_timestamp_is_recovered() -> None:
+    """Legacy processing rows without a lease timestamp must not remain stuck forever."""
+    Base.metadata.create_all(bind=engine)
+    db = Session()
+    try:
+        user = User(
+            email="missing-lease-claim-test@example.com",
+            password_hash="not-a-real-password-hash",
+            role="patient",
+            is_active=False,
+        )
+        db.add(user)
+        db.flush()
+        now = datetime.now(timezone.utc)
+        request = AccountDeletionRequest(
+            user_id=user.id,
+            status="processing",
+            attempts=1,
+            last_attempt_at=None,
+        )
+        db.add(request)
+        db.commit()
+
+        assert _claim_deletion_request(
+            db,
+            request.id,
+            now=now,
+            stale_before=now - timedelta(hours=2),
+        ) is True
+        db.refresh(request)
+        assert request.status == "processing"
+        assert request.attempts == 2
+        assert request.last_attempt_at.replace(tzinfo=timezone.utc) == now
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
