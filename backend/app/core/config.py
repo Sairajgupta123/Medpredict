@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     app_secret_key: str = "development-only-change-this-secret"
     access_token_expire_minutes: int = 30
+    require_verified_email: bool = False
     cors_origins: str = "http://localhost:3000"
     smtp_host: str | None = None
     smtp_port: int = 587
