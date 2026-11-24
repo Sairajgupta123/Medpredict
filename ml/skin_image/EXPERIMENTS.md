@@ -15,10 +15,10 @@ pretraining was enabled and review the upstream weights' terms before use.
 ## Run a comparison
 
 ```bash
-python -m ml.skin_image.compare_models --manifest private_manifest.csv --image-root private_images --output-dir private_comparison --epochs 10 --seed 42
+python -m ml.skin_image.compare_models --manifest private_manifest.csv --image-root private_images --output-dir private_comparison --dataset-registry private_dataset_registry.json --dataset-id reviewed-skin-dataset-v1 --epochs 10 --seed 42
 ```
 
-The runner executes each candidate using the same manifest, deterministic class-aware patient-grouped
+The runner requires the same source-specific dataset registry approvals as single-model training. Every governance review and clinical sign-off must be approved, and the record must be explicitly marked research-only. The runner executes each candidate using the same manifest, deterministic class-aware patient-grouped
 split seed and common training settings. Every class must occur in at least three distinct patients
 and in each partition; the splitter searches candidate partitions to reduce class-distribution and
 proportion imbalance. Each candidate writes its own checkpoint, experiment configuration, model
