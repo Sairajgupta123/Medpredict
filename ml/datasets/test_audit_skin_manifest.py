@@ -169,3 +169,26 @@ def test_audit_blocks_empty_manifest_and_single_class_dataset(tmp_path) -> None:
     ).to_csv(single_class_manifest, index=False)
     single_report = audit_skin_manifest(single_class_manifest, image_root)
     assert "at_least_two_classes_required" in single_report["training_readiness"]["blocking_reasons"]
+
+
+def test_audit_hashes_images_without_reading_entire_file_into_memory(tmp_path, monkeypatch) -> None:
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    Image.new("RGB", (16, 16), color="teal").save(image_root / "one.png")
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        {
+            "image_id": ["i1"],
+            "image_path": ["one.png"],
+            "label": ["A"],
+            "patient_id": ["p1"],
+        }
+    ).to_csv(manifest, index=False)
+
+    def reject_read_bytes(_self):
+        raise AssertionError("Image hashing must use bounded-memory streaming reads")
+
+    monkeypatch.setattr("pathlib.Path.read_bytes", reject_read_bytes)
+    report = audit_skin_manifest(manifest, image_root)
+    assert report["file_integrity"]["decode_failures"] == 0
+    assert report["content_duplicates"]["duplicate_content_groups"] == 0
