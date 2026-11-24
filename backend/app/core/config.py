@@ -1,6 +1,7 @@
 """Centralized application settings loaded from environment variables."""
 
 from functools import lru_cache
+from urllib.parse import parse_qs, urlsplit
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -68,6 +69,9 @@ class Settings(BaseSettings):
                 raise ValueError("REQUIRE_VERIFIED_EMAIL must be enabled in production.")
             if not self.database_url.lower().startswith(("postgresql://", "postgresql+")):
                 raise ValueError("A PostgreSQL DATABASE_URL is required in production.")
+            ssl_mode = parse_qs(urlsplit(self.database_url).query).get("sslmode", [""])[0].lower()
+            if ssl_mode not in {"require", "verify-ca", "verify-full"}:
+                raise ValueError("Production DATABASE_URL must require PostgreSQL TLS using sslmode=require, verify-ca, or verify-full.")
             if not self.frontend_base_url.lower().startswith("https://"):
                 raise ValueError("FRONTEND_BASE_URL must use HTTPS in production.")
             origins = self.allowed_origins
