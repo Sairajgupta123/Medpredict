@@ -23,6 +23,7 @@ async function submitReview(formData: FormData) {
   const sessionResponse = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (!sessionResponse.ok) redirect("/login");
   const user = await sessionResponse.json() as { role?: string };
@@ -66,6 +67,7 @@ async function submitReview(formData: FormData) {
     },
     body: JSON.stringify({ expected_status: expectedStatus, status, reason }),
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (response.status === 409) redirect("/review?error=conflict");
