@@ -324,11 +324,21 @@ def request_account_deletion(
         select(AccountDeletionRequest).where(AccountDeletionRequest.user_id == user.id)
     )
     if existing is not None:
-        if existing.status == "pending":
-            return {"status": "pending", "message": "Your deletion request is already queued."}
+        if existing.status in {"pending", "processing"}:
+            message = (
+                "Your deletion request is being processed."
+                if existing.status == "processing"
+                else "Your deletion request is already queued."
+            )
+            return {"status": existing.status, "message": message}
+        if existing.status == "completed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This account's deletion request has already been completed.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This account has already completed its deletion request.",
+            detail="This deletion request requires manual review. Please contact support.",
         )
     db.add(AccountDeletionRequest(user_id=user.id))
     user.is_active = False
