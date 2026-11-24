@@ -295,6 +295,25 @@ def revoke_reviewer_scope(
     db: DbSession,
 ) -> dict:
     """Revoke an active scope and append an immutable audit event atomically."""
+    # For image scopes, take the shared image lock before the scope lock.
+    # Assignment and consent withdrawal use this same lock order, preventing
+    # an assignment from committing against a concurrently revoked grant.
+    scope = db.scalar(
+        select(CatalogReviewerScope).where(CatalogReviewerScope.id == scope_id)
+    )
+    if scope is not None and scope.scope_type == "skin_image":
+        try:
+            image_prediction_id = UUID(scope.scope_key)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=409,
+                detail="The image reviewer scope has an invalid target.",
+            )
+        db.scalar(
+            select(SkinImageAnalysis.id)
+            .where(SkinImageAnalysis.prediction_id == image_prediction_id)
+            .with_for_update()
+        )
     scope = db.scalar(
         select(CatalogReviewerScope)
         .where(CatalogReviewerScope.id == scope_id)
