@@ -343,6 +343,7 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
     assert response.headers["content-type"] == "image/png"
     assert response.headers["cache-control"] == "private, no-store, max-age=0"
     assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
     assert "sandbox" in response.headers["content-security-policy"]
 
     db = TestingSessionLocal()
