@@ -1377,6 +1377,7 @@ def test_owner_review_status_is_minimal_and_never_exposes_reviewer_or_storage_da
 
 def test_skin_image_history_delete_removes_private_object_and_preserves_review_audit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api.v1 import predictions
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
     token, user = _register(client, "image-delete-success@example.com")
     reviewer_token, reviewer = _register(client, "image-delete-reviewer@example.com")
     _set_account_role(reviewer.id, "reviewer")
