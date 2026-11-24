@@ -13,6 +13,7 @@ from app.models.prediction import (
     PredictionConsentEvent,
     PredictionResult,
     SkinImageAnalysis,
+    SkinImageReviewEvent,
 )
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 
@@ -505,6 +506,26 @@ def purge_expired_skin_image_records(
         image_record.deletion_requested_at = (
             image_record.deletion_requested_at or datetime.now(timezone.utc)
         )
+
+        # Retention expiry ends reviewer assignment as well as storage access.
+        # Preserve the outgoing reviewer in the append-only image audit trail.
+        if (
+            image_record.review_status == "assigned"
+            and image_record.assigned_reviewer_id is not None
+        ):
+            previous_reviewer_id = image_record.assigned_reviewer_id
+            image_record.assigned_reviewer_id = None
+            image_record.assigned_by = None
+            image_record.assigned_at = None
+            image_record.review_status = "pending"
+            db.add(SkinImageReviewEvent(
+                prediction_id=image_record.prediction_id,
+                image_analysis_id=image_record.id,
+                event_type="unassigned",
+                actor_id=None,
+                assigned_reviewer_id=previous_reviewer_id,
+                reason="Assignment cleared because the image retention period expired.",
+            ))
 
         # Expiry is also an owner-authorized end to image retention. Revoke
         # exact reviewer scopes in the same durable transaction as the pending
