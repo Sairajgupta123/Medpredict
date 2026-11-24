@@ -27,6 +27,7 @@ from app.services.skin_image_storage_factory import build_skin_image_storage
 def _release_for_retry(request: AccountDeletionRequest, error_code: str) -> None:
     """Make a claimed request available for a later retry."""
     request.status = "pending"
+    request.claim_token = None
     request.last_error_code = error_code
 
 
@@ -66,16 +67,6 @@ def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before
 
 def _lock_owned_request(db, request_id: UUID, claim_token: UUID | None):
     """Lock the job row and fence out workers whose claim has expired."""
-    request = _lock_owned_request(db, request_id, claim_token)
-    if request is None:
-        return None
-    if claim_token is not None and request.claim_token != claim_token:
-        raise DeletionClaimLost("Deletion job claim was replaced by another worker.")
-    return request
-
-
-def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID | None = None) -> bool:
-    """Erase one claimed patient account; retain a non-identifying audit tombstone."""
     request = db.scalar(
         select(AccountDeletionRequest)
         .where(
@@ -85,11 +76,22 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
         .with_for_update(skip_locked=True)
     )
     if request is None:
+        return None
+    if claim_token is not None and request.claim_token != claim_token:
+        raise DeletionClaimLost("Deletion job claim was replaced by another worker.")
+    return request
+
+
+def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID | None = None) -> bool:
+    """Erase one claimed patient account; retain a non-identifying audit tombstone."""
+    request = _lock_owned_request(db, request_id, claim_token)
+    if request is None:
         return False
 
     user = db.scalar(select(User).where(User.id == request.user_id).with_for_update())
     if user is None or user.role != "patient" or user.is_active:
         request.status = "failed"
+        request.claim_token = None
         request.last_error_code = "account_state_requires_manual_review"
         db.commit()
         return False
@@ -196,6 +198,11 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
         image.deleted_at = datetime.now(timezone.utc)
         db.commit()
 
+    # Fence the final relational deletion and tombstone transaction as well.
+    request = _lock_owned_request(db, request_id, claim_token)
+    if request is None:
+        return False
+
     # Remove owned health rows only after all external image objects are confirmed gone.
     for prediction in predictions:
         db.delete(prediction)
@@ -213,6 +220,7 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
     request.status = "completed"
     request.last_error_code = None
     request.completed_at = datetime.now(timezone.utc)
+    request.claim_token = None
     db.commit()
     return True
 
