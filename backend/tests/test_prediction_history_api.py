@@ -328,6 +328,8 @@ def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.api.v1 import skin_images
+    from app.core.config import Settings
+    monkeypatch.setattr(skin_images, "get_settings", lambda: Settings(skin_image_retention_days=30))
 
     token, user = _register(client, "image-intake@example.com")
     storage = _FakeIntakeStorage()
@@ -359,6 +361,8 @@ def test_skin_image_intake_stores_sanitized_image_after_explicit_consents(
             )
         )
         assert image is not None and image.storage_status == "stored"
+        assert image.retention_expires_at is not None
+        assert image.retention_policy_version == "image-retention-v1"
         events = list(
             db.scalars(
                 select(PredictionConsentEvent).where(
@@ -381,6 +385,8 @@ def test_skin_image_intake_records_failed_storage_without_claiming_success(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.api.v1 import skin_images
+    from app.core.config import Settings
+    monkeypatch.setattr(skin_images, "get_settings", lambda: Settings(skin_image_retention_days=30))
 
     token, user = _register(client, "image-intake-failure@example.com")
     monkeypatch.setattr(
@@ -433,6 +439,8 @@ def test_skin_image_intake_fails_closed_when_storage_is_not_configured(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.api.v1 import skin_images
+    from app.core.config import Settings
+    monkeypatch.setattr(skin_images, "get_settings", lambda: Settings(skin_image_retention_days=30))
     from app.services.skin_image_storage import DisabledSkinImageStorage
 
     token, _ = _register(client, "image-intake-disabled@example.com")
