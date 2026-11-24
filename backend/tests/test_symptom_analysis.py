@@ -1,6 +1,8 @@
 """Tests for the non-diagnostic symptom phrase endpoint and structured context."""
 
-import pytest\n\nfrom fastapi.testclient import TestClient
+import pytest
+
+from fastapi.testclient import TestClient
 
 from app.main import app
 
