@@ -12,6 +12,7 @@ async function check(name, request, expectedStatus, expectedCacheControl = true)
     }
   }
   process.stdout.write(`PASS ${name} (HTTP ${response.status})\n`);
+  return response;
 }
 
 const home = await fetch(baseUrl);
