@@ -82,6 +82,11 @@ await check(
   400,
 );
 await check(
+  "reject oversized symptom request body",
+  { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ text: "x".repeat(8 * 1024), reported_context: { duration: "not_sure", severity: "not_sure", onset: "not_sure" } }) } },
+  413,
+);
+await check(
   "reject invalid symptom payload",
   { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ text: " ", reported_context: {} }) } },
   422,
@@ -92,6 +97,11 @@ await check(
   "reject cross-origin catalog-match request",
   { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: ["HEADACHE"] }) } },
   403,
+);
+await check(
+  "reject oversized catalog-match request body",
+  { path: "/api/symptoms/catalog-match", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ symptom_ids: ["A".repeat(4 * 1024)] }) } },
+  413,
 );
 await check(
   "reject malformed catalog-match identifiers",
