@@ -1524,6 +1524,50 @@ def test_skin_image_history_delete_failure_keeps_retry_marker_and_can_retry(clie
         db.close()
 
 
+@pytest.mark.parametrize("storage_status", ["pending_upload", "failed"])
+def test_incomplete_skin_image_upload_can_be_safely_deleted(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    storage_status: str,
+) -> None:
+    """Idempotent object deletion cleans up writes with an ambiguous outcome."""
+    from app.api.v1 import predictions
+
+    token, user = _register(client, f"image-delete-{storage_status}@example.com")
+    item = _prediction(user.id, modality="skin_image")
+    key = "skin-images/33333333333333333333333333333333.png"
+    db = TestingSessionLocal()
+    try:
+        db.add(SkinImageAnalysis(
+            prediction_id=item.id,
+            object_key=key,
+            content_type="image/png",
+            image_sha256="c" * 64,
+            storage_status=storage_status,
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    storage = _FakeIntakeStorage()
+    # A failed put may have partially succeeded before the adapter raised.
+    storage.objects[key] = (b"possibly-partial-object", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+
+    response = client.delete(
+        f"/api/v1/predictions/history/{item.id}",
+        headers=_headers(token),
+    )
+    assert response.status_code == 204
+    assert key not in storage.objects
+
+    db = TestingSessionLocal()
+    try:
+        assert db.get(Prediction, item.id) is None
+    finally:
+        db.close()
+
+
 def test_skin_image_history_delete_is_blocked_for_unknown_storage_state(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.api.v1 import predictions
     token, user = _register(client, "image-delete-unknown@example.com")
