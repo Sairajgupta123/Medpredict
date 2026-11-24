@@ -51,6 +51,30 @@ for (const endpoint of ["login", "register"]) {
   );
 }
 
+for (const action of ["request", "confirm"]) {
+  const resetPath = `/api/auth/password-reset/${action}`;
+  await check(
+    `reject cross-origin password reset ${action}`,
+    { path: resetPath, init: { method: "POST", headers: { Origin: "https://invalid.example", "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject missing origin for password reset ${action}`,
+    { path: resetPath, init: { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
+    `reject malformed password reset ${action} payload`,
+    { path: resetPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
+    400,
+  );
+}
+await check(
+  "reject invalid password reset confirmation fields",
+  { path: "/api/auth/password-reset/confirm", init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ token: "short", new_password: "short" }) } },
+  422,
+);
+
 const logoutPath = "/api/auth/logout";
 await check(
   "reject cross-origin logout request",
