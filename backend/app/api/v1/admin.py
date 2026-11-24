@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
-from app.models.prediction import SkinImageAnalysis
+from app.models.prediction import SkinImageAnalysis, SkinImageReviewEvent
 from app.services.prediction_history import has_active_skin_image_consent
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
@@ -179,8 +179,34 @@ def deactivate_reviewer_account(
     if not reviewer.is_active:
         raise HTTPException(status_code=409, detail="Reviewer account is already inactive.")
 
-    # The account row serializes grants (which lock this row first) against
-    # deactivation. Revocation events and account disablement commit together.
+    # Lock order is reviewer account -> image rows -> reviewer scopes, matching
+    # assignment and image access. Return unfinished assignments to the admin queue.
+    assigned_images = db.scalars(
+        select(SkinImageAnalysis)
+        .where(
+            SkinImageAnalysis.assigned_reviewer_id == reviewer.id,
+            SkinImageAnalysis.review_status == "assigned",
+        )
+        .order_by(SkinImageAnalysis.id.asc())
+        .with_for_update()
+    ).all()
+    reason = f"Reviewer account deactivated: {payload.reason}"
+    for image_record in assigned_images:
+        previous_assignment = image_record.assigned_reviewer_id
+        image_record.assigned_reviewer_id = None
+        image_record.assigned_by = None
+        image_record.assigned_at = None
+        image_record.review_status = "pending"
+        db.add(SkinImageReviewEvent(
+            prediction_id=image_record.prediction_id,
+            image_analysis_id=image_record.id,
+            event_type="unassigned",
+            actor_id=administrator.id,
+            assigned_reviewer_id=previous_assignment,
+            reason="Assignment cleared because reviewer account was deactivated.",
+        ))
+
+    # Revoke scope rows after image rows to preserve the shared lock ordering.
     scopes = db.scalars(
         select(CatalogReviewerScope)
         .where(
@@ -190,7 +216,6 @@ def deactivate_reviewer_account(
         .with_for_update()
     ).all()
     revoked_at = datetime.now(timezone.utc)
-    reason = f"Reviewer account deactivated: {payload.reason}"
     for scope in scopes:
         scope.revoked_by = administrator.id
         scope.revoked_at = revoked_at
@@ -222,7 +247,8 @@ def deactivate_reviewer_account(
         "account_status": "inactive",
         "new_role": reviewer.role,
         "revoked_scope_count": len(scopes),
-        "message": "Reviewer access and existing sessions have been revoked.",
+        "returned_assignment_count": len(assigned_images),
+        "message": "Reviewer access, existing sessions and unfinished assignments have been revoked.",
     }
 
 
