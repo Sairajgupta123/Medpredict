@@ -63,7 +63,7 @@ export function SkinImageIntake() {
           typeof payload.clinical_validation_status !== "string" ||
           payload.human_review_required !== true ||
           typeof payload.image_intake_configured !== "boolean" ||
-          !(payload.image_retention_days === null || (Number.isInteger(payload.image_retention_days) && payload.image_retention_days >= 1 && payload.image_retention_days <= 3650)) ||
+          !(payload.image_retention_days === null || (typeof payload.image_retention_days === "number" && Number.isInteger(payload.image_retention_days) && payload.image_retention_days >= 1 && payload.image_retention_days <= 3650)) ||
           (payload.image_intake_configured && payload.image_retention_days === null) ||
           payload.disease_prediction_performed !== false ||
           (payload.inference_available && !payload.model_configured) ||
