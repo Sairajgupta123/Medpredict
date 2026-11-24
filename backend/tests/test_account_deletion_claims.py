@@ -192,6 +192,8 @@ def test_account_deletion_erases_text_history_and_keeps_non_login_tombstone() ->
 
 
 def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
+    from app.models.email_verification import EmailVerificationToken
+    from app.models.password_reset import PasswordResetToken
     from app.models.prediction import (
         Prediction, SkinImageAnalysis, SkinImageReviewEvent,
     )
@@ -246,6 +248,19 @@ def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
             grant_reason="Owner authorized exact image review.",
         )
         db.add(scope)
+        now = datetime.now(timezone.utc)
+        db.add_all([
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash="d" * 64,
+                expires_at=now + timedelta(minutes=20),
+            ),
+            EmailVerificationToken(
+                user_id=user.id,
+                token_hash="e" * 64,
+                expires_at=now + timedelta(minutes=20),
+            ),
+        ])
         db.commit()
         request_id = request.id
         scope_id = scope.id
@@ -261,6 +276,12 @@ def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
         retained_prediction = db.get(Prediction, prediction_id)
         retained_image = db.get(SkinImageAnalysis, image_id)
         assert stored_request is not None and stored_request.status == "pending"
+        assert db.scalar(
+            select(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+        ) is None
+        assert db.scalar(
+            select(EmailVerificationToken).where(EmailVerificationToken.user_id == user.id)
+        ) is None
         assert retained_prediction is not None
         assert retained_image is not None
         assert retained_image.storage_status == "deletion_pending"
