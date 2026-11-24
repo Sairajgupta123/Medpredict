@@ -50,6 +50,7 @@ async function requireReviewerToken() {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) redirect("/login");
   const user = await response.json() as { role?: string };
@@ -167,6 +168,7 @@ async function submitImageReview(formData: FormData) {
     },
     body: JSON.stringify({ outcome, reason }),
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) redirect(`/review/skin-images?error=${response.status === 409 ? "conflict" : "save"}`);
   revalidatePath("/review/skin-images");
@@ -189,6 +191,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
     const response = await fetch(`${API_BASE_URL}/skin-images/review/queue`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) queueError = "The skin-image review queue could not be loaded.";
     else {
@@ -206,6 +209,7 @@ export default async function SkinImageReviewPage({ searchParams }: PageProps) {
       const response = await fetch(`${API_BASE_URL}/admin/reviewers`, {
         headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(8_000),
       });
       if (response.ok) {
         const payload: unknown = await response.json();
