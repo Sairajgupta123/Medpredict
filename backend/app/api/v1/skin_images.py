@@ -804,6 +804,7 @@ def list_skin_image_review_events(
 
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    user = _lock_active_reviewer_account(db, user)
     try:
         parsed_id = UUID(prediction_id)
     except ValueError as exc:
@@ -861,6 +862,7 @@ def list_skin_image_review_audit(
     """
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    user = _lock_active_reviewer_account(db, user)
     if limit < 1 or limit > 200 or offset < 0 or offset > 10000:
         raise HTTPException(status_code=422, detail="Audit pagination is outside the allowed range.")
 
