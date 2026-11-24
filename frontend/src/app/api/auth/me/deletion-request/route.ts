@@ -74,7 +74,10 @@ export async function POST(request: Request) {
     return privateJson({ detail: "The MediPredict server is unavailable. Please try again." }, 503);
   }
 
-  const result = await readBoundedJson(upstream, 16 * 1024);\n  if (result === null) {\n    return privateJson({ detail: "The deletion service returned an invalid response." }, 502);\n  }
+  const result = await readBoundedJson(upstream, 16 * 1024);
+  if (result === null) {
+    return privateJson({ detail: "The deletion service returned an invalid response." }, 502);
+  }
   if (!upstream.ok) {
     const detail = result && typeof result === "object" && "detail" in result
       ? result.detail : "The deletion request could not be submitted.";
