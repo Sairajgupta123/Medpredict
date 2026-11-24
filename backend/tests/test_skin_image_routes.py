@@ -690,13 +690,8 @@ def test_admin_can_recover_pending_image_after_reviewer_deactivation(
     admin_headers = _admin_headers()
     db = TestingSessionLocal()
     try:
-        # Resolve the administrator from its signed token through the same
-        # authenticated endpoint rather than relying on token payload details.
-        admin_response = client.get("/api/v1/auth/me", headers=admin_headers)
-        assert admin_response.status_code == 200
-        administrator = db.query(User).filter_by(
-            email=admin_response.json()["email"]
-        ).one()
+        # The test helper creates exactly one administrator for this test.
+        administrator = db.query(User).filter_by(role="admin").one()
         reviewer = User(
             email=f"skin-recovery-reviewer-{uuid4().hex}@example.test",
             password_hash="test-only-hash",
