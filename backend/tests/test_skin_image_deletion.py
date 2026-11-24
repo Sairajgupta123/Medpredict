@@ -260,6 +260,108 @@ def test_retention_expiry_requires_timezone_and_future_timestamp(
     assert error.value.status_code == 422
 
 
+def test_history_consent_revocation_clears_assigned_reviewer_and_audits(
+    db_session: Session,
+) -> None:
+    from app.models.prediction import SkinImageReviewEvent
+    from app.models.reviewer_scope import CatalogReviewerScope
+    from app.services.prediction_history import (
+        record_skin_image_consent_decision,
+        revoke_skin_image_history_consent,
+    )
+
+    owner, prediction = _owned_image_history(db_session)
+    reviewer = User(
+        id=uuid4(), email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-password-hash", role="reviewer",
+        is_active=True, email_verified=True,
+    )
+    db_session.add(reviewer)
+    db_session.flush()
+    record_skin_image_consent_decision(
+        db_session, owner.id, prediction.id,
+        purpose="skin_image_history", action="granted",
+        policy_version="image-history-v1",
+    )
+    image = db_session.scalar(select(SkinImageAnalysis).where(
+        SkinImageAnalysis.prediction_id == prediction.id
+    ))
+    assert image is not None
+    image.review_status = "assigned"
+    image.assigned_reviewer_id = reviewer.id
+    image.assigned_by = owner.id
+    image.assigned_at = datetime.now(timezone.utc)
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id, scope_type="skin_image",
+        scope_key=str(prediction.id), granted_by=owner.id,
+        grant_reason="Owner authorized exact image review.",
+    )
+    db_session.add(scope)
+    db_session.commit()
+
+    revoke_skin_image_history_consent(
+        db_session, owner.id, prediction.id,
+        image_storage=FakePrivateStorage(), policy_version="image-history-v1",
+    )
+    db_session.refresh(image)
+    db_session.refresh(scope)
+    assert image.review_status == "pending"
+    assert image.assigned_reviewer_id is None
+    assert image.assigned_by is None
+    assert image.assigned_at is None
+    assert scope.revoked_at is not None
+    event = db_session.scalar(select(SkinImageReviewEvent).where(
+        SkinImageReviewEvent.prediction_id == prediction.id,
+        SkinImageReviewEvent.event_type == "unassigned",
+        SkinImageReviewEvent.assigned_reviewer_id == reviewer.id,
+    ))
+    assert event is not None and event.actor_id == owner.id
+    assert "revoked image-history consent" in event.reason
+
+
+def test_owner_history_deletion_clears_assigned_reviewer_and_audits(
+    db_session: Session,
+) -> None:
+    from app.models.prediction import SkinImageReviewEvent
+    from app.models.reviewer_scope import CatalogReviewerScope
+
+    owner, prediction = _owned_image_history(db_session)
+    reviewer = User(
+        id=uuid4(), email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-password-hash", role="reviewer",
+        is_active=True, email_verified=True,
+    )
+    db_session.add(reviewer)
+    db_session.flush()
+    image = db_session.scalar(select(SkinImageAnalysis).where(
+        SkinImageAnalysis.prediction_id == prediction.id
+    ))
+    assert image is not None
+    image.review_status = "assigned"
+    image.assigned_reviewer_id = reviewer.id
+    image.assigned_by = owner.id
+    image.assigned_at = datetime.now(timezone.utc)
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id, scope_type="skin_image",
+        scope_key=str(prediction.id), granted_by=owner.id,
+        grant_reason="Owner authorized exact image review.",
+    )
+    db_session.add(scope)
+    db_session.commit()
+
+    delete_user_history_item(
+        db_session, owner.id, prediction.id, image_storage=FakePrivateStorage(),
+    )
+    event = db_session.scalar(select(SkinImageReviewEvent).where(
+        SkinImageReviewEvent.prediction_id == prediction.id,
+        SkinImageReviewEvent.event_type == "unassigned",
+        SkinImageReviewEvent.assigned_reviewer_id == reviewer.id,
+    ))
+    assert event is not None and event.actor_id == owner.id
+    assert "owner deleted image history" in event.reason
+    assert db_session.get(Prediction, prediction.id) is None
+
+
 def test_image_history_consent_revocation_deletes_object_before_revoking(
     db_session: Session,
 ) -> None:
