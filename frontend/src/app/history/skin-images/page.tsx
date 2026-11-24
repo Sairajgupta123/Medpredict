@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { API_BASE_URL, getSessionToken, getSessionUser } from "@/lib/auth-proxy";
+import { API_BASE_URL, getSessionToken, getSessionUser, readBoundedJson } from "@/lib/auth-proxy";
 
 export const metadata: Metadata = { title: "Your skin image history" };
 
@@ -89,7 +89,7 @@ async function revokeReviewConsent(formData: FormData) {
 
   let result: unknown;
   try {
-    result = await response.json();
+    result = await readBoundedJson(response, 16 * 1024);
   } catch {
     redirect("/history/skin-images?error=save");
   }
@@ -133,7 +133,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
         signal: AbortSignal.timeout(10_000),
       });
       if (response.ok) {
-        const payload: unknown = await response.json();
+        const payload: unknown = await readBoundedJson(response, 512 * 1024);
         const validHistoryPage = (value: unknown): value is HistoryPage => {
           if (!value || typeof value !== "object" || Array.isArray(value)) return false;
           const candidate = value as Record<string, unknown>;
@@ -180,7 +180,7 @@ export default async function SkinImageHistoryPage({ searchParams }: PageProps) 
                   },
                 );
                 if (statusResponse.ok) {
-                  const rawStatusPayload: unknown = await statusResponse.json();
+                  const rawStatusPayload: unknown = await readBoundedJson(statusResponse, 16 * 1024);
                   const isRecord = (value: unknown): value is Record<string, unknown> =>
                     Boolean(value) && typeof value === "object" && !Array.isArray(value);
                   const statusPayload = isRecord(rawStatusPayload) ? rawStatusPayload : null;
