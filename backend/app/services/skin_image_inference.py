@@ -37,6 +37,10 @@ class SkinImageInferenceResult:
     abstention_reason: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.abstained, bool):
+            raise InvalidSkinImageModelOutput("The abstained flag must be boolean.")
+        if not isinstance(self.confidence_calibrated, bool):
+            raise InvalidSkinImageModelOutput("The confidence_calibrated flag must be boolean.")
         if (
             not isinstance(self.model_version, str)
             or not self.model_version
@@ -56,7 +60,11 @@ class SkinImageInferenceResult:
                 raise InvalidSkinImageModelOutput(
                     "Abstained results must not contain a candidate or confidence."
                 )
-            if not self.abstention_reason or len(self.abstention_reason.strip()) > 240:
+            if (
+                not isinstance(self.abstention_reason, str)
+                or not self.abstention_reason.strip()
+                or len(self.abstention_reason.strip()) > 240
+            ):
                 raise InvalidSkinImageModelOutput(
                     "Abstained results require a concise reason."
                 )
@@ -67,13 +75,16 @@ class SkinImageInferenceResult:
                 "Uncalibrated model confidence cannot be returned as a result."
             )
         if (
-            not self.candidate_label
+            not isinstance(self.candidate_label, str)
+            or not self.candidate_label
             or self.candidate_label != self.candidate_label.strip()
             or len(self.candidate_label) > 160
         ):
             raise InvalidSkinImageModelOutput("A valid candidate label is required.")
         if (
             self.confidence is None
+            or isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, (int, float))
             or not math.isfinite(self.confidence)
             or not 0.0 <= self.confidence <= 1.0
         ):
