@@ -192,7 +192,10 @@ def test_account_deletion_erases_text_history_and_keeps_non_login_tombstone() ->
 
 
 def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
-    from app.models.prediction import Prediction, SkinImageAnalysis
+    from app.models.prediction import (
+        Prediction, SkinImageAnalysis, SkinImageReviewEvent,
+    )
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
     from app.workers.account_deletion import process_deletion_request
 
     Base.metadata.create_all(bind=engine)
@@ -222,8 +225,31 @@ def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
             storage_status="stored",
         )
         db.add(image)
+        reviewer = User(
+            email="erase-reviewer@example.test",
+            password_hash="test-only-password-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(reviewer)
+        db.flush()
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        image.assigned_by = user.id
+        image.assigned_at = datetime.now(timezone.utc)
+        scope = CatalogReviewerScope(
+            reviewer_id=reviewer.id,
+            scope_type="skin_image",
+            scope_key=str(prediction.id),
+            granted_by=user.id,
+            grant_reason="Owner authorized exact image review.",
+        )
+        db.add(scope)
         db.commit()
         request_id = request.id
+        scope_id = scope.id
+        reviewer_id = reviewer.id
         prediction_id = prediction.id
         image_id = image.id
 
@@ -238,6 +264,28 @@ def test_account_deletion_storage_failure_keeps_health_rows_for_retry() -> None:
         assert retained_prediction is not None
         assert retained_image is not None
         assert retained_image.storage_status == "deletion_pending"
+        assert retained_image.review_status == "pending"
+        assert retained_image.assigned_reviewer_id is None
+        revoked_scope = db.get(CatalogReviewerScope, scope_id)
+        assert revoked_scope is not None and revoked_scope.revoked_at is not None
+        assert revoked_scope.revoked_by == user.id
+        scope_event = db.scalar(
+            select(CatalogReviewerScopeEvent).where(
+                CatalogReviewerScopeEvent.scope_id == scope_id,
+                CatalogReviewerScopeEvent.event_type == "revoked",
+            )
+        )
+        assert scope_event is not None
+        assert scope_event.reviewer_id == reviewer_id
+        assert scope_event.operator_id == user.id
+        unassignment = db.scalar(
+            select(SkinImageReviewEvent).where(
+                SkinImageReviewEvent.prediction_id == prediction_id,
+                SkinImageReviewEvent.event_type == "unassigned",
+            )
+        )
+        assert unassignment is not None
+        assert unassignment.actor_id == user.id
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
