@@ -70,10 +70,16 @@ flows backed by the FastAPI authentication endpoints.
 
 - Browser credentials are posted to same-origin Next.js route handlers.
 - The route handlers call the FastAPI authentication endpoints server-to-server.
-- Registration creates the account and requests a verification email, but does not establish
-  a browser session or expose the backend access token to client JavaScript.
+- Registration creates the account but does not establish a browser session or expose the
+  backend access token to client JavaScript. It then requests a verification email; if that
+  request cannot be started, the page tells the user to continue from `/verify-email`.
+- Verification requests return a generic response to avoid account enumeration. The one-time
+  verification token is carried in the URL fragment, removed from browser history on page
+  load, and submitted only to the same-origin confirmation route.
 - The user verifies the email and then signs in. Only a successful login sets the
-  HttpOnly, SameSite=Lax session cookie.
+  HttpOnly, SameSite=Lax session cookie. Verification and password-recovery proxy responses
+  are marked `private, no-store`; both flows enforce origin checks, bounded JSON bodies and
+  upstream timeouts.
 - The dashboard resolves the signed-in profile server-side.
 - Logout revokes the backend session and clears the browser cookie.
 - Login, registration, email-verification and logout POST routes validate the request Origin.
