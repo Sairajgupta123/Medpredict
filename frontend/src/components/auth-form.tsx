@@ -115,6 +115,7 @@ export function AuthForm({ mode }: AuthFormProps) {
           <span aria-hidden="true">→</span>
         </button>
       </form>
+      {!isRegister ? <p className="auth-switch"><Link href="/reset-password">Forgot your password?</Link></p> : null}
       <p className="auth-switch">
         {isRegister ? "Already have an account?" : "New to MediPredict?"}{" "}
         <Link href={isRegister ? "/login" : "/register"}>{isRegister ? "Sign in" : "Create an account"}</Link>
