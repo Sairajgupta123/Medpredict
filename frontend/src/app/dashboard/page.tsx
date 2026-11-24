@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
+import { AccountDeletionForm } from "@/components/account-deletion-form";
 import { getSessionUser } from "@/lib/auth-proxy";
 import { apiRequest, type ResearchModelStatusResponse } from "@/lib/api";
 
@@ -62,6 +63,7 @@ export default async function DashboardPage() {
               <Link className="dashboard-signin" href="/login">Sign in to your account ↗</Link>
             )}
           </div>
+          {user?.role === "patient" ? <AccountDeletionForm /> : null}
           <h1>{user ? `Welcome, ${user.display_name || "back"}.` : "Your health information,"}<br /><em>organized with care.</em></h1>
           <p>This workspace is under active development. The cards below show the planned modules and their current implementation stage.</p>
           <div className="workspace-notice"><span aria-hidden="true">i</span><div><strong>{user ? "Signed-in workspace" : "Preview environment"}</strong><small>The symptom prototype recognizes phrases only; disease prediction, image analysis and personalized guidance are not available.</small></div></div>
