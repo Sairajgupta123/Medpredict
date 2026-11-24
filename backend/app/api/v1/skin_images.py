@@ -436,6 +436,7 @@ def retrieve_skin_image(
             "Cache-Control": "private, no-store, max-age=0",
             "Pragma": "no-cache",
             "X-Content-Type-Options": "nosniff",
+            "Cross-Origin-Resource-Policy": "same-origin",
             "Content-Security-Policy": "default-src 'none'; sandbox",
             "Content-Length": str(len(content)),
         },
@@ -746,6 +747,7 @@ def retrieve_assigned_review_image(
             "Cache-Control": "private, no-store, max-age=0",
             "Pragma": "no-cache",
             "X-Content-Type-Options": "nosniff",
+            "Cross-Origin-Resource-Policy": "same-origin",
             "Content-Security-Policy": "default-src 'none'; sandbox",
         },
     )
