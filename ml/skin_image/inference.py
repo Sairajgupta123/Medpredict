@@ -145,6 +145,37 @@ def validate_skin_checkpoint(
     ):
         raise ValueError("Checkpoint configuration does not match model metadata")
 
+    governance = config.get("dataset_governance")
+    required_governance_reviews = (
+        "license_review", "permitted_use_review", "privacy_review", "label_review",
+        "clinical_reviewer_signoff",
+    )
+    if not isinstance(governance, dict):
+        raise ValueError("Checkpoint is missing approved dataset governance provenance")
+    if (
+        not isinstance(governance.get("dataset_id"), str)
+        or not governance["dataset_id"].strip()
+        or governance.get("approval_status") != "research_only_approved"
+        or governance.get("image_domain") not in {"dermoscopy", "clinical_phone_photo", "mixed"}
+        or not isinstance(governance.get("source_url"), str)
+        or not governance["source_url"].startswith("https://")
+        or not isinstance(governance.get("version"), str)
+        or not governance["version"].strip()
+        or not isinstance(governance.get("license"), str)
+        or governance["license"].strip().lower() in {
+            "unknown", "unknown_pending_source_review", "none", "n/a", "not reviewed"
+        }
+        or not isinstance(governance.get("registry_sha256"), str)
+        or len(governance["registry_sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in governance["registry_sha256"])
+        or not isinstance(governance.get("governance_reviews"), dict)
+        or any(
+            governance["governance_reviews"].get(field) != "approved"
+            for field in required_governance_reviews
+        )
+    ):
+        raise ValueError("Checkpoint dataset governance provenance is incomplete or unapproved")
+
     if metadata is not None:
         comparisons = {
             "architecture": architecture,
@@ -157,6 +188,7 @@ def validate_skin_checkpoint(
             "calibration_temperature": temperature,
             "abstention_threshold": threshold,
             "threshold_selection_partition": "validation_only",
+            "dataset_governance": governance,
         }
         for key, expected in comparisons.items():
             if metadata.get(key) != expected:
