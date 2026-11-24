@@ -4,7 +4,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models.email_verification import EmailVerificationToken
@@ -88,3 +88,33 @@ def consume_email_verification_token(db: Session, raw_token: str) -> User | None
     if user is None or not user.is_active:
         return None
     return user
+
+
+def cleanup_expired_email_verification_tokens(
+    db: Session,
+    *,
+    older_than: datetime,
+    limit: int = 500,
+) -> int:
+    """Delete a bounded batch of expired or long-consumed verification tokens."""
+    if not 1 <= limit <= 1000:
+        raise ValueError("Cleanup batch limit must be between 1 and 1000.")
+    if older_than.tzinfo is None or older_than.utcoffset() is None:
+        raise ValueError("Cleanup cutoff must be timezone-aware.")
+
+    table = EmailVerificationToken.__table__
+    stale_ids = db.scalars(
+        select(table.c.id)
+        .where(
+            (table.c.expires_at < older_than)
+            | (table.c.used_at < older_than)
+        )
+        .order_by(table.c.expires_at.asc())
+        .limit(limit)
+    ).all()
+    if not stale_ids:
+        return 0
+
+    result = db.execute(delete(table).where(table.c.id.in_(stale_ids)))
+    db.commit()
+    return max(0, result.rowcount or 0)

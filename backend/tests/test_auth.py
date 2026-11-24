@@ -1109,3 +1109,50 @@ def test_unverified_account_session_is_blocked_when_policy_enabled(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 401
+
+
+def test_email_verification_cleanup_removes_only_stale_rows_in_bounded_batches(
+    client: TestClient,
+) -> None:
+    from datetime import timedelta, timezone
+
+    from sqlalchemy import select
+    from app.core.email_verification import cleanup_expired_email_verification_tokens
+    from app.models.email_verification import EmailVerificationToken
+    from app.models.user import User
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "verify-cleanup@example.com", "password": "StrongPass123!"},
+    )
+    assert registration.status_code == 201
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(select(User).where(User.email == "verify-cleanup@example.com"))
+        assert user is not None
+        now = datetime.now(timezone.utc)
+        db.add_all([
+            EmailVerificationToken(
+                user_id=user.id, token_hash="a" * 64,
+                expires_at=now - timedelta(days=4),
+            ),
+            EmailVerificationToken(
+                user_id=user.id, token_hash="b" * 64,
+                expires_at=now + timedelta(days=1),
+                used_at=now - timedelta(days=3),
+            ),
+            EmailVerificationToken(
+                user_id=user.id, token_hash="c" * 64,
+                expires_at=now + timedelta(days=1),
+            ),
+        ])
+        db.commit()
+        deleted = cleanup_expired_email_verification_tokens(
+            db, older_than=now - timedelta(hours=48), limit=1
+        )
+        assert deleted == 1
+        remaining = db.scalars(select(EmailVerificationToken)).all()
+        assert len(remaining) == 2
+        assert any(row.token_hash == "c" * 64 for row in remaining)
+    finally:
+        db.close()

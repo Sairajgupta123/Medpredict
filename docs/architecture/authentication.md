@@ -80,8 +80,7 @@ must explicitly enable it and configure SMTP.
 ## Current account states
 
 - `is_active`: inactive accounts cannot log in or access protected routes.
-- `email_verified`: defaults to false. Email verification is not implemented yet; do not treat
-  this field as proof that an address has been verified.
+- `email_verified`: defaults to false and becomes true only after a valid, single-use email verification token is consumed.
 - `last_login_at`: updated after successful login.
 - `token_version`: monotonically incremented when the password is reset or the account logs out; protected routes compare
 the JWT `ver` claim with this database value.
@@ -161,3 +160,13 @@ email-rotation abuse. Production ingress must additionally apply IP/network-leve
 at a trusted reverse proxy, API gateway, or WAF. The application must not trust arbitrary
 client-supplied forwarding headers for client IP identity. Monitor 429 rates and authentication
 failures without logging passwords, tokens, raw emails, or private health data.
+
+
+### Email verification token lifecycle
+
+Run `python -m app.workers.email_verification_cleanup` daily from the deployment scheduler.
+Each invocation deletes at most 500 tokens that expired or were consumed more than 48 hours
+ago. Recent consumed tokens are retained briefly to support replay rejection and operational
+review. The worker logs aggregate deletion counts only; it never prints token digests, raw
+tokens, email addresses, or account identifiers. Run additional bounded batches if a backlog
+develops.
