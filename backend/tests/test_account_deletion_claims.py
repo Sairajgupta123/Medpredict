@@ -167,12 +167,14 @@ def test_processing_request_without_attempt_timestamp_is_recovered() -> None:
         db.add(request)
         db.commit()
 
-        assert _claim_deletion_request(
+        token = _claim_deletion_request(
             db,
             request.id,
             now=now,
             stale_before=now - timedelta(hours=2),
-        ) is True
+        )
+        assert token is not None
+        assert request.claim_token == token
         db.refresh(request)
         assert request.status == "processing"
         assert request.attempts == 2
