@@ -59,9 +59,11 @@ export function SkinImageIntake() {
           typeof payload.model_configured !== "boolean" ||
           typeof payload.disease_prediction_performed !== "boolean" ||
           typeof payload.clinical_validation_status !== "string" ||
-          typeof payload.human_review_required !== "boolean" ||
+          payload.human_review_required !== true ||
+          payload.disease_prediction_performed !== false ||
+          (payload.inference_available && !payload.model_configured) ||
           typeof payload.message !== "string"
-        ) throw new Error("Invalid status response");
+        ) throw new Error("Invalid or unsafe status response");
         if (active) setModelStatus(payload as ModelStatus);
       })
       .catch(() => {
