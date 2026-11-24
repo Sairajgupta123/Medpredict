@@ -58,7 +58,16 @@ async function requireReviewerToken() {
     redirect("/review/skin-images?error=unavailable");
   }
   if (!response.ok) redirect("/login");
-  const user = await response.json() as { role?: string };
+  let user: { role?: string };
+  try {
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      redirect("/review/skin-images?error=unavailable");
+    }
+    user = payload as { role?: string };
+  } catch {
+    redirect("/review/skin-images?error=unavailable");
+  }
   if (user.role !== "reviewer" && user.role !== "admin") redirect("/dashboard");
   return { token, user };
 }
