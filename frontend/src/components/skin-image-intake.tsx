@@ -215,7 +215,7 @@ export function SkinImageIntake() {
             <ul>
               <li>{modelStatus.inference_available && modelStatus.model_configured ? "Model inference available" : "Disease classification is not currently available"}</li>
               <li>{modelStatus.clinical_validation_status === "not_established" ? "Clinical validation has not been established" : `Clinical validation status: ${modelStatus.clinical_validation_status}`}</li>
-              <li>{modelStatus.human_review_required ? "Qualified human review remains necessary" : "Human review requirement not indicated"}</li>
+              <li>{modelStatus.human_review_required ? "Authorized human technical capture-quality review remains required; this is not clinical review" : "Human technical review requirement not indicated"}</li>
             </ul>
           </>
         ) : modelStatusUnavailable ? (
