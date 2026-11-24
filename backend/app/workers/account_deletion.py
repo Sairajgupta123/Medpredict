@@ -168,6 +168,10 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
             ))
             access_changed = True
     if access_changed:
+        # The scope/assignment cleanup can be lengthy; fence its commit too.
+        request = _lock_owned_request(db, request_id, claim_token)
+        if request is None:
+            return False
         db.commit()
 
     for image in images:
