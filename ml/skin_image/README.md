@@ -25,11 +25,29 @@ The CSV must include:
 Do not pass patient identifiers to the model, print them, commit them, or include them in experiment
 logs. Keep the manifest and images in approved private storage.
 
+## Dataset governance gate
+
+Technical file checks alone do not authorize model training. Before training, add a source-specific
+record to a private dataset registry JSON file and obtain documented approval for the license,
+permitted use, privacy, labels and clinical reviewer sign-off. The record must use
+`approval_status: research_only_approved`, `modality: image`, and a known image domain
+(`dermoscopy`, `clinical_phone_photo` or `mixed`). Unknown or placeholder licenses are rejected.
+The registry record's `dataset_id` must match the training command exactly; duplicate IDs and
+registry changes during validation are rejected. Approval must be performed by the responsible
+human reviewers, never inferred from this software. Keep the registry private if it contains
+restricted source or governance details.
+
 ## Run an offline research experiment
 
 ```bash
-python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --epochs 10 --target-validation-coverage 0.90
+python -m ml.skin_image.train --manifest private_manifest.csv --image-root private_images --output-dir private_experiment --dataset-registry private_dataset_registry.json --dataset-id reviewed-skin-dataset-v1 --epochs 10 --target-validation-coverage 0.90
 ```
+
+The registry must contain the matching record with all five review fields set to `approved`:
+`license_review`, `permitted_use_review`, `privacy_review`, `label_review`, and
+`clinical_reviewer_signoff`. A successful gate grants research-only training permission; it does
+not establish clinical validity or permit deployment. The trainer records the dataset ID, registry
+digest and approval summary in experiment configuration, metadata and report.
 
 The trainer creates deterministic, class-aware patient-grouped 70/15/15 approximate partitions.
 It requires every class to occur in at least three distinct patients and in every partition, then
