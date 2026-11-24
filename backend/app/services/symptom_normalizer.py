@@ -136,9 +136,9 @@ def _scope_status(normalized_text: str, start: int) -> str:
         r"\bnot$",
         r"\bnot\s+(?:have|having)(?:\s+(?:any|a|an))?$",
         r"\b(?:am|is|are|was|were)\s+not"
-        r"(?:\s+(?:have|having))?(?:\s+(?:any|a|an))?$",
+        r"(?:\s+(?:have|having|experience|experiencing))?(?:\s+(?:any|a|an))?$",
         r"\b(?:do not|does not|did not|dont|doesnt|didnt)\s+"
-        r"(?:have)?(?:\s+(?:any|a|an))?$",
+        r"(?:have|experience|experiencing)?(?:\s+(?:any|a|an))?$",
     )
     if any(re.search(pattern, context) for pattern in negation_patterns):
         return "negated_or_denied_context"
