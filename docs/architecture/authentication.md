@@ -118,7 +118,7 @@ The current implementation does not yet include:
 - Per-device session management; logout currently revokes all account access tokens
 - IP/network-level login and registration rate limiting, distributed abuse detection, and alerting
 - Multi-factor authentication
-- Account export/deletion workflow and associated prediction-data retention handling
+- Self-service account deletion and its asynchronous private-image cleanup workflow
 - Security event audit logging
 
 Password-reset-driven access-token revocation and account-wide logout are implemented through per-user token versions. Logout revokes every access token for the account, not only the token used to call the endpoint. The frontend logout route calls the backend revocation endpoint before clearing the HttpOnly session cookie; if the backend is temporarily unavailable, it retains the cookie so revocation can be retried.
@@ -188,3 +188,35 @@ tokens, private object-storage keys, raw image bytes, and reviewer identifiers. 
 uses `Cache-Control: private, no-store`. Image bytes remain in private object storage and are
 not embedded in the JSON export; a separate authorized image-export workflow would be needed
 if that capability is introduced.
+
+
+## Account deletion safety requirements
+
+Self-service account deletion is not exposed yet. A database-only delete or a broad
+ORM cascade would be unsafe for this schema:
+
+- Skin-image bytes are stored outside the relational database. The existing private
+  storage adapter's `delete_private` operation is idempotent, but deletion must be
+  confirmed before the corresponding database history is removed.
+- Image records in unknown, pending-upload, or failed storage states must not be
+  treated as successfully erased. The existing history deletion service deliberately
+  blocks unverified storage states and retains a durable `deletion_pending` marker
+  when object deletion fails.
+- Reviewer-scope grants, scope events, catalog review events, reference-link audit
+  events, and role-provisioning events contain restrictive foreign keys to user
+  accounts. Deleting a reviewer or administrator without a governance transfer
+  would break attribution and/or violate referential integrity.
+- Prediction history has owner-scoped health inputs and consent events. Any
+  deletion workflow must handle the owned prediction graph and image objects
+  together, while preserving only the minimum legally/operationally required
+  audit evidence under an explicit retention policy.
+- Account access must be revoked immediately when a deletion request is accepted.
+  A queued request must remain retryable and must not be marked complete until
+  external object deletion and the database cleanup have both succeeded.
+
+The intended implementation is a patient-only, password-confirmed request followed
+by bounded asynchronous processing. Reviewer and administrator accounts require
+separate assignment transfer and audit-retention handling; they must not be silently
+anonymized or deleted through the patient self-service path. Until that workflow,
+storage reconciliation, and tests are complete, account deletion must be treated as
+unsupported rather than implying that deactivation is erasure.
