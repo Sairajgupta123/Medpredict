@@ -194,7 +194,7 @@ class SkinImageReviewEvent(Base):
     __tablename__ = "skin_image_review_events"
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('assigned', 'reassigned', 'image_accessed', 'reviewed')",
+            "event_type IN ('assigned', 'reassigned', 'unassigned', 'image_accessed', 'reviewed')",
             name="ck_skin_image_review_event_type",
         ),
         CheckConstraint(
