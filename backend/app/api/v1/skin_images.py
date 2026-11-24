@@ -701,6 +701,7 @@ def retrieve_assigned_review_image(
 
     if user.role not in {"reviewer", "admin"}:
         raise HTTPException(status_code=403, detail="Image reviewer permission required.")
+    user = _lock_active_reviewer_account(db, user)
     try:
         parsed_id = UUID(prediction_id)
     except ValueError as exc:
