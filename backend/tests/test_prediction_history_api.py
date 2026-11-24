@@ -1434,6 +1434,68 @@ def test_skin_image_history_delete_removes_private_object_and_preserves_review_a
         db.close()
 
 
+def test_image_history_consent_revocation_also_revokes_reviewer_scope(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1 import predictions
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+
+    owner_token, owner = _register(client, "image-history-scope-owner@example.com")
+    _, reviewer = _register(client, "image-history-scope-reviewer@example.com")
+    _set_account_role(reviewer.id, "reviewer")
+    item, key, _ = _stored_image_for_user(owner.id)
+
+    db = TestingSessionLocal()
+    try:
+        image = db.scalar(
+            select(SkinImageAnalysis).where(SkinImageAnalysis.prediction_id == item.id)
+        )
+        assert image is not None
+        image.review_status = "assigned"
+        image.assigned_reviewer_id = reviewer.id
+        scope = CatalogReviewerScope(
+            reviewer_id=reviewer.id,
+            scope_type="skin_image",
+            scope_key=str(item.id),
+            granted_by=owner.id,
+            grant_reason="Owner approved exact image review access.",
+        )
+        db.add(scope)
+        db.commit()
+        scope_id = scope.id
+    finally:
+        db.close()
+
+    storage = _FakeIntakeStorage()
+    storage.objects[key] = (b"private-image", "image/png")
+    monkeypatch.setattr(predictions, "build_skin_image_storage", lambda: storage)
+
+    response = client.post(
+        f"/api/v1/predictions/history/{item.id}/revoke-consent",
+        headers=_headers(owner_token),
+    )
+    assert response.status_code == 200, response.text
+    assert key not in storage.objects
+
+    db = TestingSessionLocal()
+    try:
+        revoked_scope = db.get(CatalogReviewerScope, scope_id)
+        assert revoked_scope is not None
+        assert revoked_scope.revoked_at is not None
+        assert revoked_scope.revoked_by == owner.id
+        event = db.scalar(
+            select(CatalogReviewerScopeEvent).where(
+                CatalogReviewerScopeEvent.scope_id == scope_id,
+                CatalogReviewerScopeEvent.event_type == "revoked",
+            )
+        )
+        assert event is not None
+        assert event.operator_id == owner.id
+        assert event.reason == "Image-history consent revoked; reviewer access revoked."
+    finally:
+        db.close()
+
+
 def test_repeated_image_history_consent_revocation_does_not_duplicate_audit_event(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
