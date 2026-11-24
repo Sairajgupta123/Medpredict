@@ -1283,3 +1283,73 @@ def test_account_deletion_worker_retries_image_storage_failure(client: TestClien
         assert storage.deleted == ["skin-images/" + "c" * 32 + ".jpg"]
     finally:
         db.close()
+
+
+@pytest.mark.parametrize(
+    ("existing_status", "expected_status", "expected_http_status"),
+    [
+        ("pending", "pending", 200),
+        ("processing", "processing", 200),
+        ("completed", None, 409),
+        ("failed", None, 409),
+    ],
+)
+def test_account_deletion_request_reports_existing_job_state(
+    client: TestClient,
+    existing_status: str,
+    expected_status: str | None,
+    expected_http_status: int,
+) -> None:
+    """Repeated deletion requests report in-flight state and never create duplicate jobs."""
+    from sqlalchemy import select
+
+    from app.models.account_deletion import AccountDeletionRequest
+    from app.models.user import User
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": f"delete-existing-{existing_status}@example.com",
+            "password": "StrongPass123!",
+        },
+    )
+    assert registration.status_code == 201
+    token = registration.json()["access_token"]
+    db = TestingSessionLocal()
+    try:
+        user = db.scalar(
+            select(User).where(
+                User.email == f"delete-existing-{existing_status}@example.com"
+            )
+        )
+        assert user is not None
+        db.add(AccountDeletionRequest(user_id=user.id, status=existing_status))
+        db.commit()
+        user_id = user.id
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "StrongPass123!"},
+    )
+    assert response.status_code == expected_http_status
+
+    db = TestingSessionLocal()
+    try:
+        jobs = db.scalars(
+            select(AccountDeletionRequest).where(
+                AccountDeletionRequest.user_id == user_id
+            )
+        ).all()
+        user = db.get(User, user_id)
+        assert len(jobs) == 1
+        assert user is not None and user.is_active is True
+        if expected_status is not None:
+            assert response.json()["status"] == expected_status
+            assert isinstance(response.json()["message"], str)
+        else:
+            assert "detail" in response.json()
+    finally:
+        db.close()
