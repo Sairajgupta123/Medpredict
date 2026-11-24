@@ -819,12 +819,30 @@ def test_login_rate_limit_is_enforced_per_normalized_email(
         response = client.post("/api/v1/auth/login", json=payload)
         assert response.status_code == 401
 
+    # Move the active window forward to prove Retry-After reports only its remainder.
+    from sqlalchemy import select, update
+
+    from app.models.auth_rate_limit import AuthRateLimitBucket
+
+    db = TestingSessionLocal()
+    try:
+        bucket = db.scalar(select(AuthRateLimitBucket))
+        assert bucket is not None
+        db.execute(
+            update(AuthRateLimitBucket)
+            .where(AuthRateLimitBucket.bucket_key == bucket.bucket_key)
+            .values(window_started_at=datetime.now(timezone.utc) - timedelta(minutes=5))
+        )
+        db.commit()
+    finally:
+        db.close()
+
     limited = client.post(
         "/api/v1/auth/login",
         json={"email": "target@example.com", "password": "WrongPassword123!"},
     )
     assert limited.status_code == 429
-    assert limited.headers["retry-after"] == "900"
+    assert 595 <= int(limited.headers["retry-after"]) <= 600
 
 
 def test_password_reset_request_rate_limit_keeps_generic_responses(
@@ -868,7 +886,6 @@ def test_rate_limit_window_resets_after_expiry_and_stores_only_digest(
     from sqlalchemy import select, update
 
     from app.api.v1 import auth
-    from app.core.auth_rate_limit import enforce_auth_rate_limit
     from app.models.auth_rate_limit import AuthRateLimitBucket
 
     monkeypatch.setattr(auth, "verify_password", lambda *_: True)
