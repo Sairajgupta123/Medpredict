@@ -55,6 +55,7 @@ export default async function DashboardPage() {
                 {user.role === "admin" ? (
                   <Link className="review-access-link" href="/admin">Admin governance ↗</Link>
                 ) : null}
+                <Link className="review-access-link" href="/api/auth/me/export">Export my data ↓</Link>
                 <LogoutButton />
               </div>
             ) : (
