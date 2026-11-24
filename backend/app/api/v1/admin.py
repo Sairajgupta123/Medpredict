@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.api.dependencies import Administrator, DbSession
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.prediction import SkinImageAnalysis
+from app.services.prediction_history import has_active_skin_image_consent
 from app.models.user import RoleProvisioningEvent, User
 from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
 from app.models.knowledge import MedicalReference, MedicalReferenceEvent
@@ -212,6 +213,30 @@ def grant_reviewer_scope(
         if payload.scope_type == "skin_image" and payload.scope_key is not None
         else payload.scope_key
     )
+
+    # Serialize exact image-scope grants with consent withdrawal, assignment,
+    # image reads and retention cleanup by taking the shared image-row lock.
+    if payload.scope_type == "skin_image":
+        image_prediction_id = UUID(scope_key)
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
+            .where(SkinImageAnalysis.prediction_id == image_prediction_id)
+            .with_for_update()
+        )
+        if image_record is None or image_record.storage_status != "stored":
+            raise HTTPException(
+                status_code=409,
+                detail="Only a stored image can receive reviewer access.",
+            )
+        if not has_active_skin_image_consent(
+            db, image_prediction_id, purpose="skin_image_processing"
+        ) or not has_active_skin_image_consent(
+            db, image_prediction_id, purpose="skin_image_review"
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Active image-processing and human-review consent are required.",
+            )
 
     existing = db.scalar(
         _scope_key_filter(payload.scope_type, scope_key).where(
