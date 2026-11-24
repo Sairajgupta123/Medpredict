@@ -857,3 +857,84 @@ def test_registration_rate_limit_is_enforced_per_email(client: TestClient) -> No
     limited = client.post("/api/v1/auth/register", json=payload)
     assert limited.status_code == 429
     assert limited.headers["retry-after"] == "3600"
+
+
+
+def test_rate_limit_window_resets_after_expiry_and_stores_only_digest(
+    client: TestClient, monkeypatch
+) -> None:
+    from datetime import timedelta, timezone
+
+    from sqlalchemy import select, update
+
+    from app.api.v1 import auth
+    from app.core.auth_rate_limit import enforce_auth_rate_limit
+    from app.models.auth_rate_limit import AuthRateLimitBucket
+
+    monkeypatch.setattr(auth, "verify_password", lambda *_: True)
+    payload = {"email": "Window-Reset@example.com", "password": "WrongPassword123!"}
+    for _ in range(10):
+        assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+
+    db = TestingSessionLocal()
+    try:
+        bucket = db.scalar(select(AuthRateLimitBucket))
+        assert bucket is not None
+        assert "window-reset@example.com" not in bucket.bucket_key
+        db.execute(
+            update(AuthRateLimitBucket).where(
+                AuthRateLimitBucket.bucket_key == bucket.bucket_key
+            ).values(window_started_at=datetime.now(timezone.utc) - timedelta(hours=1))
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post("/api/v1/auth/login", json=payload)
+    assert response.status_code == 401
+
+
+def test_rate_limit_cleanup_deletes_only_old_rows_in_bounded_batches(client: TestClient) -> None:
+    from datetime import timedelta, timezone
+
+    from sqlalchemy import select, update
+
+    from app.core.auth_rate_limit import cleanup_expired_auth_rate_limit_buckets
+    from app.models.auth_rate_limit import AuthRateLimitBucket
+
+    for email in ("old-one@example.com", "old-two@example.com", "fresh@example.com"):
+        response = client.post(
+            "/api/v1/auth/password-reset/request", json={"email": email}
+        )
+        assert response.status_code == 202
+
+    db = TestingSessionLocal()
+    try:
+        old_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+        db.execute(
+            update(AuthRateLimitBucket)
+            .where(AuthRateLimitBucket.bucket_key != "")
+            .values(window_started_at=old_cutoff)
+        )
+        # Keep one bucket recent; the rows are intentionally opaque to the test.
+        newest = db.scalar(
+            select(AuthRateLimitBucket).order_by(
+                AuthRateLimitBucket.bucket_key.desc()
+            )
+        )
+        assert newest is not None
+        db.execute(
+            update(AuthRateLimitBucket)
+            .where(AuthRateLimitBucket.bucket_key == newest.bucket_key)
+            .values(window_started_at=datetime.now(timezone.utc))
+        )
+        db.commit()
+
+        deleted = cleanup_expired_auth_rate_limit_buckets(
+            db, older_than=datetime.now(timezone.utc) - timedelta(days=2), limit=1
+        )
+        assert deleted == 1
+        remaining = db.scalars(select(AuthRateLimitBucket)).all()
+        assert len(remaining) == 2
+    finally:
+        db.close()

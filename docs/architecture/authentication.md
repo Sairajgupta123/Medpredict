@@ -124,9 +124,24 @@ Current per-identifier limits:
 - Registration: 5 attempts per normalized email address per hour.
 - Password-reset request: 3 attempts per normalized email address per hour.
 
-Excess requests receive HTTP 429 with a `Retry-After` header. These limits are shared across
+Excess requests receive HTTP 429 with a `Retry-After` header containing the remaining window duration. These limits are shared across
 application workers because they are stored in the database, not process memory. They are
 account-targeted limits only: they do not stop an attacker rotating email addresses or
 distributing requests across IPs. A production deployment still needs trusted edge/WAF
 IP-based throttling, monitoring, and abuse response. Do not treat this control as a complete
 anti-bot or denial-of-service defense.
+
+
+### Throttle data lifecycle
+
+Rate-limit rows are retained briefly for operational throttling and cleanup. Run
+`python -m app.workers.auth_rate_limit_cleanup` daily from the deployment scheduler; each
+invocation deletes at most 500 rows whose windows ended more than 48 hours ago. The worker
+prints aggregate counts only and can be safely run repeatedly. Increase the scheduler
+frequency or invoke additional batches if a backlog develops.
+
+The per-email counters are not sufficient against distributed credential stuffing or
+email-rotation abuse. Production ingress must additionally apply IP/network-level limits
+at a trusted reverse proxy, API gateway, or WAF. The application must not trust arbitrary
+client-supplied forwarding headers for client IP identity. Monitor 429 rates and authentication
+failures without logging passwords, tokens, raw emails, or private health data.
