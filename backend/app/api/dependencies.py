@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
@@ -39,6 +40,7 @@ def get_current_user(
         user is None
         or not user.is_active
         or user.token_version != token_version
+        or (get_settings().require_verified_email and not user.email_verified)
     ):
         raise unauthorized
     return user

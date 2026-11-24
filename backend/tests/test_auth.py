@@ -1086,3 +1086,26 @@ def test_login_can_require_verified_email_without_account_enumeration(
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid email or password."
+
+
+def test_unverified_account_session_is_blocked_when_policy_enabled(
+    client: TestClient, monkeypatch
+) -> None:
+    from types import SimpleNamespace
+
+    from app.api import dependencies
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "protected-unverified@example.com", "password": "StrongPass123!"},
+    )
+    assert registration.status_code == 201
+    token = registration.json()["access_token"]
+    monkeypatch.setattr(
+        dependencies, "get_settings", lambda: SimpleNamespace(require_verified_email=True)
+    )
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 401
