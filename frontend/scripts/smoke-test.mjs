@@ -147,7 +147,7 @@ await check(
 );
 await check(
   "reject oversized symptom request body",
-  { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ text: "x".repeat(8 * 1024), reported_context: { duration: "not_sure", severity: "not_sure", onset: "not_sure" } }) } },
+  { path, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify({ text: "x".repeat(20 * 1024), reported_context: { duration: "not_sure", severity: "not_sure", onset: "not_sure" } }) } },
   413,
 );
 await check(
