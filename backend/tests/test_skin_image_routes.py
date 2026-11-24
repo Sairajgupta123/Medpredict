@@ -682,6 +682,99 @@ def test_reassignment_revokes_previous_reviewers_access(
     finally:
         db.close()
 
+
+def test_admin_can_recover_pending_image_after_reviewer_deactivation(
+    client: TestClient,
+) -> None:
+    """A pending image can be safely assigned to a newly authorized reviewer."""
+    admin_headers = _admin_headers()
+    db = TestingSessionLocal()
+    try:
+        admin_id = admin_headers["Authorization"].split(" ", 1)[1]
+        # Resolve the administrator from its signed token through the same
+        # authenticated endpoint rather than relying on token payload details.
+        admin_response = client.get("/api/v1/auth/me", headers=admin_headers)
+        assert admin_response.status_code == 200
+        administrator = db.query(User).filter_by(
+            email=admin_response.json()["email"]
+        ).one()
+        reviewer = User(
+            email=f"skin-recovery-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add(reviewer)
+        db.flush()
+        prediction = Prediction(
+            user_id=administrator.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/recovery-test",
+                content_type="image/png",
+                image_sha256="3" * 64,
+                storage_status="stored",
+                review_status="pending",
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=administrator.id,
+                grant_reason="Replacement reviewer explicitly authorized.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        reviewer_id = str(reviewer.id)
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/api/v1/skin-images/review/{prediction_id}/assign",
+        headers=admin_headers,
+        json={
+            "reviewer_id": reviewer_id,
+            "reason": "Recover pending work after reviewer deactivation.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["reviewer_id"] == reviewer_id
+    assert response.json()["review_status"] == "assigned"
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_id,
+        ).one()
+        assert image_record.review_status == "assigned"
+        assert image_record.assigned_reviewer_id == uuid4_from_string(reviewer_id)
+    finally:
+        db.close()
+
+
 def test_review_decision_is_terminal_and_audited_once(
     client: TestClient,
 ) -> None:
