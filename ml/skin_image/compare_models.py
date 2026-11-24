@@ -74,6 +74,7 @@ def compare_architectures(
                 "test_metrics_must_not_select_winner": True,
                 "report_path": f"{slug}/experiment_report.json",
                 "metadata_path": f"{slug}/model_metadata.json",
+                "dataset_governance": report["dataset_governance"],
             }
         )
 
@@ -86,6 +87,7 @@ def compare_architectures(
         "status": "research_comparison_only",
         "ranking_metric": "best_validation_macro_f1",
         "test_metrics_used_for_ranking": False,
+        "dataset_governance": experiments[0]["dataset_governance"],
         "shared_settings": {
             "seed": seed,
             "epochs": epochs,
