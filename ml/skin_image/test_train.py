@@ -112,6 +112,31 @@ def test_training_dataset_gate_returns_governance_provenance(tmp_path):
     assert len(result["registry_sha256"]) == 64
 
 
+def test_training_dataset_gate_rejects_registry_changed_during_approval(tmp_path, monkeypatch):
+    import json
+
+    import ml.skin_image.train as train_module
+
+    registry = tmp_path / "registry.json"
+    registry.write_text(
+        json.dumps({"datasets": [_approved_dataset_record()]}), encoding="utf-8"
+    )
+    original_hash = train_module._sha256_file
+    calls = 0
+
+    def mutate_after_initial_hash(path):
+        nonlocal calls
+        digest = original_hash(path)
+        calls += 1
+        if calls == 1:
+            registry.write_text(registry.read_text(encoding="utf-8") + "\\n", encoding="utf-8")
+        return digest
+
+    monkeypatch.setattr(train_module, "_sha256_file", mutate_after_initial_hash)
+    with pytest.raises(ValueError, match="registry changed during approval checks"):
+        train_module.require_research_dataset_approval(registry, "approved-skin-set-v1")
+
+
 def test_training_dataset_gate_rejects_duplicate_dataset_ids(tmp_path):
     import json
 
