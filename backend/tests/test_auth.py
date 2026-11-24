@@ -86,7 +86,7 @@ def test_access_token_with_invalid_signature_is_rejected() -> None:
         "type": "access",
         "iss": "medipredict-api",
     }
-    token = jwt.encode(payload, "not-the-application-secret", algorithm="HS256")
+    token = jwt.encode(payload, "not-the-application-secret-key-32-bytes", algorithm="HS256")
 
     assert decode_access_token(token) is None
 
