@@ -66,7 +66,7 @@ def enforce_auth_rate_limit(
                 (expired, 1), else_=table.c.request_count + 1
             ),
         },
-    ).returning(table.c.request_count)
+    )
 
     result = db.execute(
         statement.returning(table.c.request_count, table.c.window_started_at)

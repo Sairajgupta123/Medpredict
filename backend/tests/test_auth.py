@@ -902,7 +902,7 @@ def test_rate_limit_cleanup_deletes_only_old_rows_in_bounded_batches(client: Tes
     from app.core.auth_rate_limit import cleanup_expired_auth_rate_limit_buckets
     from app.models.auth_rate_limit import AuthRateLimitBucket
 
-    for email in ("old-one@example.com", "old-two@example.com", "fresh@example.com"):
+    for email in ("old-one@example.com", "old-two@example.com", "old-three@example.com"):
         response = client.post(
             "/api/v1/auth/password-reset/request", json={"email": email}
         )
@@ -912,29 +912,31 @@ def test_rate_limit_cleanup_deletes_only_old_rows_in_bounded_batches(client: Tes
     try:
         old_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
         db.execute(
-            update(AuthRateLimitBucket)
-            .where(AuthRateLimitBucket.bucket_key != "")
-            .values(window_started_at=old_cutoff)
-        )
-        # Keep one bucket recent; the rows are intentionally opaque to the test.
-        newest = db.scalar(
-            select(AuthRateLimitBucket).order_by(
-                AuthRateLimitBucket.bucket_key.desc()
-            )
-        )
-        assert newest is not None
-        db.execute(
-            update(AuthRateLimitBucket)
-            .where(AuthRateLimitBucket.bucket_key == newest.bucket_key)
-            .values(window_started_at=datetime.now(timezone.utc))
+            update(AuthRateLimitBucket).values(window_started_at=old_cutoff)
         )
         db.commit()
+    finally:
+        db.close()
 
+    # This request creates a guaranteed fresh row after all older rows were aged.
+    response = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "fresh-after-aging@example.com"},
+    )
+    assert response.status_code == 202
+
+    db = TestingSessionLocal()
+    try:
         deleted = cleanup_expired_auth_rate_limit_buckets(
             db, older_than=datetime.now(timezone.utc) - timedelta(days=2), limit=1
         )
         assert deleted == 1
         remaining = db.scalars(select(AuthRateLimitBucket)).all()
-        assert len(remaining) == 2
+        assert len(remaining) == 3
+        assert any(
+            row.window_started_at.replace(tzinfo=timezone.utc)
+            > datetime.now(timezone.utc) - timedelta(days=1)
+            for row in remaining
+        )
     finally:
         db.close()
