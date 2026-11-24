@@ -161,6 +161,71 @@ def list_eligible_reviewers(
     ]
 
 
+@router.post("/reviewers/{reviewer_id}/deactivate")
+def deactivate_reviewer_account(
+    reviewer_id: UUID,
+    payload: ReviewerScopeRevoke,
+    administrator: Administrator,
+    db: DbSession,
+) -> dict:
+    """Disable a reviewer, invalidate sessions and revoke every active scope."""
+    reviewer = db.scalar(
+        select(User)
+        .where(User.id == reviewer_id)
+        .with_for_update()
+    )
+    if reviewer is None or reviewer.role != "reviewer":
+        raise HTTPException(status_code=404, detail="Reviewer account not found.")
+    if not reviewer.is_active:
+        raise HTTPException(status_code=409, detail="Reviewer account is already inactive.")
+
+    # The account row serializes grants (which lock this row first) against
+    # deactivation. Revocation events and account disablement commit together.
+    scopes = db.scalars(
+        select(CatalogReviewerScope)
+        .where(
+            CatalogReviewerScope.reviewer_id == reviewer.id,
+            CatalogReviewerScope.revoked_at.is_(None),
+        )
+        .with_for_update()
+    ).all()
+    revoked_at = datetime.now(timezone.utc)
+    reason = f"Reviewer account deactivated: {payload.reason}"
+    for scope in scopes:
+        scope.revoked_by = administrator.id
+        scope.revoked_at = revoked_at
+        scope.revoke_reason = reason
+        db.add(CatalogReviewerScopeEvent(
+            scope_id=scope.id,
+            reviewer_id=reviewer.id,
+            event_type="revoked",
+            scope_type=scope.scope_type,
+            scope_key=scope.scope_key,
+            operator_id=administrator.id,
+            reason=reason,
+        ))
+
+    previous_role = reviewer.role
+    reviewer.role = "patient"
+    reviewer.is_active = False
+    reviewer.token_version += 1
+    db.add(RoleProvisioningEvent(
+        target_user_id=reviewer.id,
+        previous_role=previous_role,
+        new_role="patient",
+        operator_identity=administrator.email,
+        reason=reason,
+    ))
+    db.commit()
+    return {
+        "reviewer_id": str(reviewer.id),
+        "account_status": "inactive",
+        "new_role": reviewer.role,
+        "revoked_scope_count": len(scopes),
+        "message": "Reviewer access and existing sessions have been revoked.",
+    }
+
+
 @router.get("/reviewer-scopes", response_model=list[ReviewerScopeRead])
 def list_reviewer_scopes(
     administrator: Administrator,
