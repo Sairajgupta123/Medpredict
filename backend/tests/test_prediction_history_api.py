@@ -407,8 +407,26 @@ def test_skin_image_intake_records_failed_storage_without_claiming_success(
             )
         )
         assert image is not None and image.storage_status == "failed"
+        failed_prediction_id = prediction.id
     finally:
         db.close()
+
+    # A failed write must never be presented as a stored image or reach object storage.
+    status_response = client.get(
+        f"/api/v1/skin-images/{failed_prediction_id}/review-status",
+        headers=_headers(token),
+    )
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["status"] == "submission_unavailable"
+    assert status_payload["clinical_interpretation_performed"] is False
+    assert status_payload["disease_prediction_performed"] is False
+
+    image_response = client.get(
+        f"/api/v1/skin-images/{failed_prediction_id}",
+        headers=_headers(token),
+    )
+    assert image_response.status_code == 404
 
 
 def test_skin_image_intake_fails_closed_when_storage_is_not_configured(
