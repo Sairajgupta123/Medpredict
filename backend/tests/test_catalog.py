@@ -795,6 +795,85 @@ def test_reviewer_without_assignment_cannot_read_queue_or_change_catalog(
     assert decision.status_code == 403
 
 
+def test_admin_deactivation_revokes_reviewer_scopes_and_sessions(
+    client: TestClient,
+) -> None:
+    admin_headers = _user_headers("admin", email_suffix="deactivate-reviewer-admin")
+    reviewer_headers = _user_headers(
+        "reviewer", grant_scopes=False, email_suffix="deactivate-reviewer-target"
+    )
+    reviewer_token = reviewer_headers["Authorization"].split(" ", 1)[1]
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(
+            email="reviewer-deactivate-reviewer-target@example.com"
+        ).one()
+        reviewer.email_verified = True
+        db.add_all([
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="disease",
+                scope_key=None,
+                granted_by=reviewer.id,
+                grant_reason="Broad catalog review access.",
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="symptom",
+                scope_key="SYM_DEACTIVATE",
+                granted_by=reviewer.id,
+                grant_reason="Exact symptom review access.",
+            ),
+        ])
+        db.commit()
+        reviewer_id = str(reviewer.id)
+    finally:
+        db.close()
+
+    before = client.get("/api/v1/auth/me", headers=reviewer_headers)
+    assert before.status_code == 200
+
+    deactivated = client.post(
+        f"/api/v1/admin/reviewers/{reviewer_id}/deactivate",
+        headers=admin_headers,
+        json={"reason": "Reviewer access is no longer required."},
+    )
+    assert deactivated.status_code == 200, deactivated.text
+    assert deactivated.json()["account_status"] == "inactive"
+    assert deactivated.json()["new_role"] == "patient"
+    assert deactivated.json()["revoked_scope_count"] == 2
+
+    stale_session = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {reviewer_token}"},
+    )
+    assert stale_session.status_code == 401
+
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(id=reviewer_id).one()
+        scopes = db.query(CatalogReviewerScope).filter_by(
+            reviewer_id=reviewer.id
+        ).all()
+        events = db.query(CatalogReviewerScopeEvent).filter_by(
+            reviewer_id=reviewer.id,
+            event_type="revoked",
+        ).all()
+        role_event = db.query(RoleProvisioningEvent).filter_by(
+            target_user_id=reviewer.id
+        ).one()
+        assert reviewer.is_active is False
+        assert reviewer.role == "patient"
+        assert reviewer.token_version == 1
+        assert len(scopes) == 2
+        assert all(scope.revoked_at is not None for scope in scopes)
+        assert len(events) == 2
+        assert role_event.previous_role == "reviewer"
+        assert role_event.new_role == "patient"
+    finally:
+        db.close()
+
+
 def test_admin_can_grant_exact_reviewer_scope_and_revoke_with_audit(
     client: TestClient,
 ) -> None:
