@@ -75,6 +75,21 @@ count. Schedule repeated runs if the backlog exceeds one batch. Also configure I
 limits at the trusted ingress (API gateway, reverse proxy, or WAF); the application-level
 per-email limits are not a replacement for edge protection.
 
+When private skin-image storage is deliberately enabled, also schedule the bounded image
+retention worker from the backend environment (for example, once daily):
+
+```bash
+python -m app.workers.skin_image_retention
+```
+
+The worker processes at most 100 expired image records per run by default (maximum 500),
+deletes objects through the configured private S3-compatible adapter, revokes expired
+reviewer scopes, and reports aggregate counts only. A failed deletion remains marked
+`deletion_pending` for a later retry; the worker exits non-zero if any deletion failed.
+Do not enable image intake until private bucket access, encryption, lifecycle policy,
+retention duration, monitoring and recovery have been reviewed. The worker is not a
+substitute for an object-store lifecycle policy or an operational alert on repeated failures.
+
 ## Production gate — not yet cleared
 
 Before exposing the application publicly, complete and independently verify all of the
