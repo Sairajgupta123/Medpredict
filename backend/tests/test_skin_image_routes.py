@@ -1185,4 +1185,6 @@ def test_skin_image_model_status_reports_inference_unavailable(
     assert body["disease_prediction_performed"] is False
     assert body["clinical_validation_status"] == "not_established"
     assert body["human_review_required"] is True
+    assert body["image_intake_configured"] is False
+    assert body["image_retention_days"] is None
     assert "not configured" in body["message"]
