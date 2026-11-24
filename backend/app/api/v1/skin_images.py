@@ -332,6 +332,23 @@ def revoke_skin_image_review_consent(
     # Keep the consent event and every scope revocation in the same transaction.
     # The image-row lock prevents assignment from slipping between these writes.
     if image_record is not None:
+        if (
+            image_record.review_status == "assigned"
+            and image_record.assigned_reviewer_id is not None
+        ):
+            previous_reviewer_id = image_record.assigned_reviewer_id
+            image_record.assigned_reviewer_id = None
+            image_record.assigned_by = None
+            image_record.assigned_at = None
+            image_record.review_status = "pending"
+            db.add(SkinImageReviewEvent(
+                prediction_id=prediction.id,
+                image_analysis_id=image_record.id,
+                event_type="unassigned",
+                actor_id=user.id,
+                assigned_reviewer_id=previous_reviewer_id,
+                reason="Assignment cleared because the owner revoked human-review consent.",
+            ))
         active_scopes = db.scalars(
             select(CatalogReviewerScope)
             .where(
