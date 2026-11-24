@@ -96,6 +96,7 @@ export async function GET(_request: Request, context: RouteContext) {
       "Cache-Control": "private, no-store, max-age=0",
       Pragma: "no-cache",
       "X-Content-Type-Options": "nosniff",
+      "Cross-Origin-Resource-Policy": "same-origin",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     },
   });
