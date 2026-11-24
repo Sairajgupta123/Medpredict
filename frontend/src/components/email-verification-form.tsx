@@ -96,7 +96,7 @@ export function EmailVerificationForm({ initialToken = "" }: Props) {
               {busy ? "Please wait..." : "Verify email"} <span aria-hidden="true">→</span>
             </button>
           </form>
-          <div className="auth-form" aria-label="Request another verification email">
+          <form className="auth-form" onSubmit={requestLink}>
             <label className="field-label">
               Email address
               <input
@@ -104,18 +104,15 @@ export function EmailVerificationForm({ initialToken = "" }: Props) {
                 maxLength={320}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
+                required
                 type="email"
                 value={email}
               />
             </label>
-            <button className="button button-secondary auth-submit" disabled={busy || !email.trim()} onClick={() => {
-              const form = document.getElementById("verification-request-form") as HTMLFormElement | null;
-              form?.requestSubmit();
-            }} type="button">
-              Send verification link
+            <button className="button button-secondary auth-submit" disabled={busy || !email.trim()} type="submit">
+              {busy ? "Please wait..." : "Send verification link"}
             </button>
-            <form id="verification-request-form" onSubmit={requestLink} />
-          </div>
+          </form>
           {message && <p className="auth-success" role="status">{message}</p>}
           {error && <p className="auth-error" role="alert">{error}</p>}
           <p className="auth-switch"><Link href="/login">Return to sign in</Link></p>

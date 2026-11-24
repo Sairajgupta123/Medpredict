@@ -215,6 +215,7 @@ h1 em, h2 em { font-style: normal; color: #6c9a7f; }
 .field-label input::placeholder { color: #a9b5ad; }
 .auth-submit { width: 100%; border: 0; cursor: pointer; margin-top: 3px; }
 .auth-submit:disabled { opacity: .65; cursor: wait; }
+.auth-success { margin: 0; padding: 10px 12px; border: 1px solid #cfe5d4; border-radius: 7px; background: #f4fbf5; color: #356c47; font-size: 11px; line-height: 1.6; }
 .auth-error { margin: 0; padding: 10px 12px; border: 1px solid #f0d3ce; border-radius: 7px; background: #fff7f5; color: #a24e43; font-size: 11px; line-height: 1.6; }
 .auth-switch { margin: 22px 0 0; text-align: center; color: #829188; font-size: 11px; }
 .auth-switch a { color: #28664c; font-weight: 700; }
