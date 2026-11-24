@@ -18,6 +18,8 @@ type ModelStatus = {
   disease_prediction_performed: boolean;
   clinical_validation_status: string;
   human_review_required: boolean;
+  image_intake_configured: boolean;
+  image_retention_days: number | null;
   message: string;
 };
 
@@ -60,6 +62,9 @@ export function SkinImageIntake() {
           typeof payload.disease_prediction_performed !== "boolean" ||
           typeof payload.clinical_validation_status !== "string" ||
           payload.human_review_required !== true ||
+          typeof payload.image_intake_configured !== "boolean" ||
+          !(payload.image_retention_days === null || (Number.isInteger(payload.image_retention_days) && payload.image_retention_days >= 1 && payload.image_retention_days <= 3650)) ||
+          (payload.image_intake_configured && payload.image_retention_days === null) ||
           payload.disease_prediction_performed !== false ||
           (payload.inference_available && !payload.model_configured) ||
           typeof payload.message !== "string"
@@ -113,6 +118,10 @@ export function SkinImageIntake() {
     setRevocationMessage("");
     if (!image) {
       setError("Choose an image before continuing.");
+      return;
+    }
+    if (!modelStatus?.image_intake_configured || !modelStatus.image_retention_days) {
+      setError("Private image storage and an explicit retention period are not configured. No image was uploaded.");
       return;
     }
     if (!processingConsent || !historyConsent || !reviewConsent) {
@@ -216,6 +225,7 @@ export function SkinImageIntake() {
               <li>{modelStatus.inference_available && modelStatus.model_configured ? "Model inference available" : "Disease classification is not currently available"}</li>
               <li>{modelStatus.clinical_validation_status === "not_established" ? "Clinical validation has not been established" : `Clinical validation status: ${modelStatus.clinical_validation_status}`}</li>
               <li>{modelStatus.human_review_required ? "Authorized human technical capture-quality review remains required; this is not clinical review" : "Human technical review requirement not indicated"}</li>
+              <li>{modelStatus.image_intake_configured && modelStatus.image_retention_days ? `Private image storage is configured. Image bytes are retained for up to ${modelStatus.image_retention_days} days after upload; minimal audit metadata may remain.` : "Private image intake is unavailable until storage and an explicit retention period are configured."}</li>
             </ul>
           </>
         ) : modelStatusUnavailable ? (
@@ -280,7 +290,7 @@ export function SkinImageIntake() {
             </label>
             <label className="skin-intake-consent-item">
               <input type="checkbox" checked={historyConsent} onChange={(event) => setHistoryConsent(event.target.checked)} />
-              <span><strong>2. Image history and retention</strong><small>I agree that a private image-history record may be retained under the project&apos;s applicable retention policy. I understand that no default expiry is assumed by this prototype.</small></span>
+              <span><strong>2. Image history and retention</strong><small>{modelStatus?.image_intake_configured && modelStatus.image_retention_days ? `I agree that this image may be retained privately for up to ${modelStatus.image_retention_days} days after upload. Minimal audit metadata may remain after image bytes are deleted.` : "Image upload remains disabled until private storage and an explicit retention period are configured."}</small></span>
             </label>
             <label className="skin-intake-consent-item">
               <input type="checkbox" checked={reviewConsent} onChange={(event) => setReviewConsent(event.target.checked)} />
@@ -294,7 +304,7 @@ export function SkinImageIntake() {
           </div>
 
           {error && <p className="skin-intake-error" role="alert">{error}</p>}
-          <button className="button button-primary skin-intake-submit" type="submit" disabled={submitting || !image || !processingConsent || !historyConsent || !reviewConsent}>
+          <button className="button button-primary skin-intake-submit" type="submit" disabled={submitting || !image || !processingConsent || !historyConsent || !reviewConsent || !modelStatus?.image_intake_configured || !modelStatus.image_retention_days}>
             {submitting ? "Securely submitting..." : "Submit image with consent"} <span aria-hidden="true">→</span>
           </button>
           <p className="skin-intake-form-foot">Nothing is considered stored until the server confirms private storage. If storage is unavailable, the request fails closed.</p>
