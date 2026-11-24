@@ -37,6 +37,7 @@ async function submitReview(formData: FormData) {
   if (
     !["disease", "symptom", "disease_symptom"].includes(targetType) ||
     !targetKey ||
+    targetKey.length > 200 ||
     !allowedStatuses.has(status) ||
     !allowedStatuses.has(expectedStatus) ||
     reason.length < 8 ||
