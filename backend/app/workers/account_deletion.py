@@ -5,7 +5,7 @@ Schedule frequently (for example, every 15 minutes) while deletion requests exis
 """
 from datetime import datetime, timedelta, timezone
 import secrets
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, or_, select, update
 
@@ -30,8 +30,13 @@ def _release_for_retry(request: AccountDeletionRequest, error_code: str) -> None
     request.last_error_code = error_code
 
 
-def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before: datetime) -> bool:
-    """Claim one pending or abandoned job with a compare-and-set update."""
+class DeletionClaimLost(RuntimeError):
+    """Raised when another worker has taken ownership of a deletion job."""
+
+
+def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before: datetime) -> UUID | None:
+    """Claim one pending or abandoned job with a unique fencing token."""
+    claim_token = uuid4()
     claimed_id = db.scalar(
         update(AccountDeletionRequest)
         .where(
@@ -47,18 +52,29 @@ def _claim_deletion_request(db, request_id: UUID, *, now: datetime, stale_before
                 ),
             ),
         )
-        .values(
+         .values(
             status="processing",
+            claim_token=claim_token,
             attempts=AccountDeletionRequest.attempts + 1,
             last_attempt_at=now,
         )
         .returning(AccountDeletionRequest.id)
     )
     db.commit()
-    return claimed_id is not None
+    return claim_token if claimed_id is not None else None
 
 
-def process_deletion_request(db, request_id: UUID, storage) -> bool:
+def _lock_owned_request(db, request_id: UUID, claim_token: UUID | None):
+    """Lock the job row and fence out workers whose claim has expired."""
+    request = _lock_owned_request(db, request_id, claim_token)
+    if request is None:
+        return None
+    if claim_token is not None and request.claim_token != claim_token:
+        raise DeletionClaimLost("Deletion job claim was replaced by another worker.")
+    return request
+
+
+def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID | None = None) -> bool:
     """Erase one claimed patient account; retain a non-identifying audit tombstone."""
     request = db.scalar(
         select(AccountDeletionRequest)
@@ -153,6 +169,9 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
         db.commit()
 
     for image in images:
+        request = _lock_owned_request(db, request_id, claim_token)
+        if request is None:
+            return False
         if image.storage_status == "deleted":
             continue
         if image.storage_status not in {"stored", "deletion_pending"}:
@@ -167,6 +186,11 @@ def process_deletion_request(db, request_id: UUID, storage) -> bool:
         except Exception:
             _release_for_retry(request, "private_image_deletion_failed")
             db.commit()
+            return False
+        # Re-check ownership after the external call: a stale worker must not
+        # commit database erasure after a replacement worker has claimed the job.
+        request = _lock_owned_request(db, request_id, claim_token)
+        if request is None:
             return False
         image.storage_status = "deleted"
         image.deleted_at = datetime.now(timezone.utc)
@@ -223,20 +247,25 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
             claimed = _claim_deletion_request(
                 db, request_id, now=now, stale_before=stale_processing_before
             )
-            if not claimed:
+            if claimed is None:
                 continue
 
             summary["processed"] += 1
             try:
-                if process_deletion_request(db, request_id, storage):
+                if process_deletion_request(db, request_id, storage, claim_token=claimed):
                     summary["completed"] += 1
                 else:
                     summary["failed"] += 1
+            except DeletionClaimLost:
+                # A newer worker owns the request; never reset its state to pending.
+                db.rollback()
+                summary["failed"] += 1
             except Exception:
                 db.rollback()
                 row = db.get(AccountDeletionRequest, request_id)
                 if row is not None and row.status == "processing":
                     _release_for_retry(row, "unexpected_processing_error")
+                    row.claim_token = None
                     db.commit()
                 summary["failed"] += 1
         return summary
