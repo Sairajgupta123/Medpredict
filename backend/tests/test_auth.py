@@ -806,3 +806,54 @@ def test_access_token_with_future_issued_at_is_rejected() -> None:
 
     token = _signed_test_token(iat=datetime.now(timezone.utc) + timedelta(minutes=10))
     assert decode_access_token(token) is None
+
+
+def test_login_rate_limit_is_enforced_per_normalized_email(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.api.v1 import auth
+
+    monkeypatch.setattr(auth, "verify_password", lambda *_: True)
+    payload = {"email": "TARGET@example.com", "password": "WrongPassword123!"}
+    for _ in range(10):
+        response = client.post("/api/v1/auth/login", json=payload)
+        assert response.status_code == 401
+
+    limited = client.post(
+        "/api/v1/auth/login",
+        json={"email": "target@example.com", "password": "WrongPassword123!"},
+    )
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "900"
+
+
+def test_password_reset_request_rate_limit_keeps_generic_responses(
+    client: TestClient,
+) -> None:
+    payload = {"email": "unknown-reset-target@example.com"}
+    for _ in range(3):
+        response = client.post(
+            "/api/v1/auth/password-reset/request", json=payload
+        )
+        assert response.status_code == 202
+        assert "If an account exists" in response.json()["message"]
+
+    limited = client.post(
+        "/api/v1/auth/password-reset/request", json=payload
+    )
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "3600"
+
+
+def test_registration_rate_limit_is_enforced_per_email(client: TestClient) -> None:
+    payload = {"email": "limited-register@example.com", "password": "StrongPass123!"}
+    first = client.post("/api/v1/auth/register", json=payload)
+    assert first.status_code == 201
+
+    for _ in range(4):
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 409
+
+    limited = client.post("/api/v1/auth/register", json=payload)
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "3600"

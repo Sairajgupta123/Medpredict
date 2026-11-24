@@ -3,6 +3,7 @@
 Importing this module registers every model with the shared SQLAlchemy metadata.
 """
 
+from app.models.auth_rate_limit import AuthRateLimitBucket
 from app.models.catalog import CatalogReviewEvent, Disease, DiseaseSymptom, Symptom
 from app.models.catalog_reference import CatalogReference, CatalogReferenceEvent
 from app.models.feedback import PredictionFeedback
@@ -24,6 +25,7 @@ from app.models.prediction import (
 from app.models.user import RoleProvisioningEvent, User
 
 __all__ = [
+    "AuthRateLimitBucket",
     "CareRecommendation",
     "CatalogReviewEvent",
     "CatalogReference",

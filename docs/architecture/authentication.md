@@ -93,7 +93,7 @@ The current implementation does not yet include:
 - Email verification or verified-email enforcement
 - Refresh tokens and refresh-token rotation
 - Per-device session management; logout currently revokes all account access tokens
-- Login/registration rate limiting and abuse detection
+- IP/network-level login and registration rate limiting, distributed abuse detection, and alerting
 - Multi-factor authentication
 - Admin roles and role-based access control
 - Account export/deletion workflow and associated prediction-data retention handling
@@ -110,3 +110,23 @@ outside local development.
 Do not include passwords, tokens, raw symptom descriptions, or private image object keys in logs.
 A user's authentication identity must not be treated as permission to access every prediction:
 resource ownership checks must be added to each history/report endpoint when those features are built.
+
+
+## Authentication request throttling
+
+The API persists rate-limit buckets in PostgreSQL (SQLite is supported for tests). Keys are
+HMAC-SHA256 digests using the application secret; raw email addresses are not stored in the
+throttle table.
+
+Current per-identifier limits:
+
+- Login: 10 attempts per normalized email address per 15-minute window.
+- Registration: 5 attempts per normalized email address per hour.
+- Password-reset request: 3 attempts per normalized email address per hour.
+
+Excess requests receive HTTP 429 with a `Retry-After` header. These limits are shared across
+application workers because they are stored in the database, not process memory. They are
+account-targeted limits only: they do not stop an attacker rotating email addresses or
+distributing requests across IPs. A production deployment still needs trusted edge/WAF
+IP-based throttling, monitoring, and abuse response. Do not treat this control as a complete
+anti-bot or denial-of-service defense.

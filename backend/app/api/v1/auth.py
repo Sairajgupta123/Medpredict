@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.dependencies import CurrentUser, DbSession
 from app.core.config import get_settings
 from app.core.email import send_password_reset_email
+from app.core.auth_rate_limit import enforce_auth_rate_limit
 from app.core.password_reset import (
     consume_password_reset_token,
     invalidate_password_reset_token,
@@ -54,6 +55,7 @@ def _token_response(user: User) -> TokenResponse:
 )
 def register(payload: RegisterRequest, db: DbSession) -> TokenResponse:
     """Create an account and return its access token."""
+    enforce_auth_rate_limit(db, "register", payload.email, limit=5, window_seconds=3600)
     existing = db.scalar(select(User).where(User.email == payload.email))
     if existing is not None:
         raise HTTPException(
@@ -86,6 +88,7 @@ def register(payload: RegisterRequest, db: DbSession) -> TokenResponse:
 )
 def login(payload: LoginRequest, db: DbSession) -> TokenResponse:
     """Authenticate credentials and return a short-lived access token."""
+    enforce_auth_rate_limit(db, "login", payload.email, limit=10, window_seconds=900)
     user = db.scalar(select(User).where(User.email == payload.email))
     stored_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
     password_valid = verify_password(payload.password, stored_hash)
@@ -113,6 +116,7 @@ def request_password_reset(
     db: DbSession,
 ) -> dict[str, str]:
     """Return a generic response to prevent account/email enumeration."""
+    enforce_auth_rate_limit(db, "password_reset", payload.email, limit=3, window_seconds=3600)
     generic_response = {
         "message": "If an account exists for this email, password reset instructions will be sent."
     }
