@@ -35,7 +35,7 @@ shopt -s nullglob
 archives=("$BACKUP_DIR"/medipredict-*.dump)
 [[ "${#archives[@]}" -eq 1 ]]
 [[ -s "${archives[0]}.sha256" ]]
-sha256sum --check "${archives[0]}.sha256"
+(cd "$BACKUP_DIR" && sha256sum --check "$(basename "${archives[0]}").sha256")
 
 # Restore must fail closed without the explicit isolated-target acknowledgement.
 if ALLOW_DATABASE_RESTORE=NO BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh" >/dev/null 2>&1; then
