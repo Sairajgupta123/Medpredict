@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = await readBoundedJsonBody(request, 8_192);
+  const parsed = await readBoundedJsonBody(request, 20 * 1024);
   if (!parsed.ok) {
     return NextResponse.json(
       { detail: parsed.status === 413 ? "Request is too large." : "Please provide valid JSON." },
