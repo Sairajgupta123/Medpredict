@@ -137,7 +137,7 @@ def _valid_checkpoint_and_metadata():
         "calibration_temperature": 1.2,
         "abstention_threshold": 0.65,
         "threshold_selection_partition": "validation_only",
-        "dataset_governance": governance,
+        "dataset_governance": dict(governance),
         "clinical_validation": False,
         "intended_use": "offline_research_only",
     }
