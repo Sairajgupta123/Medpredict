@@ -101,3 +101,39 @@ def test_production_rejects_insecure_or_incomplete_deployment_settings(
 
     with pytest.raises(ValueError, match=message):
         settings.validate_security_configuration()
+
+
+def test_production_rejects_private_image_storage_without_retention_policy() -> None:
+    settings = Settings(
+        environment="production",
+        app_secret_key="a-cryptographically-random-secret-value",
+        require_verified_email=True,
+        database_url="postgresql+psycopg://app:secret@db:5432/medipredict?sslmode=require",
+        frontend_base_url="https://app.example.test",
+        cors_origins="https://app.example.test",
+        smtp_host="smtp.example.test",
+        smtp_sender_email="noreply@example.test",
+        skin_image_s3_bucket="private-medipredict-images",
+        skin_image_s3_region="ap-south-1",
+    )
+
+    with pytest.raises(ValueError, match="SKIN_IMAGE_RETENTION_DAYS"):
+        settings.validate_security_configuration()
+
+
+def test_private_image_storage_accepts_bounded_explicit_retention_policy() -> None:
+    settings = Settings(
+        environment="production",
+        app_secret_key="a-cryptographically-random-secret-value",
+        require_verified_email=True,
+        database_url="postgresql+psycopg://app:secret@db:5432/medipredict?sslmode=require",
+        frontend_base_url="https://app.example.test",
+        cors_origins="https://app.example.test",
+        smtp_host="smtp.example.test",
+        smtp_sender_email="noreply@example.test",
+        skin_image_s3_bucket="private-medipredict-images",
+        skin_image_s3_region="ap-south-1",
+        skin_image_retention_days=30,
+    )
+
+    settings.validate_security_configuration()
