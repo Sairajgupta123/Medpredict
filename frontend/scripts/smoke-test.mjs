@@ -126,6 +126,16 @@ await check(
 
 const testPredictionId = "00000000-0000-4000-8000-000000000001";
 await check(
+  "reject cross-origin skin-image review consent revocation",
+  { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST", headers: { Origin: "https://invalid.example" } } },
+  403,
+);
+await check(
+  "reject missing origin for skin-image review consent revocation",
+  { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST" } },
+  403,
+);
+await check(
   "require authentication to revoke skin-image review consent",
   { path: `/api/skin-images/${testPredictionId}/revoke-review-consent`, init: { method: "POST", headers: { Origin: requestOrigin } } },
   401,
