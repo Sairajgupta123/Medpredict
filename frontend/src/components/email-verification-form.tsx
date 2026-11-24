@@ -28,6 +28,7 @@ export function EmailVerificationForm() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ email: email.trim() }),
+        cache: "no-store",
         signal: AbortSignal.timeout(12_000),
       });
       const result = await response.json().catch(() => null) as { message?: string; detail?: string } | null;
@@ -53,6 +54,7 @@ export function EmailVerificationForm() {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ token: token.trim() }),
+        cache: "no-store",
         signal: AbortSignal.timeout(12_000),
       });
       const result = await response.json().catch(() => null) as { message?: string; detail?: string } | null;
