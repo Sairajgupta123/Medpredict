@@ -148,7 +148,7 @@ def test_account_deletion_retries_recent_retention_pending_image_immediately():
                 db.expire_all()
                 claimed_image = db.get(SkinImageAnalysis, image_id)
                 assert claimed_image is not None
-                assert claimed_image.deletion_requested_at > old_lease
+                assert claimed_image.deletion_requested_at.replace(tzinfo=timezone.utc) > old_lease.replace(tzinfo=timezone.utc)
                 self.deleted.append(object_key)
 
         storage = LeaseCheckingStorage()
