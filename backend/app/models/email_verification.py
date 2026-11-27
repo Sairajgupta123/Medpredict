@@ -16,6 +16,7 @@ class EmailVerificationToken(Base):
     __table_args__ = (
         Index("ix_email_verification_tokens_user_id", "user_id"),
         Index("ix_email_verification_tokens_expires_at", "expires_at"),
+        Index("ix_email_verification_tokens_used_at", "used_at"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
