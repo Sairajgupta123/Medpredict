@@ -131,3 +131,58 @@ def test_non_positive_token_lifetime_is_rejected(db_session) -> None:
     user = _active_user(db_session)
     with pytest.raises(ValueError, match="lifetime must be positive"):
         issue_email_verification_token(db_session, user, expires_in_minutes=0)
+
+
+def test_cleanup_removes_only_old_expired_or_long_consumed_tokens(db_session) -> None:
+    from app.core.email_verification import cleanup_expired_email_verification_tokens
+
+    user = _active_user(db_session)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=48)
+    old_expired = EmailVerificationToken(
+        user_id=user.id, token_hash="a" * 64,
+        expires_at=cutoff - timedelta(minutes=1), used_at=None,
+    )
+    old_consumed = EmailVerificationToken(
+        user_id=user.id, token_hash="b" * 64,
+        expires_at=now + timedelta(minutes=10),
+        used_at=cutoff - timedelta(minutes=1),
+    )
+    fresh_unused = EmailVerificationToken(
+        user_id=user.id, token_hash="c" * 64,
+        expires_at=now + timedelta(minutes=10), used_at=None,
+    )
+    fresh_consumed = EmailVerificationToken(
+        user_id=user.id, token_hash="d" * 64,
+        expires_at=now + timedelta(minutes=10),
+        used_at=cutoff + timedelta(minutes=1),
+    )
+    db_session.add_all([old_expired, old_consumed, fresh_unused, fresh_consumed])
+    db_session.commit()
+
+    deleted = cleanup_expired_email_verification_tokens(
+        db_session, older_than=cutoff, limit=10
+    )
+    assert deleted == 2
+    remaining_hashes = set(
+        db_session.scalars(select(EmailVerificationToken.token_hash)).all()
+    )
+    assert remaining_hashes == {"c" * 64, "d" * 64}
+
+
+def test_email_verification_cleanup_rejects_naive_cutoff(db_session) -> None:
+    from app.core.email_verification import cleanup_expired_email_verification_tokens
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        cleanup_expired_email_verification_tokens(
+            db_session, older_than=datetime.now(), limit=10
+        )
+
+
+def test_email_verification_cleanup_enforces_bounded_batch(db_session) -> None:
+    from app.core.email_verification import cleanup_expired_email_verification_tokens
+
+    with pytest.raises(ValueError, match="between 1 and 1000"):
+        cleanup_expired_email_verification_tokens(
+            db_session, older_than=datetime.now(timezone.utc), limit=1001
+        )
