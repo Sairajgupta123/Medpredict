@@ -219,3 +219,40 @@ def test_expiry_batch_respects_requested_limit(db_session: Session) -> None:
         "deleted",
         "stored",
     ]
+
+
+def test_failed_image_deletion_is_retried_and_only_then_revokes_consent(
+    db_session: Session,
+) -> None:
+    prediction, image = _expired_image(db_session)
+    failing_storage = FakeImageStorage(fail=True)
+    first = purge_expired_skin_image_records(
+        db_session,
+        image_storage=failing_storage,
+        as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+    db_session.refresh(image)
+    assert first == {"processed": 1, "deleted": 0, "failed": 1}
+    assert image.storage_status == "deletion_pending"
+
+    retry_storage = FakeImageStorage()
+    second = purge_expired_skin_image_records(
+        db_session,
+        image_storage=retry_storage,
+        as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+    db_session.refresh(image)
+    actions = list(db_session.scalars(
+        select(PredictionConsentEvent.action).where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        ).order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+    ).all())
+
+    assert second == {"processed": 1, "deleted": 1, "failed": 0}
+    assert retry_storage.deleted == [image.object_key]
+    assert image.storage_status == "deleted"
+    assert image.retention_expires_at is None
+    assert actions == ["granted", "revoked"]
