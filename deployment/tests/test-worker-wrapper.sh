@@ -6,7 +6,7 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 export PATH="$TMP/bin:$PATH"
 export FAKE_WORKER_STATUS=0
-export FAKE_WORKER_SUMMARY="Account deletion batch: processed=2 completed=2 failed=0"
+export FAKE_WORKER_SUMMARY="Account deletion batch: processed=2 completed=2 failed=0 possible_backlog=false"
 
 cat > "$TMP/bin/python" <<'FAKE_PYTHON'
 #!/usr/bin/env bash
