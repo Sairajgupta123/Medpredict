@@ -327,6 +327,28 @@ def test_skin_loader_rejects_manifest_symlink(tmp_path):
         load_skin_research_model(str(checkpoint.resolve()))
 
 
+
+def test_skin_loader_rejects_symlinked_parent_directory(tmp_path):
+    import json
+    from ml.skin_image.inference import load_skin_research_model
+
+    actual = tmp_path / "actual"
+    actual.mkdir()
+    checkpoint = actual / "model.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    (actual / "model_metadata.json").write_text(json.dumps({
+        "intended_use": "offline_research_only",
+        "clinical_validation": False,
+    }), encoding="utf-8")
+    (actual / "artifact_manifest.json").write_text("{}", encoding="utf-8")
+    linked = tmp_path / "linked"
+    linked.symlink_to(actual, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="directory path must not contain symlinks"):
+        load_skin_research_model(str(linked / "model.pt"))
+
+
+
 def test_skin_loader_hashes_checkpoint_with_streaming_reads(tmp_path, monkeypatch):
     import hashlib
     import json
