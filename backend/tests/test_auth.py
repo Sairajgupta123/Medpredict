@@ -1038,6 +1038,59 @@ def test_email_verification_consumes_token_once_and_marks_user_verified(
         db.close()
 
 
+
+
+def test_email_verification_revokes_preverification_access_token(
+    client: TestClient, monkeypatch
+) -> None:
+    """A token issued before mailbox proof must not become valid after confirmation."""
+    from app.api import dependencies
+    from app.api.v1 import auth
+    from app.core.config import Settings
+
+    verified_settings = Settings(require_verified_email=True)
+    monkeypatch.setattr(auth, "get_settings", lambda: verified_settings)
+    monkeypatch.setattr(dependencies, "get_settings", lambda: verified_settings)
+
+    registration = client.post(
+        "/api/v1/auth/register",
+        json={"email": "preverify@example.com", "password": "StrongPass123!"},
+    )
+    assert registration.status_code == 201
+    preverification_token = registration.json()["access_token"]
+    headers = {"Authorization": f"Bearer {preverification_token}"}
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+    delivered = {}
+    monkeypatch.setattr(
+        auth,
+        "send_email_verification_email",
+        lambda recipient, raw_token: delivered.update(token=raw_token),
+    )
+    requested = client.post(
+        "/api/v1/auth/email-verification/request",
+        json={"email": "preverify@example.com"},
+    )
+    assert requested.status_code == 202
+
+    confirmed = client.post(
+        "/api/v1/auth/email-verification/confirm",
+        json={"token": delivered["token"]},
+    )
+    assert confirmed.status_code == 200
+
+    # Confirmation must not upgrade a token obtained before email ownership proof.
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "preverify@example.com", "password": "StrongPass123!"},
+    )
+    assert login.status_code == 200
+    fresh_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/api/v1/auth/me", headers=fresh_headers).status_code == 200
+
+
 def test_email_verification_delivery_failure_invalidates_token(
     client: TestClient, monkeypatch
 ) -> None:
