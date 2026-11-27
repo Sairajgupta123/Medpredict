@@ -187,6 +187,30 @@ Do not enable image intake until private bucket access, encryption, lifecycle po
 retention duration, monitoring and recovery have been reviewed. The worker is not a
 substitute for an object-store lifecycle policy or an operational alert on repeated failures.
 
+## Private S3 image deletion and versioning
+
+The S3 adapter uses server-side encryption and never sets a public ACL. For
+unversioned buckets, deletion uses the idempotent `DeleteObject` operation.
+For buckets with versioning enabled or suspended, deletion enumerates versions
+and delete markers for the exact opaque image key and permanently removes them
+in bounded batches. A partial version-delete response is treated as a failure,
+so the retention/account-erasure worker leaves the database record pending for
+retry instead of marking the image deleted.
+
+If bucket versioning is enabled or suspended, grant the worker narrowly scoped
+permissions for `GetBucketVersioning`, `ListBucketVersions` on the image
+bucket, and `DeleteObjectVersion` only under the `skin-images/*` prefix, in
+addition to the required object put/get/delete permissions. Do not grant
+bucket-wide administrative access. Verify the policy against the actual cloud
+provider and test denied/partial-delete behavior before enabling image intake.
+
+Configure an independent bucket lifecycle policy for current and noncurrent
+versions, expired delete markers, and incomplete multipart uploads. The
+application retention worker remains the authoritative per-record expiry and
+consent workflow; a bucket lifecycle policy is defense in depth and must not
+delete objects before the disclosed application retention deadline. Confirm
+lifecycle behavior with synthetic objects in a non-production bucket.
+
 ## Operational monitoring and alerting
 
 The application exposes liveness and database-readiness separately; configure the
