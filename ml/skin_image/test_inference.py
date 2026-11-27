@@ -300,6 +300,42 @@ def test_skin_loader_rejects_modified_checkpoint_before_torch_load(tmp_path):
         load_skin_research_model(str(checkpoint.resolve()))
 
 
+
+def test_skin_loader_wraps_unsafe_pickle_error(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    import pickle
+    import sys
+    import types
+
+    from ml.skin_image.inference import load_skin_research_model
+
+    checkpoint = tmp_path / "model.pt"
+    metadata_path = tmp_path / "model_metadata.json"
+    manifest_path = tmp_path / "artifact_manifest.json"
+    checkpoint.write_bytes(b"checkpoint")
+    metadata = {"intended_use": "offline_research_only", "clinical_validation": False}
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    manifest = {
+        "purpose": "offline_research_only",
+        "checkpoint_file": checkpoint.name,
+        "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        "metadata_file": metadata_path.name,
+        "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    fake_torch = types.ModuleType("torch")
+    def unsafe_load(*args, **kwargs):
+        raise pickle.UnpicklingError("unsupported global in checkpoint")
+    fake_torch.load = unsafe_load
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    with pytest.raises(ValueError, match="could not be loaded safely"):
+        load_skin_research_model(str(checkpoint.resolve()))
+
+
+
 def test_skin_loader_rejects_relative_checkpoint_path():
     from ml.skin_image.inference import load_skin_research_model
 
