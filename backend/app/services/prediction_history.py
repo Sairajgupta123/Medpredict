@@ -556,8 +556,8 @@ def purge_expired_skin_image_records(
     failed = 0
     processed = 0
     for candidate in candidates:
-        # Claim each row independently and keep its lock through object deletion.
-        # This prevents two workers from deleting the same object concurrently.
+        # Claim each row under a DB lock, then persist its lease before network I/O.
+        # The lease blocks immediate duplicate claims after the transaction commits.
         image_record = db.scalar(
             select(SkinImageAnalysis)
             .where(
