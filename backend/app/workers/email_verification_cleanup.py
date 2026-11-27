@@ -28,7 +28,10 @@ def run_cleanup_batch(*, limit: int = 500) -> int:
 def main() -> int:
     """Print aggregate-only cleanup status."""
     deleted = run_cleanup_batch()
-    print(f"Email verification token cleanup: deleted={deleted}")
+    print(
+        f"Email verification token cleanup: deleted={deleted} "
+        f"possible_backlog={str(deleted >= 500).lower()}"
+    )
     return 0
 
 
