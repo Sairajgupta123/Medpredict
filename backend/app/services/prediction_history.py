@@ -177,10 +177,9 @@ def delete_user_history_item(
             reason="Assignment cleared because the owner deleted image history.",
         )
 
-        # Deleting owner history revokes every exact reviewer grant before
-        # storage cleanup begins. The revocation and deletion-pending marker
-        # commit together, so a failed object deletion cannot leave reviewer
-        # access active while the owner is retrying cleanup.
+    # Revoke exact-image grants for every image prediction, even if a legacy
+    # or damaged record is missing its SkinImageAnalysis metadata row.
+    if prediction.modality in {"skin_image", "combined"}:
         active_scopes = db.scalars(
             select(CatalogReviewerScope)
             .where(
@@ -206,27 +205,27 @@ def delete_user_history_item(
                 reason=revocation_reason,
             ))
 
-        if image_record.storage_status != "deleted":
-            image_record.storage_status = "deletion_pending"
-            image_record.deletion_requested_at = (
-                image_record.deletion_requested_at or datetime.now(timezone.utc)
-            )
-            db.commit()
+    if image_record is not None and image_record.storage_status != "deleted":
+        image_record.storage_status = "deletion_pending"
+        image_record.deletion_requested_at = (
+            image_record.deletion_requested_at or datetime.now(timezone.utc)
+        )
+        db.commit()
 
-            try:
-                image_storage.delete_private(image_record.object_key)
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=(
-                        "Image deletion is pending and will need to be retried. "
-                        "The history record has been retained."
-                    ),
-                ) from exc
+        try:
+            image_storage.delete_private(image_record.object_key)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Image deletion is pending and will need to be retried. "
+                    "The history record has been retained."
+                ),
+            ) from exc
 
-            image_record.storage_status = "deleted"
-            image_record.deleted_at = datetime.now(timezone.utc)
-            db.commit()
+        image_record.storage_status = "deleted"
+        image_record.deleted_at = datetime.now(timezone.utc)
+        db.commit()
 
     db.delete(prediction)
     db.commit()
