@@ -493,6 +493,17 @@ def test_owner_revocation_atomically_disables_reviewer_scope(
     assert response.status_code == 200
     assert response.json()["reviewer_access_revoked"] is True
 
+    owner_status = client.get(
+        f"/api/v1/skin-images/{prediction_id}/review-status",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert owner_status.status_code == 200
+    assert owner_status.json()["status"] == "review_access_withdrawn"
+    assert owner_status.json()["clinical_interpretation_performed"] is False
+    assert owner_status.json()["disease_prediction_performed"] is False
+    assert "reviewer_id" not in owner_status.json()
+    assert "object_key" not in owner_status.json()
+
     # Repeating the same withdrawal must not append duplicate consent or scope
     # audit events, and must not claim that an already-revoked grant was active.
     repeated_response = client.post(
