@@ -1,10 +1,10 @@
 """Owner-scoped prediction history and consent operations."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.services.skin_image_storage import SkinImageStorage
@@ -372,7 +372,11 @@ def set_skin_image_retention_expiry(
 
 
 def list_expired_skin_image_records(
-    db: Session, *, as_of: datetime, limit: int = 100
+    db: Session,
+    *,
+    as_of: datetime,
+    limit: int = 100,
+    retry_before: datetime | None = None,
 ) -> list[SkinImageAnalysis]:
     """Find stored images whose explicit retention deadline has elapsed.
 
@@ -384,11 +388,30 @@ def list_expired_skin_image_records(
         raise ValueError("Expiry query timestamp must include a timezone.")
     if not 1 <= limit <= 500:
         raise ValueError("Expiry query limit must be between 1 and 500.")
+    eligible_storage = SkinImageAnalysis.storage_status == "stored"
+    if retry_before is None:
+        eligible_storage = or_(
+            eligible_storage,
+            SkinImageAnalysis.storage_status == "deletion_pending",
+        )
+    else:
+        if retry_before.tzinfo is None or retry_before.utcoffset() is None:
+            raise ValueError("Retry lease timestamp must include a timezone.")
+        eligible_storage = or_(
+            eligible_storage,
+            and_(
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                or_(
+                    SkinImageAnalysis.deletion_requested_at.is_(None),
+                    SkinImageAnalysis.deletion_requested_at <= retry_before,
+                ),
+            ),
+        )
     return list(
         db.scalars(
             select(SkinImageAnalysis)
             .where(
-                SkinImageAnalysis.storage_status.in_({"stored", "deletion_pending"}),
+                eligible_storage,
                 SkinImageAnalysis.retention_expires_at <= as_of,
                 SkinImageAnalysis.retention_expires_at.is_not(None),
             )
@@ -522,7 +545,13 @@ def purge_expired_skin_image_records(
     Prediction and consent audit rows are retained. Failed objects remain in
     deletion_pending state for a later retry and are never reported as deleted.
     """
-    candidates = list_expired_skin_image_records(db, as_of=as_of, limit=limit)
+    # A durable two-hour lease prevents another worker from immediately
+    # reclaiming a deletion_pending row after the claim transaction commits.
+    # Expired leases are retried automatically; stored rows are immediately eligible.
+    retry_before = as_of - timedelta(hours=2)
+    candidates = list_expired_skin_image_records(
+        db, as_of=as_of, limit=limit, retry_before=retry_before
+    )
     deleted = 0
     failed = 0
     processed = 0
@@ -533,7 +562,16 @@ def purge_expired_skin_image_records(
             select(SkinImageAnalysis)
             .where(
                 SkinImageAnalysis.id == candidate.id,
-                SkinImageAnalysis.storage_status.in_({"stored", "deletion_pending"}),
+                or_(
+                    SkinImageAnalysis.storage_status == "stored",
+                    and_(
+                        SkinImageAnalysis.storage_status == "deletion_pending",
+                        or_(
+                            SkinImageAnalysis.deletion_requested_at.is_(None),
+                            SkinImageAnalysis.deletion_requested_at <= retry_before,
+                        ),
+                    ),
+                ),
                 SkinImageAnalysis.retention_expires_at.is_not(None),
                 SkinImageAnalysis.retention_expires_at <= as_of,
             )
@@ -544,9 +582,8 @@ def purge_expired_skin_image_records(
 
         processed += 1
         image_record.storage_status = "deletion_pending"
-        image_record.deletion_requested_at = (
-            image_record.deletion_requested_at or datetime.now(timezone.utc)
-        )
+        # Refresh the lease on every claim, including retries.
+        image_record.deletion_requested_at = as_of
         owner_id = db.scalar(
             select(Prediction.user_id).where(Prediction.id == image_record.prediction_id)
         )
