@@ -27,7 +27,12 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final="$BACKUP_DIR/medipredict-$stamp.dump"
 tmp="$final.partial"
 checksum_tmp="$final.sha256.partial"
-cleanup() { rm -f "$tmp" "$checksum_tmp"; rmdir "$lock" 2>/dev/null || true; }
+published=0
+cleanup() {
+  rm -f "$tmp" "$checksum_tmp"
+  if [[ "$published" != "1" ]]; then rm -f "$final" "$final.sha256"; fi
+  rmdir "$lock" 2>/dev/null || true
+}
 trap cleanup EXIT
 if [[ -e "$final" || -e "$final.sha256" ]]; then
   echo "A backup for this timestamp already exists; refusing to overwrite it." >&2; exit 2
@@ -40,6 +45,7 @@ pg_restore --list "$tmp" >/dev/null
 (cd "$BACKUP_DIR" && sha256sum "$(basename "$tmp")" | sed "s|$(basename "$tmp")|$(basename "$final")|") > "$checksum_tmp"
 mv "$tmp" "$final"
 mv "$checksum_tmp" "$final.sha256"
+published=1
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'medipredict-*.dump' -mtime "+$RETENTION_DAYS" -print -delete
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'medipredict-*.dump.sha256' -mtime "+$RETENTION_DAYS" -delete
 printf 'Backup created: %s\n' "$final"
