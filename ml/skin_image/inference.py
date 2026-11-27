@@ -293,7 +293,10 @@ def load_skin_research_model(checkpoint_path: str | "Path", *, device: str = "cp
         variant=settings["variant"],
         pretrained=False,
     )
-    model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+    try:
+        model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+    except RuntimeError as exc:
+        raise ValueError("Skin checkpoint weights do not match the selected architecture") from exc
     model.to(device)
     model.eval()
     return {
