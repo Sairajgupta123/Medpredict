@@ -79,6 +79,8 @@ def test_configuration_accepts_five_minute_minimum_token_lifetime() -> None:
         ({"smtp_sender_email": None}, "SMTP_SENDER_EMAIL"),
         ({"smtp_use_tls": False}, "SMTP_USE_TLS"),
         ({"smtp_username": "mailer"}, "SMTP_USERNAME"),
+        ({"skin_image_s3_bucket": "private-images"}, "SKIN_IMAGE_S3_BUCKET and SKIN_IMAGE_S3_REGION"),
+        ({"skin_image_s3_region": "ap-south-1"}, "SKIN_IMAGE_S3_BUCKET and SKIN_IMAGE_S3_REGION"),
     ],
 )
 def test_production_rejects_insecure_or_incomplete_deployment_settings(
