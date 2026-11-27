@@ -37,6 +37,17 @@ if grep -q 'sensitive@example.test\|do-not-print' <<<"$output"; then
   echo "Worker wrapper leaked raw stderr after failure." >&2; exit 1
 fi
 
+if WORKER_TIMEOUT_SECONDS=1 FAKE_WORKER_SLEEP=1 output="$(bash "$ROOT/run-worker.sh" account-deletion 2>&1)"; then
+  echo "Worker wrapper unexpectedly accepted a timed-out worker." >&2; exit 1
+else
+  status=$?
+  [[ "$status" -eq 124 ]]
+fi
+grep -q 'worker_run name=account_deletion status=failure exit_code=124 duration_seconds=' <<<"$output"
+if grep -q 'sensitive-stdout@example.test\\|sensitive-stderr@example.test\\|image-key=do-not-print\\|do-not-print' <<<"$output"; then
+  echo "Worker wrapper leaked output from a timed-out worker." >&2; exit 1
+fi
+
 if bash "$ROOT/run-worker.sh" arbitrary-python-module >/dev/null 2>&1; then
   echo "Worker wrapper accepted an arbitrary module." >&2; exit 1
 fi
