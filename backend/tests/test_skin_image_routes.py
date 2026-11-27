@@ -1495,3 +1495,82 @@ def test_consent_withdrawal_after_completed_review_blocks_future_reviewer_access
     finally:
         db.close()
 
+def test_consent_withdrawal_revokes_stale_scope_when_image_metadata_is_missing(
+    client: TestClient,
+) -> None:
+    """Missing image metadata must not leave an active reviewer authorization."""
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-missing-meta-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        reviewer = User(
+            email=f"skin-missing-meta-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([owner, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
+        reviewer_id = reviewer.id
+        db.add_all([
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=datetime.now(timezone.utc),
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=prediction_id,
+                granted_by=owner.id,
+                grant_reason="Historical exact-image authorization.",
+            ),
+        ])
+        db.commit()
+        owner_headers = {
+            "Authorization": f"Bearer {create_access_token(owner.id)}"
+        }
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/api/v1/skin-images/{prediction_id}/revoke-review-consent",
+        headers=owner_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["consent_status"] == "revoked"
+    assert response.json()["reviewer_access_revoked"] is True
+
+    db = TestingSessionLocal()
+    try:
+        scope = db.query(CatalogReviewerScope).filter_by(
+            reviewer_id=reviewer_id,
+            scope_type="skin_image",
+            scope_key=str(prediction_uuid),
+        ).one()
+        assert scope.revoked_at is not None
+        assert scope.revoked_by is not None
+        assert scope.revoke_reason == "Image owner revoked human-review consent."
+        event = db.query(CatalogReviewerScopeEvent).filter_by(
+            scope_id=scope.id,
+            event_type="revoked",
+        ).one()
+        assert event.reason == "Image owner revoked human-review consent."
+    finally:
+        db.close()
+
