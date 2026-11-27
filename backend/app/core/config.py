@@ -95,8 +95,25 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "SKIN_IMAGE_S3_BUCKET and SKIN_IMAGE_S3_REGION must be configured together."
                 )
-            if self.skin_image_s3_bucket and self.skin_image_retention_days is None:
-                raise ValueError("SKIN_IMAGE_RETENTION_DAYS is required when private skin-image storage is enabled.")
+            image_storage_enabled = bool(
+                self.skin_image_s3_bucket and self.skin_image_s3_bucket.strip()
+            )
+            if image_storage_enabled:
+                if self.skin_image_retention_days is None:
+                    raise ValueError("SKIN_IMAGE_RETENTION_DAYS is required when private skin-image storage is enabled.")
+                if self.skin_image_s3_encryption not in {"AES256", "aws:kms"}:
+                    raise ValueError("SKIN_IMAGE_S3_ENCRYPTION must be AES256 or aws:kms.")
+                if self.skin_image_s3_encryption == "aws:kms" and not (
+                    self.skin_image_s3_kms_key_id
+                    and self.skin_image_s3_kms_key_id.strip()
+                ):
+                    raise ValueError("SKIN_IMAGE_S3_KMS_KEY_ID is required when using aws:kms.")
+                if self.skin_image_s3_encryption == "AES256" and self.skin_image_s3_kms_key_id:
+                    raise ValueError("SKIN_IMAGE_S3_KMS_KEY_ID must not be set with AES256 encryption.")
+                if self.skin_image_s3_endpoint_url and not (
+                    self.skin_image_s3_endpoint_url.lower().startswith("https://")
+                ):
+                    raise ValueError("SKIN_IMAGE_S3_ENDPOINT_URL must use HTTPS.")
         if self.access_token_expire_minutes < 5:
             raise ValueError("Access token lifetime must be at least 5 minutes.")
 
