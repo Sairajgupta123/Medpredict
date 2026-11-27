@@ -26,3 +26,5 @@ jobs:
           bash -n deployment/postgres-backup.sh
           bash -n deployment/postgres-restore.sh
           bash deployment/tests/test-postgres-operations.sh
+          bash -n deployment/run-worker.sh
+          bash deployment/tests/test-worker-wrapper.sh
