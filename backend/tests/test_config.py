@@ -139,3 +139,64 @@ def test_private_image_storage_accepts_bounded_explicit_retention_policy() -> No
     )
 
     settings.validate_security_configuration()
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ({"skin_image_s3_encryption": "none"}, "SKIN_IMAGE_S3_ENCRYPTION"),
+        ({"skin_image_s3_encryption": "aws:kms"}, "SKIN_IMAGE_S3_KMS_KEY_ID"),
+        (
+            {
+                "skin_image_s3_encryption": "AES256",
+                "skin_image_s3_kms_key_id": "alias/medipredict",
+            },
+            "must not be set with AES256",
+        ),
+        (
+            {"skin_image_s3_endpoint_url": "http://storage.example.test"},
+            "SKIN_IMAGE_S3_ENDPOINT_URL",
+        ),
+    ],
+)
+def test_production_rejects_unsafe_private_s3_settings(
+    override: dict, message: str
+) -> None:
+    values = {
+        "environment": "production",
+        "app_secret_key": "a-cryptographically-random-secret-value",
+        "require_verified_email": True,
+        "database_url": "postgresql+psycopg://app:secret@db:5432/medipredict?sslmode=require",
+        "frontend_base_url": "https://app.example.test",
+        "cors_origins": "https://app.example.test",
+        "smtp_host": "smtp.example.test",
+        "smtp_sender_email": "noreply@example.test",
+        "skin_image_s3_bucket": "private-medipredict-images",
+        "skin_image_s3_region": "ap-south-1",
+        "skin_image_retention_days": 30,
+    }
+    values.update(override)
+    settings = Settings(**values)
+
+    with pytest.raises(ValueError, match=message):
+        settings.validate_security_configuration()
+
+
+def test_production_accepts_private_s3_kms_configuration() -> None:
+    settings = Settings(
+        environment="production",
+        app_secret_key="a-cryptographically-random-secret-value",
+        require_verified_email=True,
+        database_url="postgresql+psycopg://app:secret@db:5432/medipredict?sslmode=require",
+        frontend_base_url="https://app.example.test",
+        cors_origins="https://app.example.test",
+        smtp_host="smtp.example.test",
+        smtp_sender_email="noreply@example.test",
+        skin_image_s3_bucket="private-medipredict-images",
+        skin_image_s3_region="ap-south-1",
+        skin_image_s3_encryption="aws:kms",
+        skin_image_s3_kms_key_id="alias/medipredict-images",
+        skin_image_retention_days=30,
+    )
+
+    settings.validate_security_configuration()
