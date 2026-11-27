@@ -182,6 +182,10 @@ def confirm_email_verification(
             detail="The email verification link is invalid or has expired.",
         )
     user.email_verified = True
+    # Invalidate any access token issued during registration before the email
+    # address was verified. Otherwise a pre-verification token could become
+    # usable as soon as the mailbox owner confirms the address.
+    user.token_version += 1
     db.commit()
     return {"message": "Your email address has been verified."}
 
