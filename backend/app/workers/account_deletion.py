@@ -185,7 +185,9 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
             db.commit()
             return False
         image.storage_status = "deletion_pending"
-        image.deletion_requested_at = image.deletion_requested_at or datetime.now(timezone.utc)
+        # Refresh the shared deletion lease so retention cannot reclaim this image
+        # while account erasure is performing its external storage operation.
+        image.deletion_requested_at = datetime.now(timezone.utc)
         db.commit()
         try:
             storage.delete_private(image.object_key)
