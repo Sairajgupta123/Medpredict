@@ -1144,6 +1144,9 @@ def test_review_audit_is_scoped_and_pagination_is_bounded(
         str(prediction_ids[1]),
     }
     assert len(reviewer_audit.json()) == 2
+    # Reviewer audit results may include owner-originated events, but must
+    # never disclose a patient's email address or display name.
+    assert all(item["actor_identity"] is None for item in reviewer_audit.json())
     assert admin_first_page.status_code == 200
     assert len(admin_first_page.json()) == 2
     assert admin_second_page.status_code == 200
