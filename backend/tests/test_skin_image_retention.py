@@ -180,6 +180,35 @@ def test_failed_expiry_keeps_retry_marker_and_does_not_revoke_consent(
     assert scope.revoked_by == prediction.user_id
 
 
+def test_pending_deletion_without_retention_expiry_is_retried(db_session: Session) -> None:
+    prediction, image = _expired_image(db_session)
+    image.storage_status = "deletion_pending"
+    image.retention_expires_at = None
+    image.deletion_requested_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.commit()
+    storage = FakeImageStorage()
+
+    result = purge_expired_skin_image_records(
+        db_session,
+        image_storage=storage,
+        as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+
+    db_session.refresh(image)
+    actions = list(db_session.scalars(
+        select(PredictionConsentEvent.action).where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        ).order_by(PredictionConsentEvent.captured_at, PredictionConsentEvent.id)
+    ).all())
+    assert result == {"processed": 1, "deleted": 1, "failed": 0}
+    assert storage.deleted == [image.object_key]
+    assert image.storage_status == "deleted"
+    assert image.retention_expires_at is None
+    assert actions == ["granted", "revoked"]
+
+
 def test_unexpired_image_is_not_deleted(db_session: Session) -> None:
     _, image = _expired_image(db_session)
     image.retention_expires_at = datetime.now(timezone.utc) + timedelta(days=1)
