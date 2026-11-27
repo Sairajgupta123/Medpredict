@@ -103,8 +103,12 @@ def validate_skin_checkpoint(
 
     architecture = checkpoint["architecture"]
     variant = checkpoint["model_variant"]
-    if architecture not in {"mobilenet_v3", "resnet50", "efficientnet_b0"}:
+    if not isinstance(architecture, str) or architecture not in {
+        "mobilenet_v3", "resnet50", "efficientnet_b0"
+    }:
         raise ValueError("Checkpoint architecture is unsupported")
+    if not isinstance(variant, str):
+        raise ValueError("Checkpoint architecture and variant are inconsistent")
     if (architecture == "mobilenet_v3" and variant not in {"large", "small"}) or (
         architecture != "mobilenet_v3" and variant != "default"
     ):
