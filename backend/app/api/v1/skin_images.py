@@ -933,7 +933,11 @@ def list_skin_image_review_audit(
             "prediction_id": str(event.prediction_id),
             "event_type": event.event_type,
             "actor_id": str(event.actor_id),
-            "actor_identity": actor.display_name or actor.email,
+            # Reviewer audit views may include owner-originated events.
+            # Never expose a patient's display name or email to a reviewer.
+            "actor_identity": (
+                (actor.display_name or actor.email) if user.role == "admin" else None
+            ),
             "actor_role": actor.role,
             "assigned_reviewer_id": (
                 str(event.assigned_reviewer_id)
