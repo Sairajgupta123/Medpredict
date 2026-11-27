@@ -94,6 +94,29 @@ storage is not configured, and owner-scoped history/review authorization using t
 and synthetic non-identifiable data only. Never upload real patient images or symptoms to
 a test environment without an approved privacy and consent process.
 
+## Ingress and client-IP trust boundary
+
+The repository currently contains no reverse-proxy, API-gateway, WAF, or container
+ingress configuration. The API therefore does not derive a client identity from
+`X-Forwarded-For` or other forwarded-client headers, and its authentication
+throttles remain per-email only. Do not enable framework-level forwarded-header
+trust or add IP-based application throttling until the hosting topology and exact
+trusted proxy hop count are known.
+
+At deployment, configure the edge to:
+- discard client-supplied forwarding headers and write canonical values itself;
+- expose the API only through the trusted ingress (or explicitly document any
+  direct-access exception);
+- enforce per-IP/network limits for registration, login, verification and reset
+  endpoints, with stricter controls for credential attempts;
+- pass forwarded headers only from documented proxy addresses and configure the
+  ASGI server's trusted-proxy allowlist to those addresses only;
+- test direct-origin access, spoofed forwarding headers, IPv4/IPv6 behavior and
+  legitimate shared-NAT traffic before enabling the policy.
+
+Until this is verified, per-email throttling is only a supplemental control and
+must not be represented as protection against distributed or email-rotation abuse.
+
 ## Scheduled operational jobs
 
 Run the account-erasure worker every 15 minutes from the backend environment:
