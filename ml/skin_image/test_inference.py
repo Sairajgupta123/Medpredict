@@ -336,6 +336,45 @@ def test_skin_loader_wraps_unsafe_pickle_error(tmp_path, monkeypatch):
 
 
 
+
+def test_skin_loader_normalizes_architecture_weight_mismatch(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    import sys
+    import types
+
+    import ml.skin_image.model as model_module
+    from ml.skin_image.inference import load_skin_research_model
+
+    checkpoint_data, metadata = _valid_checkpoint_and_metadata()
+    checkpoint_path = tmp_path / "skin_model.pt"
+    metadata_path = tmp_path / "model_metadata.json"
+    manifest_path = tmp_path / "artifact_manifest.json"
+    checkpoint_path.write_bytes(b"checkpoint")
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    manifest = {
+        "purpose": "offline_research_only",
+        "checkpoint_file": checkpoint_path.name,
+        "checkpoint_sha256": hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
+        "metadata_file": metadata_path.name,
+        "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.load = lambda *args, **kwargs: checkpoint_data
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    class MismatchedModel:
+        def load_state_dict(self, state_dict, strict):
+            raise RuntimeError("size mismatch for classifier.weight")
+    monkeypatch.setattr(model_module, "build_skin_classifier", lambda **kwargs: MismatchedModel())
+
+    with pytest.raises(ValueError, match="weights do not match the selected architecture"):
+        load_skin_research_model(str(checkpoint_path.resolve()))
+
+
+
 def test_skin_loader_rejects_relative_checkpoint_path():
     from ml.skin_image.inference import load_skin_research_model
 
