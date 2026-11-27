@@ -73,6 +73,14 @@ def test_cleanup_index_supports_expiry_scan():
     assert "ix_auth_rate_limit_buckets_window_started_at" in indexes
 
 
+
+def test_email_verification_cleanup_indexes_expiry_and_consumption_columns():
+    from app.models.email_verification import EmailVerificationToken
+
+    indexes = {index.name for index in EmailVerificationToken.__table__.indexes}
+    assert "ix_email_verification_tokens_expires_at" in indexes
+    assert "ix_email_verification_tokens_used_at" in indexes
+
 def test_email_verification_cleanup_worker_passes_bounded_cutoff_and_closes_session(
     monkeypatch,
 ):
