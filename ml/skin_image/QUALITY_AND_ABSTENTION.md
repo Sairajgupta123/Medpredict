@@ -23,9 +23,15 @@ Thresholds must be selected on validation data using a predeclared coverage/risk
 evaluated once on an untouched test set. Report both coverage and accepted-set performance; a
 system that abstains on most difficult examples can otherwise look misleadingly strong.
 
+## Calibration status
+
+The offline training pipeline now fits scalar temperature scaling on validation logits only,
+selects its abstention threshold on validation data, and evaluates calibration and selective
+coverage on the untouched test partition. See `CALIBRATION.md` for the exact procedure.
+This does not establish subgroup calibration or reliability on unsupported inputs.
+
 ## Not implemented yet
 
-- Probability calibration (for example, temperature scaling fit only on validation logits)
 - Out-of-distribution detection validated against representative unsupported images
 - Modality classification (dermoscopy versus ordinary phone photographs)
 - Clinician-reviewed image quality thresholds
