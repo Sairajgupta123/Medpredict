@@ -256,9 +256,11 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
                 ),
             ))
             .order_by(AccountDeletionRequest.requested_at, AccountDeletionRequest.id)
-            .limit(limit)
+            .limit(limit + 1)
         ).all())
-        summary = {"processed": 0, "completed": 0, "failed": 0}
+        possible_backlog = len(candidate_ids) > limit
+        candidate_ids = candidate_ids[:limit]
+        summary = {"processed": 0, "completed": 0, "failed": 0, "possible_backlog": possible_backlog}
         for request_id in candidate_ids:
             # Compare-and-set claim prevents duplicate work across workers.
             claimed = _claim_deletion_request(
