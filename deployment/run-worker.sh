@@ -52,13 +52,13 @@ duration=$((finished - started))
 # values. Emit only the known aggregate summary formats and a bounded status record.
 case "$label" in
   account_deletion)
-    summary_pattern='^Account deletion batch: processed=[0-9]+ completed=[0-9]+ failed=[0-9]+$'
+    summary_pattern='^Account deletion batch: processed=[0-9]+ completed=[0-9]+ failed=[0-9]+ possible_backlog=(true|false)$'
     ;;
   skin_image_retention)
-    summary_pattern='^Skin-image retention batch: processed=[0-9]+ deleted=[0-9]+ failed=[0-9]+$'
+    summary_pattern='^Skin-image retention batch: processed=[0-9]+ deleted=[0-9]+ failed=[0-9]+ possible_backlog=(true|false)$'
     ;;
   auth_rate_limit_cleanup)
-    summary_pattern='^Authentication rate-limit cleanup: deleted=[0-9]+$'
+    summary_pattern='^Authentication rate-limit cleanup: deleted=[0-9]+ possible_backlog=(true|false)$'
     ;;
   email_verification_cleanup)
     summary_pattern='^Email verification token cleanup: deleted=[0-9]+$'
