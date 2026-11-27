@@ -401,11 +401,11 @@ def list_expired_skin_image_records(
     limit: int = 100,
     retry_before: datetime | None = None,
 ) -> list[SkinImageAnalysis]:
-    """Find stored images whose explicit retention deadline has elapsed.
+    """Find expired stored images and retryable pending deletions.
 
     The retention worker consumes this bounded candidate set and rechecks each
-    row under a lock before deleting its private object. Unknown, failed, and
-    in-flight states are intentionally excluded.
+    row under a lock before deleting its private object. Pending rows are
+    eligible only after their persisted deletion lease expires.
     """
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("Expiry query timestamp must include a timezone.")
