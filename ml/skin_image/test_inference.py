@@ -216,6 +216,26 @@ def test_checkpoint_validation_requires_valid_manifest_digest(mutation, message)
         validate_skin_checkpoint(checkpoint, metadata)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("architecture", ["mobilenet_v3"], "architecture is unsupported"),
+        ("architecture", {"name": "mobilenet_v3"}, "architecture is unsupported"),
+        ("model_variant", ["large"], "architecture and variant are inconsistent"),
+        ("model_variant", {"name": "large"}, "architecture and variant are inconsistent"),
+    ],
+)
+def test_checkpoint_validation_rejects_non_string_architecture_fields(
+    field, value, message
+) -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, metadata = _valid_checkpoint_and_metadata()
+    checkpoint[field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
 def test_checkpoint_validation_rejects_wrong_class_index_mapping() -> None:
     from ml.skin_image.inference import validate_skin_checkpoint
 
