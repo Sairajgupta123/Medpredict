@@ -29,6 +29,20 @@ if settings.allowed_origins:
         allow_headers=["Authorization", "Content-Type"],
     )
 
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Apply browser-facing security headers to every API response."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+    if settings.environment.lower() == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
 
 @app.get("/", tags=["Root"], summary="API information")
 def read_root() -> dict[str, str]:
