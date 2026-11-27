@@ -236,11 +236,22 @@ def test_failed_image_deletion_is_retried_and_only_then_revokes_consent(
     assert first == {"processed": 1, "deleted": 0, "failed": 1}
     assert image.storage_status == "deletion_pending"
 
+    # A second worker cannot reclaim the fresh lease immediately.
     retry_storage = FakeImageStorage()
-    second = purge_expired_skin_image_records(
+    immediate = purge_expired_skin_image_records(
         db_session,
         image_storage=retry_storage,
         as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+    assert immediate == {"processed": 0, "deleted": 0, "failed": 0}
+    assert retry_storage.deleted == []
+
+    # Once the two-hour lease expires, a later worker retries the same object.
+    second = purge_expired_skin_image_records(
+        db_session,
+        image_storage=retry_storage,
+        as_of=datetime.now(timezone.utc) + timedelta(hours=2, seconds=1),
         limit=10,
     )
     db_session.refresh(image)
