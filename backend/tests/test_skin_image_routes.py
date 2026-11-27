@@ -325,10 +325,19 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
                 grant_reason="Owner approved this exact image review.",
             ),
         ])
+        db.add(SkinImageReviewEvent(
+            prediction_id=prediction.id,
+            image_analysis_id=image_record.id,
+            event_type="assigned",
+            actor_id=owner.id,
+            assigned_reviewer_id=reviewer.id,
+            reason="Owner-originated assignment record for privacy verification.",
+        ))
         db.commit()
         prediction_id = str(prediction.id)
         prediction_uuid = prediction.id
         reviewer_id = reviewer.id
+        owner_id = owner.id
         reviewer_token = create_access_token(reviewer.id)
     finally:
         db.close()
@@ -345,6 +354,18 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cross-origin-resource-policy"] == "same-origin"
     assert "sandbox" in response.headers["content-security-policy"]
+
+    reviewer_events = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/events",
+        headers={"Authorization": f"Bearer {reviewer_token}"},
+    )
+    assert reviewer_events.status_code == 200
+    owner_event = next(
+        item for item in reviewer_events.json()
+        if item["event_type"] == "assigned"
+    )
+    assert owner_event["actor_id"] is None
+    assert owner_event["assigned_reviewer_id"] == str(reviewer_id)
 
     db = TestingSessionLocal()
     try:
