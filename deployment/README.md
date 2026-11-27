@@ -191,6 +191,26 @@ Do not enable image intake until private bucket access, encryption, lifecycle po
 retention duration, monitoring and recovery have been reviewed. The worker is not a
 substitute for an object-store lifecycle policy or an operational alert on repeated failures.
 
+## Privacy-safe worker execution wrapper
+
+For scheduled execution, prefer the allowlisted wrapper so the scheduler receives a
+bounded duration, exit status and aggregate-only summary without replaying raw worker
+stderr or tracebacks:
+
+```bash
+bash deployment/run-worker.sh account-deletion
+bash deployment/run-worker.sh skin-image-retention
+bash deployment/run-worker.sh auth-rate-limit-cleanup
+bash deployment/run-worker.sh email-verification-cleanup
+```
+
+Set `WORKER_TIMEOUT_SECONDS` per job (default 900; allowed 1–86400). The wrapper
+accepts only the four named worker jobs, propagates non-zero worker/timeout exit codes,
+and emits a low-cardinality `worker_run` status line with duration. It prints only
+recognized aggregate summary lines; raw exception text and stderr are discarded to
+avoid leaking identifiers or credentials into scheduler logs. Use the scheduler's
+exit-code alerting and retain aggregate logs according to the incident policy.
+
 ## Private S3 image deletion and versioning
 
 The S3 adapter uses server-side encryption and never sets a public ACL. For
