@@ -40,7 +40,7 @@ if grep -q 'sensitive-stdout@example.test\|sensitive-stderr@example.test\|image-
   echo "Worker wrapper leaked output after failure." >&2; exit 1
 fi
 
-if WORKER_TIMEOUT_SECONDS=1 FAKE_WORKER_SLEEP=1 output="$(bash "$ROOT/run-worker.sh" account-deletion 2>&1)"; then
+if output="$(WORKER_TIMEOUT_SECONDS=1 FAKE_WORKER_SLEEP=1 bash "$ROOT/run-worker.sh" account-deletion 2>&1)"; then
   echo "Worker wrapper unexpectedly accepted a timed-out worker." >&2; exit 1
 else
   status=$?
