@@ -248,6 +248,7 @@ def delete_user_history_item(
 
         image_record.storage_status = "deleted"
         image_record.deleted_at = datetime.now(timezone.utc)
+        image_record.retention_expires_at = None
         db.commit()
 
     db.delete(prediction)
@@ -410,41 +411,34 @@ def list_expired_skin_image_records(
         raise ValueError("Expiry query timestamp must include a timezone.")
     if not 1 <= limit <= 500:
         raise ValueError("Expiry query limit must be between 1 and 500.")
-    if retry_before is not None and (
-        retry_before.tzinfo is None or retry_before.utcoffset() is None
-    ):
-        raise ValueError("Retry lease timestamp must include a timezone.")
-    pending_lease_expired = (
-        True
-        if retry_before is None
-        else or_(
-            SkinImageAnalysis.deletion_requested_at.is_(None),
-            SkinImageAnalysis.deletion_requested_at <= retry_before,
-        )
-    )
-    # Stored objects need an explicit elapsed retention deadline. A durable
-    # deletion_pending marker is independently retryable, including when a
-    # user-initiated consent withdrawal failed before any expiry was scheduled.
-    eligible = or_(
-        and_(
-            SkinImageAnalysis.storage_status == "stored",
-            SkinImageAnalysis.retention_expires_at.is_not(None),
-            SkinImageAnalysis.retention_expires_at <= as_of,
-        ),
-        and_(
+    eligible_storage = SkinImageAnalysis.storage_status == "stored"
+    if retry_before is None:
+        eligible_storage = or_(
+            eligible_storage,
             SkinImageAnalysis.storage_status == "deletion_pending",
-            pending_lease_expired,
-        ),
-    )
+        )
+    else:
+        if retry_before.tzinfo is None or retry_before.utcoffset() is None:
+            raise ValueError("Retry lease timestamp must include a timezone.")
+        eligible_storage = or_(
+            eligible_storage,
+            and_(
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                or_(
+                    SkinImageAnalysis.deletion_requested_at.is_(None),
+                    SkinImageAnalysis.deletion_requested_at <= retry_before,
+                ),
+            ),
+        )
     return list(
         db.scalars(
             select(SkinImageAnalysis)
-            .where(eligible)
-            .order_by(
-                SkinImageAnalysis.retention_expires_at,
-                SkinImageAnalysis.deletion_requested_at,
-                SkinImageAnalysis.id,
+            .where(
+                eligible_storage,
+                SkinImageAnalysis.retention_expires_at <= as_of,
+                SkinImageAnalysis.retention_expires_at.is_not(None),
             )
+            .order_by(SkinImageAnalysis.retention_expires_at, SkinImageAnalysis.id)
             .limit(limit)
         ).all()
     )
@@ -533,9 +527,13 @@ def revoke_skin_image_history_consent(
 
     if image_record.storage_status != "deleted":
         image_record.storage_status = "deletion_pending"
-        image_record.deletion_requested_at = (
-            image_record.deletion_requested_at or datetime.now(timezone.utc)
-        )
+        # Consent withdrawal is an immediate end to owner retention. Persist
+        # an immediate expiry so the retention worker can reconcile a failed
+        # object deletion even when the owner never configured a retention date.
+        deletion_at = datetime.now(timezone.utc)
+        image_record.deletion_requested_at = deletion_at
+        image_record.retention_expires_at = deletion_at
+        image_record.retention_policy_version = policy_version.strip()
         db.commit()
         try:
             image_storage.delete_private(image_record.object_key)
@@ -592,11 +590,7 @@ def purge_expired_skin_image_records(
             .where(
                 SkinImageAnalysis.id == candidate.id,
                 or_(
-                    and_(
-                        SkinImageAnalysis.storage_status == "stored",
-                        SkinImageAnalysis.retention_expires_at.is_not(None),
-                        SkinImageAnalysis.retention_expires_at <= as_of,
-                    ),
+                    SkinImageAnalysis.storage_status == "stored",
                     and_(
                         SkinImageAnalysis.storage_status == "deletion_pending",
                         or_(
@@ -605,6 +599,8 @@ def purge_expired_skin_image_records(
                         ),
                     ),
                 ),
+                SkinImageAnalysis.retention_expires_at.is_not(None),
+                SkinImageAnalysis.retention_expires_at <= as_of,
             )
             .with_for_update(skip_locked=True)
         )
