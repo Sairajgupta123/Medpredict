@@ -369,30 +369,33 @@ def revoke_skin_image_review_consent(
                 assigned_reviewer_id=previous_reviewer_id,
                 reason="Assignment cleared because the owner revoked human-review consent.",
             ))
-        active_scopes = db.scalars(
-            select(CatalogReviewerScope)
-            .where(
-                CatalogReviewerScope.scope_type == "skin_image",
-                CatalogReviewerScope.scope_key == str(prediction.id),
-                CatalogReviewerScope.revoked_at.is_(None),
-            )
-            .with_for_update()
-        ).all()
-        revoked_at = datetime.now(timezone.utc)
-        for scope in active_scopes:
-            reason = "Image owner revoked human-review consent."
-            scope.revoked_by = user.id
-            scope.revoked_at = revoked_at
-            scope.revoke_reason = reason
-            db.add(CatalogReviewerScopeEvent(
-                scope_id=scope.id,
-                reviewer_id=scope.reviewer_id,
-                event_type="revoked",
-                scope_type="skin_image",
-                scope_key=str(prediction.id),
-                operator_id=user.id,
-                reason=reason,
-            ))
+    # Revoke all exact-image scopes even if the image metadata row is
+    # missing. Consent is the authorization source of truth; stale grants
+    # should not survive a withdrawal just because metadata is unavailable.
+    active_scopes = db.scalars(
+        select(CatalogReviewerScope)
+        .where(
+            CatalogReviewerScope.scope_type == "skin_image",
+            CatalogReviewerScope.scope_key == str(prediction.id),
+            CatalogReviewerScope.revoked_at.is_(None),
+        )
+        .with_for_update()
+    ).all()
+    revoked_at = datetime.now(timezone.utc)
+    for scope in active_scopes:
+        reason = "Image owner revoked human-review consent."
+        scope.revoked_by = user.id
+        scope.revoked_at = revoked_at
+        scope.revoke_reason = reason
+        db.add(CatalogReviewerScopeEvent(
+            scope_id=scope.id,
+            reviewer_id=scope.reviewer_id,
+            event_type="revoked",
+            scope_type="skin_image",
+            scope_key=str(prediction.id),
+            operator_id=user.id,
+            reason=reason,
+        ))
     db.commit()
     return {
         "prediction_id": str(prediction.id),
