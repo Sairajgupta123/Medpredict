@@ -8,9 +8,9 @@ def test_account_deletion_main_reports_lookahead_backlog(monkeypatch, capsys):
     monkeypatch.setattr(
         account_deletion,
         "run_deletion_batch",
-        lambda *, limit: {
-            "processed": limit,
-            "completed": limit,
+        lambda: {
+            "processed": account_deletion.DELETION_BATCH_LIMIT,
+            "completed": account_deletion.DELETION_BATCH_LIMIT,
             "failed": 0,
             "possible_backlog": True,
         },
@@ -25,7 +25,7 @@ def test_retention_main_marks_full_batch_as_possible_backlog(monkeypatch, capsys
     monkeypatch.setattr(
         skin_image_retention,
         "run_retention_batch",
-        lambda *, limit: {"processed": limit, "deleted": limit, "failed": 0},
+        lambda: {"processed": skin_image_retention.RETENTION_BATCH_LIMIT, "deleted": skin_image_retention.RETENTION_BATCH_LIMIT, "failed": 0},
     )
     assert skin_image_retention.main() == 0
     output = capsys.readouterr().out
@@ -36,7 +36,7 @@ def test_retention_main_does_not_mark_short_batch_as_backlog(monkeypatch, capsys
     monkeypatch.setattr(
         skin_image_retention,
         "run_retention_batch",
-        lambda *, limit: {"processed": limit - 1, "deleted": limit - 1, "failed": 0},
+        lambda: {"processed": skin_image_retention.RETENTION_BATCH_LIMIT - 1, "deleted": skin_image_retention.RETENTION_BATCH_LIMIT - 1, "failed": 0},
     )
     assert skin_image_retention.main() == 0
     assert "possible_backlog=false" in capsys.readouterr().out
@@ -46,7 +46,7 @@ def test_auth_cleanup_main_marks_full_batch_as_possible_backlog(monkeypatch, cap
     monkeypatch.setattr(
         auth_rate_limit_cleanup,
         "run_cleanup_batch",
-        lambda *, limit: limit,
+        lambda: auth_rate_limit_cleanup.CLEANUP_BATCH_LIMIT,
     )
     assert auth_rate_limit_cleanup.main() == 0
     assert "possible_backlog=true" in capsys.readouterr().out
@@ -56,7 +56,7 @@ def test_auth_cleanup_main_does_not_mark_short_batch_as_backlog(monkeypatch, cap
     monkeypatch.setattr(
         auth_rate_limit_cleanup,
         "run_cleanup_batch",
-        lambda *, limit: limit - 1,
+        lambda: auth_rate_limit_cleanup.CLEANUP_BATCH_LIMIT - 1,
     )
     assert auth_rate_limit_cleanup.main() == 0
     assert "possible_backlog=false" in capsys.readouterr().out
@@ -66,7 +66,7 @@ def test_email_cleanup_main_marks_full_batch_as_possible_backlog(monkeypatch, ca
     monkeypatch.setattr(
         email_verification_cleanup,
         "run_cleanup_batch",
-        lambda *, limit: limit,
+        lambda: email_verification_cleanup.CLEANUP_BATCH_LIMIT,
     )
     assert email_verification_cleanup.main() == 0
     assert "possible_backlog=true" in capsys.readouterr().out
@@ -76,7 +76,7 @@ def test_email_cleanup_main_does_not_mark_short_batch_as_backlog(monkeypatch, ca
     monkeypatch.setattr(
         email_verification_cleanup,
         "run_cleanup_batch",
-        lambda *, limit: limit - 1,
+        lambda: email_verification_cleanup.CLEANUP_BATCH_LIMIT - 1,
     )
     assert email_verification_cleanup.main() == 0
     assert "possible_backlog=false" in capsys.readouterr().out
