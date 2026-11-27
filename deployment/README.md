@@ -183,6 +183,10 @@ The worker processes at most 100 expired image records per run by default (maxim
 deletes objects through the configured private S3-compatible adapter, revokes expired
 reviewer scopes, and reports aggregate counts only. A failed deletion remains marked
 `deletion_pending` for a later retry; the worker exits non-zero if any deletion failed.
+A pending deletion is leased using its persisted request timestamp: another retention
+worker will not reclaim it immediately, and an abandoned/failed claim becomes eligible
+again after two hours. Schedule the worker frequently enough to meet the documented
+retention recovery target and alert on repeated failures.
 Do not enable image intake until private bucket access, encryption, lifecycle policy,
 retention duration, monitoring and recovery have been reviewed. The worker is not a
 substitute for an object-store lifecycle policy or an operational alert on repeated failures.
