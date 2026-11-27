@@ -34,7 +34,7 @@ if [[ "${1:-}" == "--list" ]]; then
 fi
 printf 'restore invoked\n' >> "$RESTORE_LOG"
 FAKE_RESTORE
-chmod +x "$TMP/bin/pg_dump" "$TMP/bin/pg_restore"
+chmod +x "$TMP/bin/pg_dump" "$TMP/bin/psql" "$TMP/bin/pg_restore"
 
 bash "$ROOT/postgres-backup.sh"
 shopt -s nullglob
