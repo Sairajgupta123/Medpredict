@@ -116,8 +116,10 @@ def read_skin_image_model_status() -> SkinImageModelStatusResponse:
     """Expose the current safe capability state without loading model artifacts."""
     settings = get_settings()
     intake_configured = bool(
-        settings.skin_image_s3_bucket
-        and settings.skin_image_s3_region
+        isinstance(settings.skin_image_s3_bucket, str)
+        and settings.skin_image_s3_bucket.strip()
+        and isinstance(settings.skin_image_s3_region, str)
+        and settings.skin_image_s3_region.strip()
         and settings.skin_image_retention_days is not None
     )
     return SkinImageModelStatusResponse(
