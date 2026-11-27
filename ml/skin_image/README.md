@@ -65,7 +65,7 @@ See EXPERIMENTS.md for the controlled architecture comparison runner.
 Patient-grouped proportions are approximate because patients are indivisible. The splitter requires
 at least three distinct patients per class and guarantees every class appears in train, validation
 and test; it searches candidate partitions to reduce distribution imbalance. Review image and
-patient support counts before interpreting results. Class weighting, validation-only calibration
+patient support counts before interpreting results. Class weighting, validation-only temperature calibration
 and validation-selected abstention are integrated. Validated out-of-distribution detection,
 external validation and subgroup fairness analysis remain outstanding.
 
