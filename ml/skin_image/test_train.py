@@ -273,9 +273,23 @@ def test_skin_artifact_guard_rejects_existing_checkpoint(tmp_path) -> None:
                 "experiment_config.json",
                 "skin_mobilenet_v3_large_best.pt",
                 "model_metadata.json",
+                "artifact_manifest.json",
                 "experiment_report.json",
             ],
         )
+
+
+def test_skin_artifact_guard_rejects_existing_artifact_manifest(tmp_path) -> None:
+    from ml.skin_image.train import ensure_skin_artifacts_do_not_exist
+
+    manifest = tmp_path / "artifact_manifest.json"
+    manifest.write_text("{\"keep\": true}", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="artifact_manifest.json"):
+        ensure_skin_artifacts_do_not_exist(
+            tmp_path,
+            ["experiment_config.json", "artifact_manifest.json"],
+        )
+    assert manifest.read_text(encoding="utf-8") == "{\"keep\": true}"
 
 
 def test_skin_artifact_guard_allows_new_output_directory(tmp_path) -> None:
