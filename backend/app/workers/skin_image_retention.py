@@ -12,7 +12,10 @@ from app.services.skin_image_storage import DisabledSkinImageStorage
 from app.services.skin_image_storage_factory import build_skin_image_storage
 
 
-def run_retention_batch(*, limit: int = 100) -> dict[str, int]:
+RETENTION_BATCH_LIMIT = 100
+
+
+def run_retention_batch(*, limit: int = RETENTION_BATCH_LIMIT) -> dict[str, int]:
     """Execute one bounded retention batch without logging image identifiers."""
     if not 1 <= limit <= 500:
         raise ValueError("Retention batch limit must be between 1 and 500.")
@@ -36,13 +39,13 @@ def run_retention_batch(*, limit: int = 100) -> dict[str, int]:
 
 def main() -> int:
     """Print aggregate-only status and return non-zero when any deletion failed."""
-    summary = run_retention_batch()
+    summary = run_retention_batch(limit=RETENTION_BATCH_LIMIT)
     print(
         "Skin-image retention batch: "
         f"processed={summary['processed']} "
         f"deleted={summary['deleted']} "
         f"failed={summary['failed']} "
-        f"possible_backlog={str(summary['processed'] >= 100).lower()}"
+        f"possible_backlog={str(summary['processed'] >= RETENTION_BATCH_LIMIT).lower()}"
     )
     return 1 if summary["failed"] else 0
 
