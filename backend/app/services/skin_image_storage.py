@@ -139,7 +139,47 @@ class S3PrivateSkinImageStorage:
 
     def delete_private(self, object_key: str) -> None:
         _validate_object_key(object_key)
-        # S3 DeleteObject is idempotent for an absent key.
+        # In a versioned bucket, DeleteObject only creates a delete marker;
+        # previous object versions would continue retaining the image bytes.
+        # Permanently remove every version and delete marker for this exact key.
+        versioning = self._client.get_bucket_versioning(Bucket=self._bucket)
+        status = versioning.get("Status")
+        if status in {"Enabled", "Suspended"}:
+            key_marker = None
+            version_marker = None
+            while True:
+                params: dict[str, Any] = {
+                    "Bucket": self._bucket,
+                    "Prefix": object_key,
+                }
+                if key_marker is not None:
+                    params["KeyMarker"] = key_marker
+                if version_marker is not None:
+                    params["VersionIdMarker"] = version_marker
+                page = self._client.list_object_versions(**params)
+                targets = [
+                    {"Key": item["Key"], "VersionId": item["VersionId"]}
+                    for collection in ("Versions", "DeleteMarkers")
+                    for item in page.get(collection, [])
+                    if item.get("Key") == object_key and "VersionId" in item
+                ]
+                for offset in range(0, len(targets), 1000):
+                    result = self._client.delete_objects(
+                        Bucket=self._bucket,
+                        Delete={"Objects": targets[offset:offset + 1000], "Quiet": True},
+                    )
+                    if result.get("Errors"):
+                        raise RuntimeError("Private image version deletion was incomplete.")
+                if not page.get("IsTruncated"):
+                    return
+                next_key_marker = page.get("NextKeyMarker")
+                next_version_marker = page.get("NextVersionIdMarker")
+                if not next_key_marker:
+                    raise RuntimeError("Object version listing returned an invalid continuation marker.")
+                key_marker = next_key_marker
+                version_marker = next_version_marker
+            return
+        # S3 DeleteObject is idempotent for an absent key in an unversioned bucket.
         self._client.delete_object(Bucket=self._bucket, Key=object_key)
 
 
