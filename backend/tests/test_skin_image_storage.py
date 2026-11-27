@@ -216,20 +216,20 @@ def test_s3_adapter_permanently_deletes_all_versions_and_delete_markers() -> Non
             self.pages = [
                 {
                     "Versions": [
-                        {"Key": "skin-images/opaque.jpg", "VersionId": "v1"},
-                        {"Key": "skin-images/opaque.jpg", "VersionId": "v2"},
-                        {"Key": "skin-images/other.jpg", "VersionId": "keep"},
+                        {"Key": "skin-images/0123456789abcdef0123456789abcdef.jpg", "VersionId": "v1"},
+                        {"Key": "skin-images/0123456789abcdef0123456789abcdef.jpg", "VersionId": "v2"},
+                        {"Key": "skin-images/ffffffffffffffffffffffffffffffff.jpg", "VersionId": "keep"},
                     ],
                     "DeleteMarkers": [
-                        {"Key": "skin-images/opaque.jpg", "VersionId": "marker1"}
+                        {"Key": "skin-images/0123456789abcdef0123456789abcdef.jpg", "VersionId": "marker1"}
                     ],
                     "IsTruncated": True,
-                    "NextKeyMarker": "skin-images/opaque.jpg",
+                    "NextKeyMarker": "skin-images/0123456789abcdef0123456789abcdef.jpg",
                     "NextVersionIdMarker": "v2",
                 },
                 {
                     "Versions": [
-                        {"Key": "skin-images/opaque.jpg", "VersionId": "v3"}
+                        {"Key": "skin-images/0123456789abcdef0123456789abcdef.jpg", "VersionId": "v3"}
                     ],
                     "DeleteMarkers": [],
                     "IsTruncated": False,
@@ -251,16 +251,16 @@ def test_s3_adapter_permanently_deletes_all_versions_and_delete_markers() -> Non
 
     client = VersionedClient()
     storage = S3PrivateSkinImageStorage(client=client, bucket="private")
-    storage.delete_private("skin-images/opaque.jpg")
+    storage.delete_private("skin-images/0123456789abcdef0123456789abcdef.jpg")
 
     assert len(client.list_calls) == 2
-    assert client.list_calls[1]["KeyMarker"] == "skin-images/opaque.jpg"
+    assert client.list_calls[1]["KeyMarker"] == "skin-images/0123456789abcdef0123456789abcdef.jpg"
     assert client.list_calls[1]["VersionIdMarker"] == "v2"
     assert [item["VersionId"] for item in client.delete_batches[0]] == [
         "v1", "v2", "marker1"
     ]
     assert [item["VersionId"] for item in client.delete_batches[1]] == ["v3"]
-    assert all(item["Key"] == "skin-images/opaque.jpg" for batch in client.delete_batches for item in batch)
+    assert all(item["Key"] == "skin-images/0123456789abcdef0123456789abcdef.jpg" for batch in client.delete_batches for item in batch)
 
 
 def test_s3_adapter_raises_when_version_delete_reports_partial_failure() -> None:
@@ -283,4 +283,4 @@ def test_s3_adapter_raises_when_version_delete_reports_partial_failure() -> None
         client=FailingVersionedClient(), bucket="private"
     )
     with pytest.raises(RuntimeError, match="version deletion was incomplete"):
-        storage.delete_private("skin-images/opaque.jpg")
+        storage.delete_private("skin-images/0123456789abcdef0123456789abcdef.jpg")
