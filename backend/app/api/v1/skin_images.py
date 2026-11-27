@@ -870,23 +870,31 @@ def list_skin_image_review_events(
         db, parsed_id, purpose="skin_image_review"
     ):
         raise HTTPException(status_code=403, detail="Active human-review consent is required.")
-    events = db.scalars(
-        select(SkinImageReviewEvent)
+    rows = db.execute(
+        select(SkinImageReviewEvent, User)
+        .join(User, User.id == SkinImageReviewEvent.actor_id)
         .where(SkinImageReviewEvent.prediction_id == parsed_id)
         .order_by(SkinImageReviewEvent.created_at.asc(), SkinImageReviewEvent.id.asc())
     ).all()
     return [
         {
             "event_type": event.event_type,
-            "actor_id": str(event.actor_id),
+            "actor_id": (
+                str(event.actor_id)
+                if user.role == "admin" or actor.role != "patient"
+                else None
+            ),
             "assigned_reviewer_id": (
-                str(event.assigned_reviewer_id) if event.assigned_reviewer_id else None
+                str(event.assigned_reviewer_id)
+                if event.assigned_reviewer_id is not None
+                and (user.role == "admin" or event.assigned_reviewer_id == user.id)
+                else None
             ),
             "outcome": event.outcome,
             "reason": event.reason,
             "created_at": event.created_at,
         }
-        for event in events
+        for event, actor in rows
     ]
 
 
