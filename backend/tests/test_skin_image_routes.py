@@ -337,7 +337,6 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
         prediction_id = str(prediction.id)
         prediction_uuid = prediction.id
         reviewer_id = reviewer.id
-        owner_id = owner.id
         reviewer_token = create_access_token(reviewer.id)
     finally:
         db.close()
