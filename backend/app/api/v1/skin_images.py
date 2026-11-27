@@ -932,18 +932,25 @@ def list_skin_image_review_audit(
             "event_id": str(event.id),
             "prediction_id": str(event.prediction_id),
             "event_type": event.event_type,
-            "actor_id": str(event.actor_id),
-            # Reviewer audit views may include owner-originated events.
-            # Never expose a patient's display name or email to a reviewer.
+            # Patient identifiers are not needed for reviewer audit work.
+            # Staff retain attribution; admins retain the complete audit trail.
+            "actor_id": (
+                str(event.actor_id)
+                if user.role == "admin" or actor.role != "patient"
+                else None
+            ),
             "actor_identity": (
                 (actor.display_name or actor.email)
                 if user.role == "admin" or actor.role != "patient"
                 else None
             ),
             "actor_role": actor.role,
+            # Never disclose another reviewer's stable identifier to a reviewer.
             "assigned_reviewer_id": (
                 str(event.assigned_reviewer_id)
-                if event.assigned_reviewer_id else None
+                if event.assigned_reviewer_id is not None
+                and (user.role == "admin" or event.assigned_reviewer_id == user.id)
+                else None
             ),
             "outcome": event.outcome,
             "reason": event.reason,
