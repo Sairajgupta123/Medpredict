@@ -31,7 +31,7 @@ def run_cleanup_batch(*, limit: int = CLEANUP_BATCH_LIMIT) -> int:
 
 def main() -> int:
     """Print aggregate-only cleanup status."""
-    deleted = run_cleanup_batch(limit=CLEANUP_BATCH_LIMIT)
+    deleted = run_cleanup_batch()
     print(
         f"Authentication rate-limit cleanup: deleted={deleted} "
         f"possible_backlog={str(deleted >= CLEANUP_BATCH_LIMIT).lower()}"
