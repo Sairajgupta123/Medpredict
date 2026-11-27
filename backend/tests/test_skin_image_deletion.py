@@ -826,3 +826,37 @@ def test_history_deletion_revokes_stale_scope_when_image_metadata_is_missing(
     assert scope.revoke_reason == "Owner deleted image history; reviewer access revoked."
     assert event is not None
     assert event.operator_id == owner.id
+
+def test_owner_history_deletion_does_not_finalize_after_newer_worker_takes_lease(
+    db_session: Session,
+) -> None:
+    owner, prediction = _owned_image_history(db_session)
+    image = db_session.scalar(select(SkinImageAnalysis).where(
+        SkinImageAnalysis.prediction_id == prediction.id
+    ))
+    assert image is not None
+    image_id = image.id
+    newer_lease = datetime.now(timezone.utc) + timedelta(seconds=2)
+
+    class LeaseTakingStorage(FakePrivateStorage):
+        def delete_private(self, object_key: str) -> None:
+            super().delete_private(object_key)
+            current = db_session.get(SkinImageAnalysis, image_id)
+            assert current is not None
+            current.deletion_requested_at = newer_lease
+            db_session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        delete_user_history_item(
+            db_session, owner.id, prediction.id,
+            image_storage=LeaseTakingStorage(),
+        )
+
+    assert error.value.status_code == 503
+    db_session.expire_all()
+    retained_prediction = db_session.get(Prediction, prediction.id)
+    retained_image = db_session.get(SkinImageAnalysis, image_id)
+    assert retained_prediction is not None
+    assert retained_image is not None
+    assert retained_image.storage_status == "deletion_pending"
+    assert retained_image.deletion_requested_at.replace(tzinfo=timezone.utc) == newer_lease
