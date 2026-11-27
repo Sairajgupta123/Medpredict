@@ -93,7 +93,7 @@ is below a supplied threshold. `selective_classification_metrics` reports covera
 performance. The maximum softmax score is not automatically calibrated and is not medical certainty.
 
 See `QUALITY_AND_ABSTENTION.md`. Thresholds must be selected using validation data and evaluated
-on an untouched test set. Calibration, validated out-of-distribution detection and modality checks
+on an untouched test set. Validated out-of-distribution detection and modality checks
 remain future work.
 
 ## Probability calibration
