@@ -220,6 +220,7 @@ def train_skin_model(
             "experiment_config.json",
             f"skin_{model_slug}_best.pt",
             "model_metadata.json",
+            "artifact_manifest.json",
             "experiment_report.json",
         ],
     )
