@@ -10,7 +10,10 @@ from app.core.auth_rate_limit import cleanup_expired_auth_rate_limit_buckets
 from app.db.session import SessionLocal
 
 
-def run_cleanup_batch(*, limit: int = 500) -> int:
+CLEANUP_BATCH_LIMIT = 500
+
+
+def run_cleanup_batch(*, limit: int = CLEANUP_BATCH_LIMIT) -> int:
     """Delete one bounded batch of buckets older than 48 hours."""
     if not 1 <= limit <= 1000:
         raise ValueError("Cleanup batch limit must be between 1 and 1000.")
@@ -28,10 +31,10 @@ def run_cleanup_batch(*, limit: int = 500) -> int:
 
 def main() -> int:
     """Print aggregate-only cleanup status."""
-    deleted = run_cleanup_batch()
+    deleted = run_cleanup_batch(limit=CLEANUP_BATCH_LIMIT)
     print(
         f"Authentication rate-limit cleanup: deleted={deleted} "
-        f"possible_backlog={str(deleted >= 500).lower()}"
+        f"possible_backlog={str(deleted >= CLEANUP_BATCH_LIMIT).lower()}"
     )
     return 0
 
