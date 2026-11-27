@@ -200,3 +200,15 @@ def test_production_accepts_private_s3_kms_configuration() -> None:
     )
 
     settings.validate_security_configuration()
+
+
+@pytest.mark.parametrize("port", [0, -1, 65536])
+def test_configuration_rejects_invalid_smtp_ports(port: int) -> None:
+    with pytest.raises(ValueError):
+        Settings(smtp_port=port)
+
+
+@pytest.mark.parametrize("port", [25, 587, 2525, 65535])
+def test_configuration_accepts_valid_smtp_port_range(port: int) -> None:
+    settings = Settings(smtp_port=port)
+    assert settings.smtp_port == port
