@@ -1244,6 +1244,43 @@ def test_skin_image_model_status_reports_inference_unavailable(
     assert body["image_retention_days"] is None
     assert "not configured" in body["message"]
 
+@pytest.mark.parametrize(
+    ("bucket", "region"),
+    [
+        (" ", "us-east-1"),
+        ("medpredict-private", "  "),
+        ("", "us-east-1"),
+        ("medpredict-private", ""),
+    ],
+)
+def test_skin_image_model_status_rejects_blank_storage_configuration(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    bucket: str,
+    region: str,
+) -> None:
+    """Capability status must match the storage factory's nonblank config gate."""
+    from types import SimpleNamespace
+
+    import app.api.v1.skin_images as skin_images_module
+
+    monkeypatch.setattr(
+        skin_images_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            skin_image_s3_bucket=bucket,
+            skin_image_s3_region=region,
+            skin_image_retention_days=30,
+        ),
+    )
+
+    response = client.get("/api/v1/skin-images/model-status")
+
+    assert response.status_code == 200
+    assert response.json()["image_intake_configured"] is False
+    assert response.json()["image_retention_days"] is None
+
+
 def test_owner_review_status_is_private_and_reports_only_non_diagnostic_states(
     client: TestClient,
 ) -> None:
