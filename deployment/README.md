@@ -173,7 +173,7 @@ runs if a backlog exceeds one batch.
 Also configure IP/network-level limits at the trusted ingress (API gateway, reverse proxy, or WAF); the application-level per-email limits are not a replacement for edge protection.
 
 When private skin-image storage is deliberately enabled, also schedule the bounded image
-retention worker from the backend environment (for example, once daily):
+retention worker from the backend environment (for example, every 15 minutes):
 
 ```bash
 python -m app.workers.skin_image_retention
