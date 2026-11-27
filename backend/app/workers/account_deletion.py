@@ -120,7 +120,13 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
 
     # Revoke exact image-review scopes before attempting external object deletion.
     # This closes reviewer access immediately, including when storage is unavailable.
-    image_scope_keys = {str(image.prediction_id) for image in images}
+    image_scope_keys = {
+        str(prediction.id)
+        for prediction in predictions
+        if prediction.modality in {"skin_image", "combined"}
+    }
+    # Include owned image predictions even when legacy/corrupt data is missing
+    # its SkinImageAnalysis row; stale exact-image grants must still be revoked.
     access_changed = False
     # Clear every assignment on owned images, even if its original scope was
     # already revoked or is missing due to legacy data.
