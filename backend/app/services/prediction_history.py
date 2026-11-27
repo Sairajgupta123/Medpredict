@@ -415,7 +415,7 @@ def list_expired_skin_image_records(
     ):
         raise ValueError("Retry lease timestamp must include a timezone.")
     pending_lease_expired = (
-        SkinImageAnalysis.deletion_requested_at.is_(None)
+        True
         if retry_before is None
         else or_(
             SkinImageAnalysis.deletion_requested_at.is_(None),
