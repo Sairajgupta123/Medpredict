@@ -410,34 +410,41 @@ def list_expired_skin_image_records(
         raise ValueError("Expiry query timestamp must include a timezone.")
     if not 1 <= limit <= 500:
         raise ValueError("Expiry query limit must be between 1 and 500.")
-    eligible_storage = SkinImageAnalysis.storage_status == "stored"
-    if retry_before is None:
-        eligible_storage = or_(
-            eligible_storage,
+    if retry_before is not None and (
+        retry_before.tzinfo is None or retry_before.utcoffset() is None
+    ):
+        raise ValueError("Retry lease timestamp must include a timezone.")
+    pending_lease_expired = (
+        SkinImageAnalysis.deletion_requested_at.is_(None)
+        if retry_before is None
+        else or_(
+            SkinImageAnalysis.deletion_requested_at.is_(None),
+            SkinImageAnalysis.deletion_requested_at <= retry_before,
+        )
+    )
+    # Stored objects need an explicit elapsed retention deadline. A durable
+    # deletion_pending marker is independently retryable, including when a
+    # user-initiated consent withdrawal failed before any expiry was scheduled.
+    eligible = or_(
+        and_(
+            SkinImageAnalysis.storage_status == "stored",
+            SkinImageAnalysis.retention_expires_at.is_not(None),
+            SkinImageAnalysis.retention_expires_at <= as_of,
+        ),
+        and_(
             SkinImageAnalysis.storage_status == "deletion_pending",
-        )
-    else:
-        if retry_before.tzinfo is None or retry_before.utcoffset() is None:
-            raise ValueError("Retry lease timestamp must include a timezone.")
-        eligible_storage = or_(
-            eligible_storage,
-            and_(
-                SkinImageAnalysis.storage_status == "deletion_pending",
-                or_(
-                    SkinImageAnalysis.deletion_requested_at.is_(None),
-                    SkinImageAnalysis.deletion_requested_at <= retry_before,
-                ),
-            ),
-        )
+            pending_lease_expired,
+        ),
+    )
     return list(
         db.scalars(
             select(SkinImageAnalysis)
-            .where(
-                eligible_storage,
-                SkinImageAnalysis.retention_expires_at <= as_of,
-                SkinImageAnalysis.retention_expires_at.is_not(None),
+            .where(eligible)
+            .order_by(
+                SkinImageAnalysis.retention_expires_at,
+                SkinImageAnalysis.deletion_requested_at,
+                SkinImageAnalysis.id,
             )
-            .order_by(SkinImageAnalysis.retention_expires_at, SkinImageAnalysis.id)
             .limit(limit)
         ).all()
     )
@@ -585,7 +592,11 @@ def purge_expired_skin_image_records(
             .where(
                 SkinImageAnalysis.id == candidate.id,
                 or_(
-                    SkinImageAnalysis.storage_status == "stored",
+                    and_(
+                        SkinImageAnalysis.storage_status == "stored",
+                        SkinImageAnalysis.retention_expires_at.is_not(None),
+                        SkinImageAnalysis.retention_expires_at <= as_of,
+                    ),
                     and_(
                         SkinImageAnalysis.storage_status == "deletion_pending",
                         or_(
@@ -594,8 +605,6 @@ def purge_expired_skin_image_records(
                         ),
                     ),
                 ),
-                SkinImageAnalysis.retention_expires_at.is_not(None),
-                SkinImageAnalysis.retention_expires_at <= as_of,
             )
             .with_for_update(skip_locked=True)
         )
