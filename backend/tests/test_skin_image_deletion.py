@@ -525,8 +525,11 @@ def test_retention_purge_retries_pending_object_deletion(
     db_session.refresh(image)
     assert image.storage_status == "deletion_pending"
 
+    # Retry only after the persisted two-hour deletion lease expires.
     second = purge_expired_skin_image_records(
-        db_session, image_storage=storage, as_of=expiry + timedelta(seconds=2)
+        db_session,
+        image_storage=storage,
+        as_of=expiry + timedelta(hours=2, seconds=2),
     )
     assert second == {"processed": 1, "deleted": 1, "failed": 0}
     db_session.refresh(image)
