@@ -301,7 +301,7 @@ def run_deletion_batch(*, limit: int = DELETION_BATCH_LIMIT) -> dict[str, int]:
 
 def main() -> int:
     """Print aggregate-only status and fail when requests need retry."""
-    summary = run_deletion_batch(limit=DELETION_BATCH_LIMIT)
+    summary = run_deletion_batch()
     print(
         "Account deletion batch: "
         f"processed={summary['processed']} completed={summary['completed']} failed={summary['failed']} "
