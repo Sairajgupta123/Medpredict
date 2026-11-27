@@ -367,6 +367,7 @@ def test_image_history_consent_revocation_deletes_object_before_revoking(
 ) -> None:
     from app.services.prediction_history import (
         has_active_skin_image_consent,
+        purge_expired_skin_image_records,
         record_skin_image_consent_decision,
         revoke_skin_image_history_consent,
     )
