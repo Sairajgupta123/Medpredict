@@ -328,11 +328,17 @@ def read_reviewer_workload(
 
     pending_by_type: dict[str, int] = {}
     for target_type, model in models.items():
+        count_statement = select(func.count()).select_from(model)
+        if target_type == "disease_symptom":
+            # Correlate link scopes through their disease and symptom codes.
+            count_statement = (
+                count_statement
+                .join(Disease, Disease.id == DiseaseSymptom.disease_id)
+                .join(Symptom, Symptom.id == DiseaseSymptom.symptom_id)
+            )
         pending_by_type[target_type] = int(
             db.scalar(
-                select(func.count())
-                .select_from(model)
-                .where(
+                count_statement.where(
                     model.review_status.in_(("draft", "in_review")),
                     scope_filters[target_type],
                 )
