@@ -1219,6 +1219,43 @@ def test_reviewer_history_is_limited_to_own_decisions(
     assert other_history.status_code == 200
     assert other_history.json() == []
 
+def test_reviewer_workload_counts_only_exact_disease_symptom_links(
+    client: TestClient,
+) -> None:
+    headers = _user_headers("reviewer", grant_scopes=False)
+    db = TestingSessionLocal()
+    try:
+        reviewer = db.query(User).filter_by(email="reviewer-reviewer@example.com").one()
+        disease_a = Disease(code="DIS_LINK_SCOPE_A", name="Scoped Disease A")
+        disease_b = Disease(code="DIS_LINK_SCOPE_B", name="Unscoped Disease B")
+        symptom_a = Symptom(code="SYM_LINK_SCOPE_A", name="Scoped Symptom A")
+        symptom_b = Symptom(code="SYM_LINK_SCOPE_B", name="Unscoped Symptom B")
+        db.add_all([disease_a, disease_b, symptom_a, symptom_b])
+        db.flush()
+        db.add_all([
+            DiseaseSymptom(disease_id=disease_a.id, symptom_id=symptom_a.id),
+            DiseaseSymptom(disease_id=disease_b.id, symptom_id=symptom_b.id),
+        ])
+        db.add(CatalogReviewerScope(
+            reviewer_id=reviewer.id,
+            scope_type="disease_symptom",
+            scope_key="DIS_LINK_SCOPE_A:SYM_LINK_SCOPE_A",
+            granted_by=reviewer.id,
+            grant_reason="Test exact disease symptom workload scope.",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/catalog/review/workload", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["pending_by_type"] == {
+        "disease": 0,
+        "symptom": 0,
+        "disease_symptom": 1,
+    }
+
+
 def test_reviewer_workload_counts_only_assigned_items_and_personal_activity(
     client: TestClient,
 ) -> None:
