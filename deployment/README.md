@@ -183,11 +183,13 @@ The worker processes at most 100 expired image records per run by default (maxim
 deletes objects through the configured private S3-compatible adapter, revokes expired
 reviewer scopes, and reports aggregate counts only. A failed deletion remains marked
 `deletion_pending` for a later retry; the worker exits non-zero if any deletion failed.
-The worker also retries durable `deletion_pending` records when no retention expiry was
-scheduled (for example, after an owner-initiated consent withdrawal encounters a storage
-outage). A pending deletion is leased using its persisted request timestamp: another
-retention worker will not reclaim it immediately, and an abandoned/failed claim becomes
-eligible again after two hours. Schedule the worker frequently enough to meet the documented
+When an owner withdraws image-history consent, the API records an immediate
+retention-expiry marker before attempting object deletion. If storage is unavailable,
+the scheduled worker retries that pending deletion after its two-hour lease, even when
+the owner had never configured a retention schedule. Other deletion flows retain their
+own explicit retry/reconciliation path. A pending deletion is leased using its persisted
+request timestamp: another retention worker will not reclaim it immediately, and an
+abandoned/failed claim becomes eligible again after two hours. Schedule the worker frequently enough to meet the documented
 retention recovery target and alert on repeated failures.
 Do not enable image intake until private bucket access, encryption, lifecycle policy,
 retention duration, monitoring and recovery have been reviewed. The worker is not a
