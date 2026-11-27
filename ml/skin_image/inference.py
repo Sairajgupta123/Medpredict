@@ -177,6 +177,8 @@ def validate_skin_checkpoint(
         raise ValueError("Checkpoint dataset governance provenance is incomplete or unapproved")
 
     if metadata is not None:
+        if not isinstance(metadata, dict):
+            raise ValueError("Model metadata must be a JSON object")
         comparisons = {
             "architecture": architecture,
             "variant": variant,
