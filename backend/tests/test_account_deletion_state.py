@@ -163,3 +163,67 @@ def test_account_deletion_retries_recent_retention_pending_image_immediately():
         db.close()
         Base.metadata.drop_all(bind=engine)
 
+def test_account_deletion_revokes_image_scope_when_image_metadata_is_missing():
+    """Legacy image grants must be revoked even without a storage metadata row."""
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+
+    Base.metadata.create_all(bind=engine)
+    db = Session()
+    try:
+        user = User(
+            email="missing-image-metadata-erasure@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+            is_active=False,
+        )
+        reviewer = User(
+            email="missing-image-metadata-reviewer@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([user, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=user.id,
+            modality="skin_image",
+            status="review_required",
+        )
+        request = AccountDeletionRequest(user_id=user.id, status="processing")
+        db.add_all([prediction, request])
+        db.flush()
+        scope = CatalogReviewerScope(
+            reviewer_id=reviewer.id,
+            scope_type="skin_image",
+            scope_key=str(prediction.id),
+            granted_by=user.id,
+            grant_reason="Legacy exact-image review authorization.",
+        )
+        db.add(scope)
+        db.commit()
+
+        request_id = request.id
+        prediction_id = prediction.id
+        scope_id = scope.id
+
+        assert process_deletion_request(db, request_id, NoopStorage()) is True
+
+        db.expire_all()
+        stored_scope = db.get(CatalogReviewerScope, scope_id)
+        assert stored_scope is not None
+        assert stored_scope.revoked_at is not None
+        assert stored_scope.revoked_by == user.id
+        assert stored_scope.revoke_reason == "Owner requested account deletion."
+        audit = db.scalar(select(CatalogReviewerScopeEvent).where(
+            CatalogReviewerScopeEvent.scope_id == scope_id,
+            CatalogReviewerScopeEvent.event_type == "revoked",
+        ))
+        assert audit is not None
+        assert audit.operator_id == user.id
+        assert audit.reason == "Owner requested account deletion."
+        assert db.get(Prediction, prediction_id) is None
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+
