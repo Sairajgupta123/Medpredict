@@ -173,6 +173,18 @@ def test_checkpoint_validation_rejects_metadata_governance_mismatch() -> None:
         validate_skin_checkpoint(checkpoint, metadata)
 
 
+@pytest.mark.parametrize("metadata", [[], "metadata", 42, None])
+def test_checkpoint_validation_rejects_non_object_metadata(metadata) -> None:
+    from ml.skin_image.inference import validate_skin_checkpoint
+
+    checkpoint, _ = _valid_checkpoint_and_metadata()
+    if metadata is None:
+        # None intentionally means that no metadata comparison was requested.
+        return
+    with pytest.raises(ValueError, match="Model metadata must be a JSON object"):
+        validate_skin_checkpoint(checkpoint, metadata)
+
+
 def test_checkpoint_metadata_validation_returns_inference_settings() -> None:
     from ml.skin_image.inference import validate_skin_checkpoint
 
