@@ -1257,8 +1257,15 @@ def test_owner_review_status_is_private_and_reports_only_non_diagnostic_states(
         db.close()
 
     endpoint = f"/api/v1/skin-images/{prediction_id}/review-status"
+    unauthenticated_view = client.get(endpoint)
     forbidden_owner_view = client.get(endpoint, headers=other_headers)
+    malformed_reference = client.get(
+        "/api/v1/skin-images/not-a-uuid/review-status",
+        headers=owner_headers,
+    )
+    assert unauthenticated_view.status_code == 401
     assert forbidden_owner_view.status_code == 404
+    assert malformed_reference.status_code == 404
 
     def assert_safe_status(expected: str) -> dict:
         response = client.get(endpoint, headers=owner_headers)
