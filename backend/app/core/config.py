@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     require_verified_email: bool = False
     cors_origins: str = "http://localhost:3000"
     smtp_host: str | None = None
-    smtp_port: int = 587
+    smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_sender_email: str | None = None
