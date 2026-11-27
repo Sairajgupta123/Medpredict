@@ -174,7 +174,10 @@ class S3PrivateSkinImageStorage:
                     return
                 next_key_marker = page.get("NextKeyMarker")
                 next_version_marker = page.get("NextVersionIdMarker")
-                if not next_key_marker:
+                if (
+                    not next_key_marker
+                    or (next_key_marker, next_version_marker) == (key_marker, version_marker)
+                ):
                     raise RuntimeError("Object version listing returned an invalid continuation marker.")
                 key_marker = next_key_marker
                 version_marker = next_version_marker
