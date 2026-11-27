@@ -15,6 +15,7 @@ chmod 600 "$PGPASSFILE"
 cat > "$TMP/bin/pg_dump" <<'FAKE_DUMP'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [[ "${FAKE_DUMP_FAIL:-0}" == "1" ]]; then exit 9; fi
 for arg in "$@"; do
   case "$arg" in --file=*) printf 'valid fake custom archive\n' > "${arg#--file=}" ;; esac
 done
@@ -50,10 +51,29 @@ if ALLOW_DATABASE_RESTORE=YES BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-
 fi
 [[ ! -e "$RESTORE_LOG" ]]
 
-# A valid checksum and explicit acknowledgement allow the restore command.
+# A checksum that names a different archive must not authorize this restore.
 printf 'valid fake custom archive\n' > "${archives[0]}"
+(cd "$BACKUP_DIR" && sha256sum "$(basename "${archives[0]}")" > "$(basename "${archives[0]}").sha256")
+sed -i 's/medipredict-[0-9]*T[0-9]*Z.dump/medipredict-20000101T000000Z.dump/' "${archives[0]}.sha256"
+if ALLOW_DATABASE_RESTORE=YES BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh" >/dev/null 2>&1; then
+  echo "Restore unexpectedly accepted a checksum for a different filename." >&2; exit 1
+fi
+[[ ! -e "$RESTORE_LOG" ]]
+
+# A valid checksum and explicit acknowledgement allow the restore command.
 (cd "$BACKUP_DIR" && sha256sum "$(basename "${archives[0]}")" > "$(basename "${archives[0]}").sha256")
 ALLOW_DATABASE_RESTORE=YES BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh"
 grep -q 'restore invoked' "$RESTORE_LOG"
+
+# A failed dump must leave no published archive or stale partial file.
+export BACKUP_DIR="$TMP/failed-backups"
+mkdir -p "$BACKUP_DIR"
+if FAKE_DUMP_FAIL=1 bash "$ROOT/postgres-backup.sh" >/dev/null 2>&1; then
+  echo "Backup unexpectedly succeeded after pg_dump failure." >&2; exit 1
+fi
+if find "$BACKUP_DIR" -maxdepth 1 -type f -print -quit | grep -q .; then
+  echo "Failed backup left a published or partial file." >&2; exit 1
+fi
+[[ ! -e "$BACKUP_DIR/.medipredict-backup.lock" ]]
 
 echo "PostgreSQL backup/restore safety tests passed."
