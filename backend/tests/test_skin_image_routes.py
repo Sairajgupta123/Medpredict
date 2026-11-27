@@ -325,7 +325,8 @@ def test_assigned_reviewer_image_retrieval_is_private_and_audited(
                 grant_reason="Owner approved this exact image review.",
             ),
         ])
-        db.flush()  # Populate image_record.id before creating its audit event.\n        db.add(SkinImageReviewEvent(
+        db.flush()  # Populate image_record.id before creating its audit event.
+        db.add(SkinImageReviewEvent(
             prediction_id=prediction.id,
             image_analysis_id=image_record.id,
             event_type="assigned",
