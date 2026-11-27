@@ -11,6 +11,7 @@ on:
     paths:
       - "deployment/**"
       - ".github/workflows/deployment-ops-checks.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
