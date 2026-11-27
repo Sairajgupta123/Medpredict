@@ -20,6 +20,11 @@ for arg in "$@"; do
   case "$arg" in --file=*) printf 'valid fake custom archive\n' > "${arg#--file=}" ;; esac
 done
 FAKE_DUMP
+cat > "$TMP/bin/psql" <<'FAKE_PSQL'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf '%s\n' "${FAKE_PSQL_OBJECTS:-0}"
+FAKE_PSQL
 cat > "$TMP/bin/pg_restore" <<'FAKE_RESTORE'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -45,6 +50,12 @@ rm -f "$RESTORE_LOG"
 # Restore must fail closed without the explicit isolated-target acknowledgement.
 if ALLOW_DATABASE_RESTORE=NO BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh" >/dev/null 2>&1; then
   echo "Restore unexpectedly accepted missing acknowledgement." >&2; exit 1
+fi
+[[ ! -e "$RESTORE_LOG" ]]
+
+# A non-empty restore target must be rejected before pg_restore is invoked.
+if FAKE_PSQL_OBJECTS=2 ALLOW_DATABASE_RESTORE=YES BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh" >/dev/null 2>&1; then
+  echo "Restore unexpectedly accepted a non-empty target." >&2; exit 1
 fi
 [[ ! -e "$RESTORE_LOG" ]]
 
