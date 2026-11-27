@@ -57,6 +57,26 @@ class Settings(BaseSettings):
             if origin.strip()
         ]
 
+    @staticmethod
+    def _is_https_url(value: str, *, origin_only: bool = False) -> bool:
+        """Validate an absolute HTTPS URL without credentials or malformed authority."""
+        try:
+            parsed = urlsplit(value)
+            _ = parsed.port  # Force validation of malformed port values.
+        except ValueError:
+            return False
+        if (
+            parsed.scheme.lower() != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            return False
+        if origin_only and (parsed.path not in {"", "/"} or parsed.query):
+            return False
+        return True
+
     def validate_security_configuration(self) -> None:
         """Reject unsafe secret configuration in production."""
         if self.environment.lower() == "production":
@@ -68,19 +88,31 @@ class Settings(BaseSettings):
                 raise ValueError("The development secret cannot be used in production.")
             if not self.require_verified_email:
                 raise ValueError("REQUIRE_VERIFIED_EMAIL must be enabled in production.")
-            if not self.database_url.lower().startswith(("postgresql://", "postgresql+")):
-                raise ValueError("A PostgreSQL DATABASE_URL is required in production.")
-            ssl_mode = parse_qs(urlsplit(self.database_url).query).get("sslmode", [""])[0].lower()
+            try:
+                database = urlsplit(self.database_url)
+                _ = database.port
+            except ValueError:
+                database = None
+            if (
+                database is None
+                or database.scheme.lower() != "postgresql"
+                and not database.scheme.lower().startswith("postgresql+")
+                or not database.hostname
+                or not database.username
+                or database.fragment
+            ):
+                raise ValueError("A valid PostgreSQL DATABASE_URL with a host and username is required in production.")
+            ssl_mode = parse_qs(database.query).get("sslmode", [""])[0].lower()
             if ssl_mode not in {"require", "verify-ca", "verify-full"}:
                 raise ValueError("Production DATABASE_URL must require PostgreSQL TLS using sslmode=require, verify-ca, or verify-full.")
-            if not self.frontend_base_url.lower().startswith("https://"):
-                raise ValueError("FRONTEND_BASE_URL must use HTTPS in production.")
+            if not self._is_https_url(self.frontend_base_url):
+                raise ValueError("FRONTEND_BASE_URL must be a valid absolute HTTPS URL in production.")
             origins = self.allowed_origins
             if not origins or any(
-                not origin.lower().startswith("https://") or "*" in origin
+                "*" in origin or not self._is_https_url(origin, origin_only=True)
                 for origin in origins
             ):
-                raise ValueError("Production CORS_ORIGINS must contain explicit HTTPS origins only.")
+                raise ValueError("Production CORS_ORIGINS must contain valid HTTPS origins only (scheme and host, without path, query, credentials or wildcard).")
             if not self.smtp_host or not self.smtp_host.strip():
                 raise ValueError("SMTP_HOST is required for production account verification.")
             if not self.smtp_sender_email or not self.smtp_sender_email.strip():
@@ -110,10 +142,10 @@ class Settings(BaseSettings):
                     raise ValueError("SKIN_IMAGE_S3_KMS_KEY_ID is required when using aws:kms.")
                 if self.skin_image_s3_encryption == "AES256" and self.skin_image_s3_kms_key_id:
                     raise ValueError("SKIN_IMAGE_S3_KMS_KEY_ID must not be set with AES256 encryption.")
-                if self.skin_image_s3_endpoint_url and not (
-                    self.skin_image_s3_endpoint_url.lower().startswith("https://")
+                if self.skin_image_s3_endpoint_url and not self._is_https_url(
+                    self.skin_image_s3_endpoint_url
                 ):
-                    raise ValueError("SKIN_IMAGE_S3_ENDPOINT_URL must use HTTPS.")
+                    raise ValueError("SKIN_IMAGE_S3_ENDPOINT_URL must be a valid absolute HTTPS URL.")
         if self.access_token_expire_minutes < 5:
             raise ValueError("Access token lifetime must be at least 5 minutes.")
 
