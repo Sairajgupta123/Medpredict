@@ -275,13 +275,14 @@ def load_skin_research_model(checkpoint_path: str | "Path", *, device: str = "cp
     verify_digest(metadata_path, manifest.get("metadata_sha256"), "metadata")
 
     try:
+        import pickle
         import torch
     except ImportError as exc:
         raise RuntimeError("Install the optional skin dependencies from ml/requirements-skin.txt") from exc
 
     try:
         checkpoint = torch.load(path, map_location=device, weights_only=True)
-    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+    except (OSError, EOFError, pickle.UnpicklingError, RuntimeError, ValueError, TypeError) as exc:
         raise ValueError("Skin checkpoint could not be loaded safely") from exc
     settings = validate_skin_checkpoint(checkpoint, metadata)
     from ml.skin_image.model import build_skin_classifier
