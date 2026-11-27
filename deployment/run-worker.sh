@@ -61,7 +61,7 @@ case "$label" in
     summary_pattern='^Authentication rate-limit cleanup: deleted=[0-9]+ possible_backlog=(true|false)$'
     ;;
   email_verification_cleanup)
-    summary_pattern='^Email verification token cleanup: deleted=[0-9]+$'
+    summary_pattern='^Email verification token cleanup: deleted=[0-9]+ possible_backlog=(true|false)$'
     ;;
 esac
 summary="$(grep -E "$summary_pattern" "$tmp" | tail -n 1 || true)"
