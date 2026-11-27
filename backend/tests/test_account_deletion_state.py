@@ -1,6 +1,6 @@
 """State-reconciliation tests for the account deletion worker."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -133,15 +133,25 @@ def test_account_deletion_retries_recent_retention_pending_image_immediately():
             content_type="image/jpeg",
             image_sha256="b" * 64,
             storage_status="deletion_pending",
-            deletion_requested_at=datetime.now(timezone.utc),
+            deletion_requested_at=datetime.now(timezone.utc) - timedelta(hours=3),
         )
         db.add(image)
         db.commit()
 
         request_id = request.id
         prediction_id = prediction.id
-        storage = NoopStorage()
+        image_id = image.id
+        old_lease = image.deletion_requested_at
 
+        class LeaseCheckingStorage(NoopStorage):
+            def delete_private(self, object_key):
+                db.expire_all()
+                claimed_image = db.get(SkinImageAnalysis, image_id)
+                assert claimed_image is not None
+                assert claimed_image.deletion_requested_at > old_lease
+                self.deleted.append(object_key)
+
+        storage = LeaseCheckingStorage()
         assert process_deletion_request(db, request_id, storage) is True
 
         db.expire_all()
