@@ -8,7 +8,7 @@ type AuditEvent = {
   prediction_id: string;
   event_type: "assigned" | "unassigned" | "reassigned" | "image_accessed" | "reviewed";
   actor_id: string;
-  actor_identity: string;
+  actor_identity: string | null;
   actor_role: string;
   assigned_reviewer_id: string | null;
   outcome: string | null;
@@ -24,7 +24,7 @@ function isAuditEvent(value: unknown): value is AuditEvent {
     && typeof event.prediction_id === "string" && uuid.test(event.prediction_id)
     && ["assigned", "unassigned", "reassigned", "image_accessed", "reviewed"].includes(String(event.event_type))
     && typeof event.actor_id === "string" && uuid.test(event.actor_id)
-    && typeof event.actor_identity === "string" && event.actor_identity.length <= 320
+    && (event.actor_identity === null || (typeof event.actor_identity === "string" && event.actor_identity.length <= 320))
     // Audit events can be performed by patients (for example, consent withdrawal),
     // and a reviewer account may later be deactivated back to the patient role.
     && typeof event.actor_role === "string" && ["admin", "reviewer", "patient"].includes(event.actor_role)
@@ -92,7 +92,7 @@ export default async function SkinImageAuditPage({ searchParams }: PageProps) {
           <Link className="back-link" href="/review/skin-images">← Back to skin-image queue</Link>
           <div className="eyebrow"><span className="eyebrow-dot" /> SKIN IMAGE GOVERNANCE</div>
           <h1>Access and review <em>audit trail.</em></h1>
-          <p>Every recorded assignment, unassignment, reassignment, private image retrieval and technical review is shown with the actor identity and timestamp. This page contains audit metadata only, never image content or storage keys.</p>
+          <p>Every recorded assignment, unassignment, reassignment, private image retrieval and technical review is shown with the actor role and timestamp. Actor identity is restricted in reviewer views and available to administrators. This page contains audit metadata only, never image content or storage keys.</p>
           <div className="review-summary">
             <div><strong>{events.length.toString().padStart(2, "0")}</strong><span>EVENTS IN THIS VIEW</span></div>
             <div><strong>{user.role === "admin" ? "All image reviews" : "Your review activity"}</strong><span>AUTHORIZED AUDIT SCOPE</span></div>
@@ -121,7 +121,7 @@ export default async function SkinImageAuditPage({ searchParams }: PageProps) {
                   <span className="review-status review-status-assigned">{event.actor_role}</span>
                 </div>
                 <div className="skin-audit-grid">
-                  <div><span>Actor</span><strong>{event.actor_identity}</strong></div>
+                  <div><span>Actor</span><strong>{event.actor_identity ?? "Identity restricted"}</strong></div>
                   <div><span>Recorded at</span><strong>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(event.created_at))} IST</strong></div>
                   <div><span>Assigned reviewer</span><strong>{event.assigned_reviewer_id ?? "Not applicable"}</strong></div>
                   {event.outcome && <div><span>Outcome</span><strong>{event.outcome.replaceAll("_", " ")}</strong></div>}
