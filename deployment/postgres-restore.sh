@@ -16,7 +16,19 @@ command -v sha256sum >/dev/null || { echo "sha256sum is required." >&2; exit 127
 [[ -f "$PGPASSFILE" ]] || { echo "PGPASSFILE does not exist." >&2; exit 2; }
 [[ -s "$BACKUP_FILE" ]] || { echo "Backup file is missing or empty." >&2; exit 2; }
 [[ -f "$BACKUP_FILE.sha256" ]] || { echo "Backup checksum file is missing." >&2; exit 2; }
+backup_name="$(basename "$BACKUP_FILE")"
+if ! [[ "$backup_name" =~ ^medipredict-[0-9]{8}T[0-9]{6}Z\.dump$ ]]; then
+  echo "Backup filename does not match the expected archive format." >&2; exit 2
+fi
 chmod 600 "$PGPASSFILE"
-(cd "$(dirname "$BACKUP_FILE")" && sha256sum --check "$(basename "$BACKUP_FILE").sha256")
+checksum_line="$(cat "$BACKUP_FILE.sha256")"
+if ! [[ "$checksum_line" =~ ^([[:xdigit:]]{64})[[:space:]]+\*?${backup_name}$ ]]; then
+  echo "Backup checksum file has an invalid format or filename." >&2; exit 2
+fi
+expected_checksum="${BASH_REMATCH[1],,}"
+actual_checksum="$(sha256sum "$BACKUP_FILE" | cut -d ' ' -f 1)"
+if [[ "$actual_checksum" != "$expected_checksum" ]]; then
+  echo "Backup checksum verification failed." >&2; exit 2
+fi
 pg_restore --no-password --exit-on-error --no-owner --no-privileges --dbname="$DATABASE_URL" "$BACKUP_FILE"
 echo "Restore completed. Run application smoke tests and verify the Alembic revision before routing traffic."
