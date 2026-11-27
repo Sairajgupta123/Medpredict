@@ -785,3 +785,44 @@ def test_retention_purge_does_not_duplicate_prior_history_consent_revocation(
     assert [event.action for event in events] == ["granted", "revoked"]
     assert events[-1].policy_version == "owner-revocation-v1"
     assert storage.deleted == ["skin-images/opaque-key.jpg"]
+
+def test_history_deletion_revokes_stale_scope_when_image_metadata_is_missing(
+    db_session: Session,
+) -> None:
+    from app.models.reviewer_scope import CatalogReviewerScope, CatalogReviewerScopeEvent
+
+    owner, prediction = _owned_image_history(db_session)
+    reviewer = User(
+        id=uuid4(), email=f"{uuid4().hex}@example.test",
+        password_hash="test-only-password-hash", role="reviewer",
+        is_active=True, email_verified=True,
+    )
+    db_session.add(reviewer)
+    db_session.flush()
+    scope = CatalogReviewerScope(
+        reviewer_id=reviewer.id,
+        scope_type="skin_image",
+        scope_key=str(prediction.id),
+        granted_by=owner.id,
+        grant_reason="Owner authorized exact image review.",
+    )
+    db_session.add(scope)
+    db_session.query(SkinImageAnalysis).filter(
+        SkinImageAnalysis.prediction_id == prediction.id
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    # Legacy metadata loss must not leave a live exact-image reviewer grant.
+    delete_user_history_item(db_session, owner.id, prediction.id)
+
+    db_session.refresh(scope)
+    event = db_session.scalar(select(CatalogReviewerScopeEvent).where(
+        CatalogReviewerScopeEvent.scope_id == scope.id,
+        CatalogReviewerScopeEvent.event_type == "revoked",
+    ))
+    assert db_session.get(Prediction, prediction.id) is None
+    assert scope.revoked_at is not None
+    assert scope.revoked_by == owner.id
+    assert scope.revoke_reason == "Owner deleted image history; reviewer access revoked."
+    assert event is not None
+    assert event.operator_id == owner.id
