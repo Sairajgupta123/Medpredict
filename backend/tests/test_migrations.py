@@ -44,6 +44,7 @@ def test_migration_files_exist() -> None:
         "0025_account_deletion_requests.py",
         "0026_skin_image_unassignment_audit.py",
         "0027_account_deletion_claim_token.py",
+        "0028_email_verification_used_at.py",
     ):
         assert (versions / name).is_file()
 
@@ -55,8 +56,8 @@ def test_migration_history_has_one_head_and_expected_parent_chain() -> None:
 
     heads = script.get_revisions("heads")
     assert len(heads) == 1
-    assert heads[0].revision == "0027_deletion_claim_token"
-    assert heads[0].down_revision == "0026_skin_unassign"
+    assert heads[0].revision == "0028_email_verification_used_at"
+    assert heads[0].down_revision == "0027_deletion_claim_token"
 
     merge_head = script.get_revision("0015_merge_ref_reset_heads")
     assert merge_head is not None
@@ -122,6 +123,7 @@ def test_migration_sources_cover_registered_orm_tables() -> None:
         "0025_account_deletion_requests",
         "0026_skin_unassign",
         "0027_deletion_claim_token",
+        "0028_email_verification_used_at",
     ):
         assert f'revision: str = "{revision}"' in migration_text
     for table_name in Base.metadata.tables:
