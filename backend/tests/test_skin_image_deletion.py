@@ -464,6 +464,8 @@ def test_image_history_consent_remains_active_until_failed_delete_is_retried(
         )
     )
     assert image is not None and image.storage_status == "deletion_pending"
+    assert image.retention_expires_at is not None
+    assert image.retention_policy_version == "image-history-v1"
     assert image.review_status == "pending"
     assert image.assigned_reviewer_id is None
     assert image.assigned_by is None
@@ -477,13 +479,18 @@ def test_image_history_consent_remains_active_until_failed_delete_is_retried(
     ))
     assert unassigned is not None and unassigned.actor_id == user.id
 
-    revoke_skin_image_history_consent(
+    # Consent withdrawal persists an immediate expiry marker. The scheduled
+    # worker can therefore retry failed storage deletion without an owner-set
+    # retention schedule or another manual API request.
+    summary = purge_expired_skin_image_records(
         db_session,
-        user.id,
-        prediction.id,
         image_storage=storage,
-        policy_version="image-history-v1",
+        as_of=datetime.now(timezone.utc) + timedelta(hours=2, seconds=1),
     )
+    db_session.refresh(image)
+    assert summary == {"processed": 1, "deleted": 1, "failed": 0}
+    assert image.storage_status == "deleted"
+    assert image.retention_expires_at is None
     assert not has_active_skin_image_consent(
         db_session, prediction.id, purpose="skin_image_history"
     )
