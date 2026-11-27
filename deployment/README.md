@@ -117,6 +117,34 @@ At deployment, configure the edge to:
 Until this is verified, per-email throttling is only a supplemental control and
 must not be represented as protection against distributed or email-rotation abuse.
 
+## Frontend session and browser-request boundary
+
+The frontend auth proxy keeps the bearer token in the `medipredict_session`
+HttpOnly cookie; browser JavaScript receives only the user/session metadata.
+The cookie uses `SameSite=Lax`, `Path=/`, and the `Secure` attribute in
+production. Login and registration are bounded same-origin JSON proxies, and
+only an explicit login creates a browser session. Logout revokes the upstream
+session before clearing the cookie; transient upstream failures preserve the
+cookie so the user can retry. Authenticated account deletion clears the browser
+cookie only after the upstream request succeeds.
+
+All frontend state-changing API route handlers must validate the browser
+`Origin` against the externally visible `Host` and protocol before forwarding
+the request. The current route audit covers login, registration, logout,
+verification, password reset, account deletion, skin-image intake and consent
+revocation, symptom normalization and catalog matching. Private account export
+and session/profile reads are GET-only and require the HttpOnly session cookie.
+Keep this inventory synchronized whenever a new state-changing route is added.
+
+The origin helper reads the first `X-Forwarded-Proto` value when present because
+Next.js may run behind an internal HTTP hop. This header is security-sensitive:
+the public ingress must overwrite client-supplied forwarded-protocol headers,
+preserve the canonical Host, and be the only network path to the frontend.
+Do not treat the application check as proof of proxy trust; verify spoofed
+forwarded headers and HTTPS behavior at the deployed edge. The repository's
+production smoke script exercises missing, malformed and cross-origin Origin
+rejections, but does not replace those ingress tests.
+
 ## Scheduled operational jobs
 
 Run the account-erasure worker every 15 minutes from the backend environment:
