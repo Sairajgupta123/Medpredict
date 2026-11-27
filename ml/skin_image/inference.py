@@ -235,6 +235,8 @@ def load_skin_research_model(checkpoint_path: str | "Path", *, device: str = "cp
     if path.is_symlink() or not path.is_file():
         raise ValueError("Checkpoint must be a regular non-symlink file")
     root = path.parent
+    if any(directory.is_symlink() for directory in (root, *root.parents)):
+        raise ValueError("Checkpoint directory path must not contain symlinks")
     metadata_path = root / "model_metadata.json"
     manifest_path = root / "artifact_manifest.json"
     for candidate, label in (
