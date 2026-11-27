@@ -37,7 +37,7 @@ pg_dump --no-password --format=custom --compress=6 --file="$tmp" "$DATABASE_URL"
 test -s "$tmp"
 pg_restore --list "$tmp" >/dev/null
 # Prepare the checksum against the final archive name before publishing either file.
-sha256sum "$tmp" | sed "s|$(basename "$tmp")|$(basename "$final")|" > "$checksum_tmp"
+(cd "$BACKUP_DIR" && sha256sum "$(basename "$tmp")" | sed "s|$(basename "$tmp")|$(basename "$final")/") > "$checksum_tmp"
 mv "$tmp" "$final"
 mv "$checksum_tmp" "$final.sha256"
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'medipredict-*.dump' -mtime "+$RETENTION_DAYS" -print -delete
