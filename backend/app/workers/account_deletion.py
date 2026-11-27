@@ -234,7 +234,10 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
     return True
 
 
-def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
+DELETION_BATCH_LIMIT = 25
+
+
+def run_deletion_batch(*, limit: int = DELETION_BATCH_LIMIT) -> dict[str, int]:
     """Atomically claim a bounded batch and expose aggregate counts only."""
     if not 1 <= limit <= 100:
         raise ValueError("Deletion batch limit must be between 1 and 100.")
@@ -298,7 +301,7 @@ def run_deletion_batch(*, limit: int = 25) -> dict[str, int]:
 
 def main() -> int:
     """Print aggregate-only status and fail when requests need retry."""
-    summary = run_deletion_batch()
+    summary = run_deletion_batch(limit=DELETION_BATCH_LIMIT)
     print(
         "Account deletion batch: "
         f"processed={summary['processed']} completed={summary['completed']} failed={summary['failed']} "
