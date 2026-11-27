@@ -159,6 +159,38 @@ Do not enable image intake until private bucket access, encryption, lifecycle po
 retention duration, monitoring and recovery have been reviewed. The worker is not a
 substitute for an object-store lifecycle policy or an operational alert on repeated failures.
 
+## Operational monitoring and alerting
+
+The application exposes liveness and database-readiness separately; configure the
+platform to probe `/api/v1/health` for process liveness and
+`/api/v1/health/ready` for traffic readiness. A readiness failure should remove
+the instance from service and page the database/platform owner according to the
+deployment's incident policy. Do not expose database exception details in probes.
+
+For scheduled workers, capture exit code, start/end time, duration and aggregate
+counts from stdout/stderr. Never forward raw exception payloads, request bodies,
+email addresses, image identifiers, object keys or tokens into alert labels.
+
+Alert and investigate when:
+- any account-deletion batch exits non-zero or reports `failed > 0`;
+- pending account-deletion backlog grows or its oldest request exceeds the
+  operator-defined erasure service target;
+- authentication-throttle or verification-token cleanup repeatedly fails or
+  leaves a growing backlog;
+- any image-retention batch exits non-zero, reports failed deletions, or leaves
+  `deletion_pending` objects beyond the configured operational recovery target;
+- database readiness, migration checks, backup verification or restore drills fail.
+
+Dashboard at minimum: API liveness/readiness, HTTP 5xx and 429 rates, worker
+success/failure counts and duration, deletion backlog age, expired-image cleanup
+counts, database connection saturation, backup age/checksum status and last
+successful restore-drill timestamp. Keep labels aggregate and low-cardinality;
+do not use user IDs, emails, symptoms or image IDs as metric dimensions.
+
+A green health probe does not prove that scheduled workers, object storage,
+backups, SMTP delivery or clinical governance are healthy. Track each as a
+separate operational dependency and keep the release gate blocked until verified.
+
 ## Production gate — not yet cleared
 
 Before exposing the application publicly, complete and independently verify all of the
