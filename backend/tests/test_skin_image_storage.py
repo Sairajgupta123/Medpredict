@@ -284,3 +284,26 @@ def test_s3_adapter_raises_when_version_delete_reports_partial_failure() -> None
     )
     with pytest.raises(RuntimeError, match="version deletion was incomplete"):
         storage.delete_private("skin-images/0123456789abcdef0123456789abcdef.jpg")
+
+
+def test_s3_adapter_rejects_non_advancing_version_pagination() -> None:
+    from app.services.skin_image_storage import S3PrivateSkinImageStorage
+
+    class StuckVersionedClient(_FakeS3Client):
+        def get_bucket_versioning(self, *, Bucket: str) -> dict[str, str]:
+            return {"Status": "Enabled"}
+
+        def list_object_versions(self, **kwargs):
+            return {
+                "Versions": [],
+                "DeleteMarkers": [],
+                "IsTruncated": True,
+                "NextKeyMarker": kwargs.get("KeyMarker"),
+                "NextVersionIdMarker": kwargs.get("VersionIdMarker"),
+            }
+
+    storage = S3PrivateSkinImageStorage(
+        client=StuckVersionedClient(), bucket="private"
+    )
+    with pytest.raises(RuntimeError, match="invalid continuation marker"):
+        storage.delete_private("skin-images/0123456789abcdef0123456789abcdef.jpg")
