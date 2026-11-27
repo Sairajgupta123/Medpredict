@@ -1358,3 +1358,140 @@ def test_owner_review_status_is_private_and_reports_only_non_diagnostic_states(
         db.close()
     assert_safe_status("review_access_withdrawn")
 
+def test_consent_withdrawal_after_completed_review_blocks_future_reviewer_access(
+    client: TestClient,
+) -> None:
+    """Withdrawal hides the result from the owner and preserves audit history."""
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-post-review-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        reviewer = User(
+            email=f"skin-post-review-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([owner, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        db.add_all([
+            SkinImageAnalysis(
+                prediction_id=prediction.id,
+                object_key="private/post-review-withdrawal",
+                content_type="image/png",
+                image_sha256="3" * 64,
+                storage_status="stored",
+                review_status="assigned",
+                assigned_reviewer_id=reviewer.id,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            CatalogReviewerScope(
+                reviewer_id=reviewer.id,
+                scope_type="skin_image",
+                scope_key=str(prediction.id),
+                granted_by=owner.id,
+                grant_reason="Owner approved this exact image review.",
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        prediction_uuid = prediction.id
+        owner_headers = {
+            "Authorization": f"Bearer {create_access_token(owner.id)}"
+        }
+        reviewer_headers = {
+            "Authorization": f"Bearer {create_access_token(reviewer.id)}"
+        }
+        reviewer_id = reviewer.id
+    finally:
+        db.close()
+
+    decision = client.post(
+        f"/api/v1/skin-images/review/{prediction_id}/decision",
+        headers=reviewer_headers,
+        json={
+            "outcome": "capture_adequate",
+            "reason": "The image is sufficiently clear for this limited technical check.",
+        },
+    )
+    assert decision.status_code == 200
+    assert decision.json()["review_status"] == "reviewed"
+    assert decision.json()["clinical_interpretation_performed"] is False
+    assert decision.json()["disease_prediction_performed"] is False
+
+    withdrawal = client.post(
+        f"/api/v1/skin-images/{prediction_id}/revoke-review-consent",
+        headers=owner_headers,
+    )
+    assert withdrawal.status_code == 200
+    assert withdrawal.json()["reviewer_access_revoked"] is True
+
+    owner_status = client.get(
+        f"/api/v1/skin-images/{prediction_id}/review-status",
+        headers=owner_headers,
+    )
+    assert owner_status.status_code == 200
+    assert owner_status.json()["status"] == "review_access_withdrawn"
+    assert owner_status.json()["clinical_interpretation_performed"] is False
+    assert owner_status.json()["disease_prediction_performed"] is False
+    assert "review_outcome" not in owner_status.json()
+    assert "reviewer_id" not in owner_status.json()
+
+    reviewer_image = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/image",
+        headers=reviewer_headers,
+    )
+    reviewer_events = client.get(
+        f"/api/v1/skin-images/review/{prediction_id}/events",
+        headers=reviewer_headers,
+    )
+    assert reviewer_image.status_code == 404
+    assert reviewer_events.status_code == 403
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.query(SkinImageAnalysis).filter_by(
+            prediction_id=prediction_uuid,
+        ).one()
+        assert image_record.review_status == "reviewed"
+        assert image_record.review_outcome == "capture_adequate"
+        scope = db.query(CatalogReviewerScope).filter_by(
+            reviewer_id=reviewer_id,
+            scope_type="skin_image",
+            scope_key=prediction_id,
+        ).one()
+        assert scope.revoked_at is not None
+        retained_decision = db.query(SkinImageReviewEvent).filter_by(
+            prediction_id=prediction_uuid,
+            event_type="reviewed",
+            outcome="capture_adequate",
+        ).one()
+        assert retained_decision is not None
+    finally:
+        db.close()
+
