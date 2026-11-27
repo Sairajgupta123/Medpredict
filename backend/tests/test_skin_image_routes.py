@@ -1147,14 +1147,25 @@ def test_review_audit_is_scoped_and_pagination_is_bounded(
     # Reviewer audit results retain staff actor identities but redact
     # patient identities on owner-originated events.
     assert all(
-        item["actor_identity"] is None
+        item["actor_identity"] is None and item["actor_id"] is None
         for item in reviewer_audit.json()
         if item["actor_role"] == "patient"
     )
     assert all(
-        item["actor_identity"] is not None
+        item["actor_identity"] is not None and item["actor_id"] is not None
         for item in reviewer_audit.json()
         if item["actor_role"] in {"admin", "reviewer"}
+    )
+    # Reviewer views only expose their own assignment identifier, never
+    # another reviewer's stable UUID from a reassignment/history event.
+    assert all(
+        item["assigned_reviewer_id"] in {None, str(reviewer.id)}
+        for item in reviewer_audit.json()
+    )
+    # Administrators retain complete actor and assignment identifiers.
+    assert all(
+        item["actor_id"] is not None
+        for item in admin_all_events.json()
     )
     assert admin_first_page.status_code == 200
     assert len(admin_first_page.json()) == 2
