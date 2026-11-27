@@ -154,3 +154,26 @@ def test_research_model_status_never_exposes_configured_paths(monkeypatch) -> No
         assert capability["loaded"] is False
         assert capability["inference_enabled"] is False
 
+
+def test_api_responses_include_baseline_security_headers() -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["X-Permitted-Cross-Domain-Policies"] == "none"
+
+
+def test_production_responses_include_hsts_header(monkeypatch) -> None:
+    from app import main
+
+    monkeypatch.setattr(main.settings, "environment", "production")
+    try:
+        response = client.get("/")
+    finally:
+        monkeypatch.setattr(main.settings, "environment", "development")
+
+    assert response.status_code == 200
+    assert response.headers["Strict-Transport-Security"] == (
+        "max-age=31536000; includeSubDomains"
+    )
