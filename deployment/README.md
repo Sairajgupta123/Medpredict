@@ -191,6 +191,16 @@ Do not enable image intake until private bucket access, encryption, lifecycle po
 retention duration, monitoring and recovery have been reviewed. The worker is not a
 substitute for an object-store lifecycle policy or an operational alert on repeated failures.
 
+## Worker backlog signals
+
+Each bounded worker emits `possible_backlog=true|false` in its aggregate summary.
+For account deletion, this is based on a one-row look-ahead beyond the selected batch.
+For retention and the two token/rate-limit cleanup jobs, it is a conservative signal:
+the configured batch was filled, so additional eligible work may remain. It does not
+claim an exact queue depth. Alert on repeated `possible_backlog=true` runs and keep
+the scheduled cadence frequent enough to drain work; investigate persistent backlog
+or non-zero exit codes. These signals contain no user or image identifiers.
+
 ## Privacy-safe worker execution wrapper
 
 For scheduled execution, prefer the allowlisted wrapper so the scheduler receives a
