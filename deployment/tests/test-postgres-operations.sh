@@ -37,6 +37,10 @@ archives=("$BACKUP_DIR"/medipredict-*.dump)
 [[ "${#archives[@]}" -eq 1 ]]
 [[ -s "${archives[0]}.sha256" ]]
 (cd "$BACKUP_DIR" && sha256sum --check "$(basename "${archives[0]}").sha256")
+# Exercise the exact checksum emitted by the backup script, not a reconstructed one.
+ALLOW_DATABASE_RESTORE=YES BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh"
+grep -q "restore invoked" "$RESTORE_LOG"
+rm -f "$RESTORE_LOG"
 
 # Restore must fail closed without the explicit isolated-target acknowledgement.
 if ALLOW_DATABASE_RESTORE=NO BACKUP_FILE="${archives[0]}" bash "$ROOT/postgres-restore.sh" >/dev/null 2>&1; then
