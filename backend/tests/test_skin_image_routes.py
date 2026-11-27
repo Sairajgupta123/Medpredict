@@ -1312,6 +1312,18 @@ def test_owner_review_status_is_private_and_reports_only_non_diagnostic_states(
     try:
         image_record = db.get(SkinImageAnalysis, image_id)
         assert image_record is not None
+        image_record.review_status = "unable_to_assess"
+        image_record.review_outcome = "unable_to_assess"
+        image_record.reviewed_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    assert_safe_status("unable_to_assess")
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.get(SkinImageAnalysis, image_id)
+        assert image_record is not None
         image_record.storage_status = "failed"
         db.commit()
     finally:
