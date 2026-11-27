@@ -92,7 +92,7 @@ export default async function SkinImageAuditPage({ searchParams }: PageProps) {
           <Link className="back-link" href="/review/skin-images">← Back to skin-image queue</Link>
           <div className="eyebrow"><span className="eyebrow-dot" /> SKIN IMAGE GOVERNANCE</div>
           <h1>Access and review <em>audit trail.</em></h1>
-          <p>Every recorded assignment, unassignment, reassignment, private image retrieval and technical review is shown with the actor role and timestamp. Actor identity is restricted in reviewer views and available to administrators. This page contains audit metadata only, never image content or storage keys.</p>
+          <p>Every recorded assignment, unassignment, reassignment, private image retrieval and technical review is shown with the actor role and timestamp. Patient identities and unrelated reviewer identifiers are restricted in reviewer views; administrators can inspect complete audit identifiers. This page contains audit metadata only, never image content or storage keys.</p>
           <div className="review-summary">
             <div><strong>{events.length.toString().padStart(2, "0")}</strong><span>EVENTS IN THIS VIEW</span></div>
             <div><strong>{user.role === "admin" ? "All image reviews" : "Your review activity"}</strong><span>AUTHORIZED AUDIT SCOPE</span></div>
