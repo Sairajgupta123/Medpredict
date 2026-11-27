@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 export PATH="$TMP/bin:$PATH"
 export FAKE_WORKER_STATUS=0
+export FAKE_WORKER_SLEEP=0
 export FAKE_WORKER_SUMMARY="Account deletion batch: processed=2 completed=2 failed=0 possible_backlog=false"
 
 cat > "$TMP/bin/python" <<'FAKE_PYTHON'
@@ -15,7 +16,7 @@ set -Eeuo pipefail
 printf '%s\n' "$FAKE_WORKER_SUMMARY"
 printf 'sensitive-stdout@example.test image-key=do-not-print\n'
 printf 'sensitive-stderr@example.test token=do-not-print\n' >&2
-if [[ "\${FAKE_WORKER_SLEEP:-0}" == "1" ]]; then sleep 3; fi
+if [[ "$FAKE_WORKER_SLEEP" == "1" ]]; then sleep 3; fi
 exit "$FAKE_WORKER_STATUS"
 FAKE_PYTHON
 chmod +x "$TMP/bin/python"
