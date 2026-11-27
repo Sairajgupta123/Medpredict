@@ -39,7 +39,7 @@ def run_retention_batch(*, limit: int = RETENTION_BATCH_LIMIT) -> dict[str, int]
 
 def main() -> int:
     """Print aggregate-only status and return non-zero when any deletion failed."""
-    summary = run_retention_batch(limit=RETENTION_BATCH_LIMIT)
+    summary = run_retention_batch()
     print(
         "Skin-image retention batch: "
         f"processed={summary['processed']} "
