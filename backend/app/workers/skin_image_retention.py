@@ -41,7 +41,8 @@ def main() -> int:
         "Skin-image retention batch: "
         f"processed={summary['processed']} "
         f"deleted={summary['deleted']} "
-        f"failed={summary['failed']}"
+        f"failed={summary['failed']} "
+        f"possible_backlog={str(summary['processed'] >= 100).lower()}"
     )
     return 1 if summary["failed"] else 0
 
