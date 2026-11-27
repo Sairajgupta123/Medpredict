@@ -299,7 +299,8 @@ def main() -> int:
     summary = run_deletion_batch()
     print(
         "Account deletion batch: "
-        f"processed={summary['processed']} completed={summary['completed']} failed={summary['failed']}"
+        f"processed={summary['processed']} completed={summary['completed']} failed={summary['failed']} "
+        f"possible_backlog={str(summary.get('possible_backlog', False)).lower()}"
     )
     return 1 if summary["failed"] else 0
 
