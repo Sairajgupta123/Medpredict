@@ -237,7 +237,7 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
 DELETION_BATCH_LIMIT = 25
 
 
-def run_deletion_batch(*, limit: int = DELETION_BATCH_LIMIT) -> dict[str, int]:
+def run_deletion_batch(*, limit: int = DELETION_BATCH_LIMIT) -> dict[str, int | bool]:
     """Atomically claim a bounded batch and expose aggregate counts only."""
     if not 1 <= limit <= 100:
         raise ValueError("Deletion batch limit must be between 1 and 100.")
