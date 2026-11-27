@@ -582,8 +582,10 @@ def purge_expired_skin_image_records(
 
         processed += 1
         image_record.storage_status = "deletion_pending"
-        # Refresh the lease on every claim, including retries.
-        image_record.deletion_requested_at = as_of
+        # Use a fresh claim timestamp as a lightweight fencing token. It is
+        # refreshed on every retry and checked again after external I/O.
+        lease_at = datetime.now(timezone.utc)
+        image_record.deletion_requested_at = lease_at
         owner_id = db.scalar(
             select(Prediction.user_id).where(Prediction.id == image_record.prediction_id)
         )
@@ -630,6 +632,20 @@ def purge_expired_skin_image_records(
         except Exception:
             failed += 1
             db.commit()
+            continue
+
+        # Account erasure may take ownership while storage I/O is in flight.
+        # Only the worker whose lease is still current may finalize this row.
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.id == candidate.id,
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                SkinImageAnalysis.deletion_requested_at == lease_at,
+            )
+            .with_for_update(skip_locked=True)
+        )
+        if image_record is None:
             continue
 
         image_record.storage_status = "deleted"
