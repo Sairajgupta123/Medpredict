@@ -89,6 +89,12 @@ class Settings(BaseSettings):
                 raise ValueError("SMTP_USE_TLS must be enabled in production.")
             if bool(self.smtp_username) != bool(self.smtp_password):
                 raise ValueError("SMTP_USERNAME and SMTP_PASSWORD must be configured together.")
+            if bool(self.skin_image_s3_bucket and self.skin_image_s3_bucket.strip()) != bool(
+                self.skin_image_s3_region and self.skin_image_s3_region.strip()
+            ):
+                raise ValueError(
+                    "SKIN_IMAGE_S3_BUCKET and SKIN_IMAGE_S3_REGION must be configured together."
+                )
             if self.skin_image_s3_bucket and self.skin_image_retention_days is None:
                 raise ValueError("SKIN_IMAGE_RETENTION_DAYS is required when private skin-image storage is enabled.")
         if self.access_token_expire_minutes < 5:
