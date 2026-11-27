@@ -1258,7 +1258,7 @@ def test_account_deletion_worker_retries_image_storage_failure(client: TestClien
     monkeypatch.setattr(account_deletion, "build_skin_image_storage", lambda: storage)
     monkeypatch.setattr(account_deletion, "SessionLocal", TestingSessionLocal)
     first = account_deletion.run_deletion_batch()
-    assert first == {"processed": 1, "completed": 0, "failed": 1}
+    assert first == {"processed": 1, "completed": 0, "failed": 1, "possible_backlog": False}
     db = TestingSessionLocal()
     try:
         request = db.query(AccountDeletionRequest).one()
@@ -1272,7 +1272,7 @@ def test_account_deletion_worker_retries_image_storage_failure(client: TestClien
 
     storage.fail = False
     second = account_deletion.run_deletion_batch()
-    assert second == {"processed": 1, "completed": 1, "failed": 0}
+    assert second == {"processed": 1, "completed": 1, "failed": 0, "possible_backlog": False}
     db = TestingSessionLocal()
     try:
         request = db.query(AccountDeletionRequest).one()
