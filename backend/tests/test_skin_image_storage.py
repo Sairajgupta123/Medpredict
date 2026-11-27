@@ -71,6 +71,9 @@ class _FakeS3Client:
         self.deleted.append(Key)
         self.objects.pop(Key, None)
 
+    def get_bucket_versioning(self, *, Bucket: str) -> dict[str, str]:
+        return {}
+
 
 def test_s3_adapter_encrypts_private_object_and_verifies_sha256() -> None:
     import hashlib
@@ -201,3 +204,83 @@ def test_s3_adapter_rejects_oversized_download_before_returning_bytes() -> None:
 
     with pytest.raises(SkinImageStorageIntegrityError, match="size limit"):
         storage.get_private(key)
+
+
+
+def test_s3_adapter_permanently_deletes_all_versions_and_delete_markers() -> None:
+    from app.services.skin_image_storage import S3PrivateSkinImageStorage
+
+    class VersionedClient(_FakeS3Client):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pages = [
+                {
+                    "Versions": [
+                        {"Key": "skin-images/opaque.jpg", "VersionId": "v1"},
+                        {"Key": "skin-images/opaque.jpg", "VersionId": "v2"},
+                        {"Key": "skin-images/other.jpg", "VersionId": "keep"},
+                    ],
+                    "DeleteMarkers": [
+                        {"Key": "skin-images/opaque.jpg", "VersionId": "marker1"}
+                    ],
+                    "IsTruncated": True,
+                    "NextKeyMarker": "skin-images/opaque.jpg",
+                    "NextVersionIdMarker": "v2",
+                },
+                {
+                    "Versions": [
+                        {"Key": "skin-images/opaque.jpg", "VersionId": "v3"}
+                    ],
+                    "DeleteMarkers": [],
+                    "IsTruncated": False,
+                },
+            ]
+            self.list_calls = []
+            self.delete_batches = []
+
+        def get_bucket_versioning(self, *, Bucket: str) -> dict[str, str]:
+            return {"Status": "Enabled"}
+
+        def list_object_versions(self, **kwargs):
+            self.list_calls.append(kwargs)
+            return self.pages.pop(0)
+
+        def delete_objects(self, *, Bucket: str, Delete: dict):
+            self.delete_batches.append(Delete["Objects"])
+            return {"Deleted": Delete["Objects"]}
+
+    client = VersionedClient()
+    storage = S3PrivateSkinImageStorage(client=client, bucket="private")
+    storage.delete_private("skin-images/opaque.jpg")
+
+    assert len(client.list_calls) == 2
+    assert client.list_calls[1]["KeyMarker"] == "skin-images/opaque.jpg"
+    assert client.list_calls[1]["VersionIdMarker"] == "v2"
+    assert [item["VersionId"] for item in client.delete_batches[0]] == [
+        "v1", "v2", "marker1"
+    ]
+    assert [item["VersionId"] for item in client.delete_batches[1]] == ["v3"]
+    assert all(item["Key"] == "skin-images/opaque.jpg" for batch in client.delete_batches for item in batch)
+
+
+def test_s3_adapter_raises_when_version_delete_reports_partial_failure() -> None:
+    from app.services.skin_image_storage import S3PrivateSkinImageStorage
+
+    class FailingVersionedClient(_FakeS3Client):
+        def get_bucket_versioning(self, *, Bucket: str) -> dict[str, str]:
+            return {"Status": "Enabled"}
+
+        def list_object_versions(self, **kwargs):
+            return {
+                "Versions": [{"Key": kwargs["Prefix"], "VersionId": "v1"}],
+                "IsTruncated": False,
+            }
+
+        def delete_objects(self, *, Bucket: str, Delete: dict):
+            return {"Errors": [{"Key": Delete["Objects"][0]["Key"], "Code": "AccessDenied"}]}
+
+    storage = S3PrivateSkinImageStorage(
+        client=FailingVersionedClient(), bucket="private"
+    )
+    with pytest.raises(RuntimeError, match="version deletion was incomplete"):
+        storage.delete_private("skin-images/opaque.jpg")
