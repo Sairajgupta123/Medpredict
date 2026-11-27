@@ -267,3 +267,41 @@ def test_failed_image_deletion_is_retried_and_only_then_revokes_consent(
     assert image.storage_status == "deleted"
     assert image.retention_expires_at is None
     assert actions == ["granted", "revoked"]
+
+def test_retention_worker_does_not_finalize_after_account_deletion_takes_lease(
+    db_session: Session,
+) -> None:
+    prediction, image = _expired_image(db_session)
+    image_id = image.id
+    newer_lease = datetime.now(timezone.utc) + timedelta(seconds=1)
+
+    class LeaseTakingStorage(FakeImageStorage):
+        def delete_private(self, object_key: str) -> None:
+            super().delete_private(object_key)
+            current = db_session.get(SkinImageAnalysis, image_id)
+            assert current is not None
+            current.deletion_requested_at = newer_lease
+            db_session.commit()
+
+    storage = LeaseTakingStorage()
+    result = purge_expired_skin_image_records(
+        db_session,
+        image_storage=storage,
+        as_of=datetime.now(timezone.utc),
+        limit=10,
+    )
+
+    db_session.expire_all()
+    retained = db_session.get(SkinImageAnalysis, image_id)
+    actions = list(db_session.scalars(
+        select(PredictionConsentEvent.action).where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        )
+    ).all())
+    assert result == {"processed": 1, "deleted": 0, "failed": 0}
+    assert retained is not None
+    assert retained.storage_status == "deletion_pending"
+    assert retained.deletion_requested_at.replace(tzinfo=timezone.utc) == newer_lease
+    assert actions == ["granted"]
+
