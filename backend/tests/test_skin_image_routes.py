@@ -1188,3 +1188,143 @@ def test_skin_image_model_status_reports_inference_unavailable(
     assert body["image_intake_configured"] is False
     assert body["image_retention_days"] is None
     assert "not configured" in body["message"]
+
+def test_owner_review_status_is_private_and_reports_only_non_diagnostic_states(
+    client: TestClient,
+) -> None:
+    """Owner status is scoped and never exposes reviewer, storage or diagnostic data."""
+    db = TestingSessionLocal()
+    try:
+        owner = User(
+            email=f"skin-status-owner-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        other_user = User(
+            email=f"skin-status-other-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+        )
+        reviewer = User(
+            email=f"skin-status-reviewer-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="reviewer",
+            is_active=True,
+            email_verified=True,
+        )
+        db.add_all([owner, other_user, reviewer])
+        db.flush()
+        prediction = Prediction(
+            user_id=owner.id,
+            modality="skin_image",
+            status="pending",
+        )
+        db.add(prediction)
+        db.flush()
+        captured_at = datetime.now(timezone.utc)
+        image_record = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="private/owner-status-test",
+            content_type="image/png",
+            image_sha256="5" * 64,
+            storage_status="stored",
+            review_status="pending",
+        )
+        db.add(image_record)
+        db.add_all([
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_processing",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+            PredictionConsentEvent(
+                prediction_id=prediction.id,
+                purpose="skin_image_review",
+                action="granted",
+                policy_version="v1",
+                captured_at=captured_at,
+            ),
+        ])
+        db.commit()
+        prediction_id = str(prediction.id)
+        owner_headers = {"Authorization": f"Bearer {create_access_token(owner.id)}"}
+        other_headers = {"Authorization": f"Bearer {create_access_token(other_user.id)}"}
+        reviewer_id = reviewer.id
+        image_id = image_record.id
+    finally:
+        db.close()
+
+    endpoint = f"/api/v1/skin-images/{prediction_id}/review-status"
+    forbidden_owner_view = client.get(endpoint, headers=other_headers)
+    assert forbidden_owner_view.status_code == 404
+
+    def assert_safe_status(expected: str) -> dict:
+        response = client.get(endpoint, headers=owner_headers)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["prediction_id"] == prediction_id
+        assert body["status"] == expected
+        assert body["clinical_interpretation_performed"] is False
+        assert body["disease_prediction_performed"] is False
+        assert not {
+            "object_key", "image_bytes", "image_sha256", "assigned_reviewer_id",
+            "reviewer_id", "reviewer_email", "review_outcome", "confidence",
+            "predicted_class", "audit_events",
+        }.intersection(body)
+        return body
+
+    assert_safe_status("awaiting_review")
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.get(SkinImageAnalysis, image_id)
+        assert image_record is not None
+        image_record.review_status = "assigned"
+        image_record.assigned_reviewer_id = reviewer_id
+        image_record.assigned_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    assert_safe_status("assigned")
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.get(SkinImageAnalysis, image_id)
+        assert image_record is not None
+        image_record.review_status = "reviewed"
+        image_record.review_outcome = "capture_adequate"
+        image_record.reviewed_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
+    assert_safe_status("reviewed")
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.get(SkinImageAnalysis, image_id)
+        assert image_record is not None
+        image_record.storage_status = "failed"
+        db.commit()
+    finally:
+        db.close()
+    assert_safe_status("submission_unavailable")
+
+    db = TestingSessionLocal()
+    try:
+        image_record = db.get(SkinImageAnalysis, image_id)
+        assert image_record is not None
+        image_record.storage_status = "stored"
+        db.add(PredictionConsentEvent(
+            prediction_id=UUID(prediction_id),
+            purpose="skin_image_review",
+            action="revoked",
+            policy_version="v1",
+            captured_at=datetime.now(timezone.utc),
+        ))
+        db.commit()
+    finally:
+        db.close()
+    assert_safe_status("review_access_withdrawn")
+
