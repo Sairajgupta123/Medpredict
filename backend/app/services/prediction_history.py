@@ -207,9 +207,11 @@ def delete_user_history_item(
 
     if image_record is not None and image_record.storage_status != "deleted":
         image_record.storage_status = "deletion_pending"
-        image_record.deletion_requested_at = (
-            image_record.deletion_requested_at or datetime.now(timezone.utc)
-        )
+        # Refresh the shared lease even when another worker left a pending
+        # marker. This fences out a retention/account-deletion worker that
+        # previously held the same image claim.
+        lease_at = datetime.now(timezone.utc)
+        image_record.deletion_requested_at = lease_at
         db.commit()
 
         try:
@@ -222,6 +224,27 @@ def delete_user_history_item(
                     "The history record has been retained."
                 ),
             ) from exc
+
+        # A newer worker may have taken the lease while object storage was
+        # processing. Only finalize this deletion if this request still owns it.
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.id == image_record.id,
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                SkinImageAnalysis.deletion_requested_at == lease_at,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if image_record is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Image deletion ownership changed during cleanup. "
+                    "The history record has been retained for retry."
+                ),
+            )
 
         image_record.storage_status = "deleted"
         image_record.deleted_at = datetime.now(timezone.utc)
