@@ -66,6 +66,13 @@ def test_quality_policy_requires_integer_dimensions() -> None:
     with pytest.raises(ValueError, match="positive integers"):
         ImageQualityPolicy(min_height=True)
 
+def test_quality_policy_rejects_unrepresentably_large_integer_thresholds() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="finite numbers"):
+        ImageQualityPolicy(min_laplacian_variance=10**1000)
+
+
 def test_quality_policy_rejects_non_numeric_and_boolean_thresholds() -> None:
     import pytest
 
