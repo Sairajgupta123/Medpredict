@@ -1286,7 +1286,7 @@ def test_account_deletion_worker_does_not_finalize_after_image_lease_takeover(
             finally:
                 other.close()
 
-    monkeypatch.setattr(account_deletion, "build_skin_image_storage", LeaseTakingStorage)
+    monkeypatch.setattr(account_deletion, "build_skin_image_storage", lambda: LeaseTakingStorage())
     monkeypatch.setattr(account_deletion, "SessionLocal", TestingSessionLocal)
 
     summary = account_deletion.run_deletion_batch()
