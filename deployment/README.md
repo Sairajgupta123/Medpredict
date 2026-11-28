@@ -136,8 +136,9 @@ revocation, symptom normalization and catalog matching. Private account export
 and session/profile reads are GET-only and require the HttpOnly session cookie.
 Keep this inventory synchronized whenever a new state-changing route is added.
 
-The origin helper reads the first `X-Forwarded-Proto` value when present because
-Next.js may run behind an internal HTTP hop. This header is security-sensitive:
+The origin helper accepts exactly one `X-Forwarded-Proto` value (`http` or
+`https`) because Next.js may run behind an internal HTTP hop; comma-separated
+chains and unsupported protocols are rejected. This header is security-sensitive:
 the public ingress must overwrite client-supplied forwarded-protocol headers,
 preserve the canonical Host, and be the only network path to the frontend.
 Do not treat the application check as proof of proxy trust; verify spoofed
