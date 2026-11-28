@@ -18,8 +18,12 @@ export function hasSameRequestOrigin(request: Request): boolean {
       parsedOrigin.hash
     ) return false;
 
-    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-    const protocol = forwardedProtocol || new URL(request.url).protocol.replace(/:$/, "");
+    const forwardedProtocolHeader = request.headers.get("x-forwarded-proto");
+    const protocol = forwardedProtocolHeader === null
+      ? new URL(request.url).protocol.replace(/:$/, "")
+      : forwardedProtocolHeader.trim().toLowerCase();
+    if (protocol !== "http" && protocol !== "https") return false;
+
     return parsedOrigin.host.toLowerCase() === host.toLowerCase() &&
       parsedOrigin.protocol === `${protocol}:`;
   } catch {
