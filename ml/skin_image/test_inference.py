@@ -25,6 +25,19 @@ def test_inference_rejects_low_resolution_before_model_execution() -> None:
     assert "resolution_too_low" in result["quality_flags"]
 
 
+@pytest.mark.parametrize("class_names", [None, "class_a,class_b", ("class_a", "class_b"), 42])
+def test_inference_rejects_non_list_class_mapping(class_names) -> None:
+    image = Image.new("RGB", (256, 256), color=(100, 110, 120))
+    with pytest.raises(ValueError, match="class_names must be a list"):
+        predict_skin_image(
+            NeverCalledModel(),
+            image,
+            class_names=class_names,
+            minimum_confidence=0.7,
+            temperature=1.0,
+        )
+
+
 def test_inference_validates_class_mapping_and_thresholds() -> None:
     image = Image.new("RGB", (256, 256), color=(100, 110, 120))
     with pytest.raises(ValueError, match="unique labels"):
