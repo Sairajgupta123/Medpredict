@@ -50,6 +50,11 @@ for (const endpoint of ["login", "register"]) {
     403,
   );
   await check(
+    `reject empty forwarded protocol for auth ${endpoint}`,
+    { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "X-Forwarded-Proto": " ", "Content-Type": "application/json" }, body: "{}" } },
+    403,
+  );
+  await check(
     `reject malformed auth ${endpoint} payload`,
     { path: authPath, init: { method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json" }, body: "{" } },
     400,
