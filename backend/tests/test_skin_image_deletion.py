@@ -70,6 +70,38 @@ def _owned_image_history(db: Session) -> tuple[User, Prediction]:
     return user, prediction
 
 
+def test_consent_grant_is_rejected_after_image_deletion(db_session: Session) -> None:
+    from app.services.prediction_history import record_skin_image_consent_decision
+
+    user, prediction = _owned_image_history(db_session)
+    image = db_session.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == prediction.id
+        )
+    )
+    assert image is not None
+    image.storage_status = "deleted"
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        record_skin_image_consent_decision(
+            db_session,
+            user.id,
+            prediction.id,
+            purpose="skin_image_history",
+            action="granted",
+            policy_version="image-history-v1",
+        )
+
+    assert error.value.status_code == 409
+    assert db_session.scalar(
+        select(PredictionConsentEvent).where(
+            PredictionConsentEvent.prediction_id == prediction.id,
+            PredictionConsentEvent.purpose == "skin_image_history",
+        )
+    ) is None
+
+
 def test_image_processing_consent_is_a_separate_audited_purpose(db_session: Session) -> None:
     prediction = Prediction(modality="skin_image")
     db_session.add(prediction)
