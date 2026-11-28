@@ -39,12 +39,18 @@ class ImageQualityPolicy:
             self.max_clipped_pixel_fraction,
             self.min_laplacian_variance,
         )
-        if not all(
-            not isinstance(value, (bool, np.bool_))
-            and isinstance(value, (int, float, np.integer, np.floating))
-            and np.isfinite(value)
-            for value in numeric_thresholds
-        ):
+        try:
+            thresholds_are_finite_numbers = all(
+                not isinstance(value, (bool, np.bool_))
+                and isinstance(value, (int, float, np.integer, np.floating))
+                and np.isfinite(value)
+                for value in numeric_thresholds
+            )
+        except (TypeError, OverflowError, ValueError):
+            # NumPy cannot coerce arbitrarily large Python integers to a finite
+            # floating-point scalar; reject them through the same public contract.
+            thresholds_are_finite_numbers = False
+        if not thresholds_are_finite_numbers:
             raise ValueError("Image-quality thresholds must be finite numbers")
         if not 0 <= self.min_mean_luminance < self.max_mean_luminance <= 255:
             raise ValueError("Luminance thresholds must satisfy 0 <= min < max <= 255")
