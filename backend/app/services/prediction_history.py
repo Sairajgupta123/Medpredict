@@ -286,6 +286,25 @@ def record_skin_image_consent_decision(
             detail="A valid consent action and policy version are required.",
         )
 
+    # Serialize every consent decision with image retrieval, retention, review
+    # assignment and deletion. In particular, a stale grant must not be
+    # appended while a concurrent history revocation is deleting the object.
+    image_record = db.scalar(
+        select(SkinImageAnalysis)
+        .where(SkinImageAnalysis.prediction_id == prediction.id)
+        .with_for_update()
+    )
+    if image_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Image metadata is unavailable; consent cannot be changed safely.",
+        )
+    if action == "granted" and image_record.storage_status != "stored":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Consent cannot be granted unless the private image is stored.",
+        )
+
     latest = db.scalar(
         select(PredictionConsentEvent)
         .where(
