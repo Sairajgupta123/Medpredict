@@ -869,3 +869,59 @@ def test_owner_history_deletion_does_not_finalize_after_newer_worker_takes_lease
     assert retained_image is not None
     assert retained_image.storage_status == "deletion_pending"
     assert retained_image.deletion_requested_at.replace(tzinfo=timezone.utc) == newer_lease
+
+
+
+def test_consent_revocation_does_not_finalize_after_newer_worker_takes_lease(
+    db_session: Session,
+) -> None:
+    from app.services.prediction_history import (
+        has_active_skin_image_consent,
+        record_skin_image_consent_decision,
+        revoke_skin_image_history_consent,
+    )
+
+    user, prediction = _owned_image_history(db_session)
+    record_skin_image_consent_decision(
+        db_session,
+        user.id,
+        prediction.id,
+        purpose="skin_image_history",
+        action="granted",
+        policy_version="image-history-v1",
+    )
+    image = db_session.scalar(
+        select(SkinImageAnalysis).where(
+            SkinImageAnalysis.prediction_id == prediction.id
+        )
+    )
+    assert image is not None
+    image_id = image.id
+    newer_lease = datetime.now(timezone.utc) + timedelta(seconds=2)
+
+    class LeaseTakingStorage(FakePrivateStorage):
+        def delete_private(self, object_key: str) -> None:
+            super().delete_private(object_key)
+            current = db_session.get(SkinImageAnalysis, image_id)
+            assert current is not None
+            current.deletion_requested_at = newer_lease
+            db_session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        revoke_skin_image_history_consent(
+            db_session,
+            user.id,
+            prediction.id,
+            image_storage=LeaseTakingStorage(),
+            policy_version="image-history-v1",
+        )
+
+    assert error.value.status_code == 503
+    db_session.expire_all()
+    retained = db_session.get(SkinImageAnalysis, image_id)
+    assert retained is not None
+    assert retained.storage_status == "deletion_pending"
+    assert retained.deletion_requested_at.replace(tzinfo=timezone.utc) == newer_lease
+    assert has_active_skin_image_consent(
+        db_session, prediction.id, purpose="skin_image_history"
+    )
