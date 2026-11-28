@@ -193,7 +193,8 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
         image.storage_status = "deletion_pending"
         # Refresh the shared deletion lease so retention cannot reclaim this image
         # while account erasure is performing its external storage operation.
-        image.deletion_requested_at = datetime.now(timezone.utc)
+        image_lease_at = datetime.now(timezone.utc)
+        image.deletion_requested_at = image_lease_at
         db.commit()
         try:
             storage.delete_private(image.object_key)
@@ -204,10 +205,27 @@ def process_deletion_request(db, request_id: UUID, storage, *, claim_token: UUID
             _release_for_retry(request, "private_image_deletion_failed")
             db.commit()
             return False
-        # Re-check ownership after the external call: a stale worker must not
-        # commit database erasure after a replacement worker has claimed the job.
+
+        # The account-job claim and image-deletion lease are independent fences.
+        # A retention worker can reclaim an expired image lease while this
+        # external call is in flight, so verify both before finalizing either
+        # the image row or the account erasure.
         request = _lock_owned_request(db, request_id, claim_token)
         if request is None:
+            return False
+        image = db.scalar(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.id == image.id,
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                SkinImageAnalysis.deletion_requested_at == image_lease_at,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if image is None:
+            _release_for_retry(request, "image_deletion_lease_lost")
+            db.commit()
             return False
         image.storage_status = "deleted"
         image.deleted_at = datetime.now(timezone.utc)
