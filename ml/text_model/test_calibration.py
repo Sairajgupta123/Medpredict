@@ -101,6 +101,11 @@ def test_coverage_selection_rejects_invalid_coverage_types(coverage) -> None:
         select_threshold_for_coverage([[0.8, 0.2]], minimum_coverage=coverage)
 
 
+def test_apply_temperature_rejects_overflowed_row_sum() -> None:
+    with pytest.raises(ValueError, match="positive finite sum"):
+        apply_temperature([[1e308, 1e308]], temperature=1.0)
+
+
 def test_probability_validation_rejects_overflowed_row_sum() -> None:
     with pytest.raises(ValueError, match="positive finite sum"):
         fit_temperature([[1e308, 1e308]], [0])
