@@ -36,6 +36,22 @@ from app.services.skin_image_validation import (
 router = APIRouter(prefix="/skin-images", tags=["Skin image intake"])
 
 
+def _lock_active_patient_account(db: DbSession, user: User) -> User:
+    """Serialize new image intake with patient account deactivation and erasure."""
+    patient = db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if patient is None or patient.role != "patient" or not patient.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An active patient account is required to submit a skin image.",
+        )
+    return patient
+
+
 def _lock_active_reviewer_account(db: DbSession, user: User) -> User:
     """Serialize reviewer operations with administrator account deactivation."""
     if user.role != "reviewer":
@@ -196,8 +212,13 @@ def intake_skin_image(
             detail="Private image storage is not configured; the image was not retained.",
         )
 
+    # The authentication dependency ran before image validation and storage
+    # setup. Re-lock and refresh the patient row immediately before creating
+    # records so a concurrent account-deletion request cannot race this intake.
+    patient = _lock_active_patient_account(db, user)
+
     prediction = Prediction(
-        user_id=user.id,
+        user_id=patient.id,
         modality="skin_image",
         status="review_required",
         input_storage_consent=False,
