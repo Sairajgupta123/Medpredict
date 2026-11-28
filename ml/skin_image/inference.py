@@ -330,7 +330,7 @@ def predict_skin_image(
         or any(not isinstance(name, str) or not name.strip() for name in class_names)
         or len(set(class_names)) != len(class_names)
     ):
-        raise ValueError("class_names must be a list of at least two unique, non-empty labels")
+        raise ValueError("class_names must be a list of at least two unique labels, all non-empty")
     if (
         isinstance(temperature, bool)
         or not isinstance(temperature, (int, float, np.integer, np.floating))
