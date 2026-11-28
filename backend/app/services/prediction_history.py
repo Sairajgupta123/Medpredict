@@ -542,8 +542,32 @@ def revoke_skin_image_history_consent(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Image deletion is pending. Consent remains active until deletion is confirmed.",
             ) from exc
+
+        # A retention or account-deletion worker may take the image lease while
+        # object storage is processing. Only finalize when this request still
+        # owns the exact lease it committed before the external call.
+        image_record = db.scalar(
+            select(SkinImageAnalysis)
+            .where(
+                SkinImageAnalysis.id == image_record.id,
+                SkinImageAnalysis.storage_status == "deletion_pending",
+                SkinImageAnalysis.deletion_requested_at == deletion_at,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if image_record is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Image deletion ownership changed during cleanup. "
+                    "The image remains pending for retry."
+                ),
+            )
+
         image_record.storage_status = "deleted"
         image_record.deleted_at = datetime.now(timezone.utc)
+        image_record.retention_expires_at = None
         db.commit()
 
     db.add(
