@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from PIL import Image
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,6 +19,7 @@ from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.api.v1.skin_images import _lock_active_patient_account
 from app.models.user import User
 from app.models.prediction import (
     Prediction,
@@ -89,6 +91,37 @@ def _user_headers(role: str) -> dict[str, str]:
     finally:
         db.close()
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_image_intake_rechecks_patient_activation_under_row_lock() -> None:
+    db = TestingSessionLocal()
+    try:
+        patient = User(
+            email=f"skin-intake-lock-{uuid4().hex}@example.test",
+            password_hash="test-only-hash",
+            role="patient",
+            is_active=True,
+        )
+        db.add(patient)
+        db.commit()
+        patient_id = patient.id
+
+        concurrent_db = TestingSessionLocal()
+        try:
+            current = concurrent_db.get(User, patient_id)
+            assert current is not None
+            current.is_active = False
+            concurrent_db.commit()
+        finally:
+            concurrent_db.close()
+
+        with pytest.raises(HTTPException) as error:
+            _lock_active_patient_account(db, patient)
+
+        assert error.value.status_code == 403
+        assert "active patient account" in error.value.detail
+    finally:
+        db.close()
 
 
 def test_static_review_queue_and_audit_routes_are_not_shadowed(
