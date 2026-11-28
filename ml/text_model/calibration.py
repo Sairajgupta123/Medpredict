@@ -43,7 +43,8 @@ def _validate(
         raise ValueError("probabilities must be a non-empty 2D array with at least two classes")
     if not np.isfinite(values).all() or (values < 0).any():
         raise ValueError("probabilities must be finite and non-negative")
-    row_sums = values.sum(axis=1)
+    with np.errstate(over="ignore", invalid="ignore"):
+        row_sums = values.sum(axis=1)
     if not np.isfinite(row_sums).all() or (row_sums <= 0).any():
         raise ValueError("each probability row must have a positive finite sum")
     values = values / row_sums[:, None]
@@ -101,9 +102,10 @@ def apply_temperature(
         raise ValueError("probabilities must be a non-empty 2D array with at least two classes")
     if not np.isfinite(values).all() or (values < 0).any():
         raise ValueError("probabilities must be finite and non-negative")
-    row_sums = values.sum(axis=1)
-    if (row_sums <= 0).any():
-        raise ValueError("each probability row must have a positive sum")
+    with np.errstate(over="ignore", invalid="ignore"):
+        row_sums = values.sum(axis=1)
+    if not np.isfinite(row_sums).all() or (row_sums <= 0).any():
+        raise ValueError("each probability row must have a positive finite sum")
     temperature = _positive_finite_number(temperature, "temperature")
     normalized = values / row_sums[:, None]
     return softmax(_logits(normalized) / temperature, axis=1)
