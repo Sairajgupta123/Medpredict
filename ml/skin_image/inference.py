@@ -325,11 +325,12 @@ def predict_skin_image(
 ) -> dict[str, Any]:
     """Run research inference after image checks; abstain rather than force a class."""
     if (
-        len(class_names) < 2
+        not isinstance(class_names, list)
+        or len(class_names) < 2
         or any(not isinstance(name, str) or not name.strip() for name in class_names)
         or len(set(class_names)) != len(class_names)
     ):
-        raise ValueError("class_names must contain at least two unique labels, all non-empty")
+        raise ValueError("class_names must be a list of at least two unique, non-empty labels")
     if (
         isinstance(temperature, bool)
         or not isinstance(temperature, (int, float, np.integer, np.floating))
