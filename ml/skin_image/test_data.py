@@ -133,7 +133,7 @@ def test_training_and_inference_share_rgb_canvas_preprocessing(tmp_path) -> None
 
     assert training_image.size == inference_image.size == (128, 128)
     assert training_image.mode == inference_image.mode == "RGB"
-    assert list(training_image.getdata()) == list(inference_image.getdata())
+    assert list(training_image.get_flattened_data()) == list(inference_image.get_flattened_data())
 
 
 def test_shared_rgb_preprocessing_rejects_invalid_image_size() -> None:
