@@ -1238,6 +1238,76 @@ def test_patient_account_deletion_request_revokes_session_and_queues_work(client
         db.close()
 
 
+def test_account_deletion_worker_does_not_finalize_after_image_lease_takeover(
+    client: TestClient, monkeypatch
+) -> None:
+    from app.models.account_deletion import AccountDeletionRequest
+    from app.models.prediction import Prediction, SkinImageAnalysis
+    from app.models.user import User
+    from app.workers import account_deletion
+
+    registration = client.post("/api/v1/auth/register", json={
+        "email": "delete-lease-race@example.com", "password": "StrongPass123!"
+    })
+    token = registration.json()["access_token"]
+    client.post(
+        "/api/v1/auth/me/deletion-request",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "StrongPass123!"},
+    )
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(email="delete-lease-race@example.com").one()
+        prediction = Prediction(user_id=user.id, modality="skin_image", status="completed")
+        db.add(prediction)
+        db.flush()
+        image = SkinImageAnalysis(
+            prediction_id=prediction.id,
+            object_key="skin-images/" + "e" * 32 + ".jpg",
+            content_type="image/jpeg",
+            image_sha256="f" * 64,
+            storage_status="stored",
+        )
+        db.add(image)
+        db.commit()
+        image_id = image.id
+    finally:
+        db.close()
+
+    class LeaseTakingStorage:
+        def delete_private(self, key):
+            assert key == "skin-images/" + "e" * 32 + ".jpg"
+            other = TestingSessionLocal()
+            try:
+                current = other.get(SkinImageAnalysis, image_id)
+                assert current is not None
+                current.deletion_requested_at = datetime.now(timezone.utc) + timedelta(seconds=3)
+                other.commit()
+            finally:
+                other.close()
+
+    monkeypatch.setattr(account_deletion, "build_skin_image_storage", LeaseTakingStorage)
+    monkeypatch.setattr(account_deletion, "SessionLocal", TestingSessionLocal)
+
+    summary = account_deletion.run_deletion_batch()
+    assert summary == {
+        "processed": 1, "completed": 0, "failed": 1, "possible_backlog": False
+    }
+
+    db = TestingSessionLocal()
+    try:
+        request = db.query(AccountDeletionRequest).one()
+        user = db.query(User).filter(User.email == "delete-lease-race@example.com").one()
+        image = db.get(SkinImageAnalysis, image_id)
+        assert request.status == "pending"
+        assert request.last_error_code == "image_deletion_lease_lost"
+        assert user.is_active is False
+        assert image is not None and image.storage_status == "deletion_pending"
+        assert db.query(Prediction).count() == 1
+    finally:
+        db.close()
+
+
 def test_account_deletion_requires_current_password_and_patient_role(client: TestClient) -> None:
     from app.models.user import User
 
